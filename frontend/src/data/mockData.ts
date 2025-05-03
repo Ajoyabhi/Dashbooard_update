@@ -30,25 +30,25 @@ import {
 // Mock Users
 export const mockUsers: User[] = [
   {
-    id: '1',
+    id: 1,
     name: 'Admin User',
+    user_name: 'admin_user',
     email: 'admin@example.com',
-    role: 'admin',
-    avatar: 'https://i.pravatar.cc/150?img=1',
+    user_type: 'admin',
   },
   {
-    id: '2',
+    id: 2,
     name: 'Agent User',
+    user_name: 'agent_user',
     email: 'agent@example.com',
-    role: 'agent',
-    avatar: 'https://i.pravatar.cc/150?img=2',
+    user_type: 'agent',
   },
   {
-    id: '3',
+    id: 3,
     name: 'Regular User',
+    user_name: 'regular_user',
     email: 'user@example.com',
-    role: 'user',
-    avatar: 'https://i.pravatar.cc/150?img=3',
+    user_type: 'payin_payout',
   },
 ];
 
@@ -193,44 +193,101 @@ export const mockChargebacks: ChargebackRecord[] = [
 // Mock Wallet Records
 export const mockWalletRecords: WalletRecord[] = [
   {
-    id: 'wr001',
-    userId: '3',
-    userName: 'Regular User',
+    _id: 'wr001',
+    transaction_id: 'txn001',
+    transaction_type: 'credit',
     amount: 500.00,
-    balance: 500.00,
-    type: 'credit',
-    description: 'Deposit',
-    date: '2025-01-15T12:00:00',
-    orderId: 'ORD001',
-    openBalance: 0.00,
-    status: 'completed'
+    status: 'completed',
+    reference_id: 'ORD001',
+    remark: 'Deposit',
+    metadata: {
+      ip_address: '127.0.0.1',
+      device_info: 'Chrome/Windows',
+      location: 'Local'
+    },
+    user: {
+      id: '3',
+      name: 'Regular User',
+      email: 'user@example.com',
+      mobile: '1234567890'
+    },
+    charges: {
+      admin_charge: 0,
+      agent_charge: 0,
+      total_charges: 0
+    },
+    merchant_details: {
+      merchant_name: 'Test Merchant',
+      merchant_callback_url: 'http://localhost:3000/callback'
+    },
+    balance: { before: 0.00, after: 500.00 },
+    createdAt: '2025-01-15T12:00:00',
+    updatedAt: '2025-01-15T12:00:00'
   },
   {
-    id: 'wr002',
-    userId: '3',
-    userName: 'Regular User',
+    _id: 'wr002',
+    transaction_id: 'txn002',
+    transaction_type: 'debit',
     amount: 100.00,
-    balance: 400.00,
-    type: 'debit',
-    description: 'Payout',
-    date: '2025-01-16T13:00:00',
-    orderId: 'ORD002',
-    openBalance: 500.00,
-    status: 'completed'
+    status: 'completed',
+    reference_id: 'ORD002',
+    remark: 'Payout',
+    metadata: {
+      ip_address: '127.0.0.1',
+      device_info: 'Chrome/Windows',
+      location: 'Local'
+    },
+    user: {
+      id: '3',
+      name: 'Regular User',
+      email: 'user@example.com',
+      mobile: '1234567890'
+    },
+    charges: {
+      admin_charge: 1,
+      agent_charge: 0,
+      total_charges: 1
+    },
+    merchant_details: {
+      merchant_name: 'Test Merchant',
+      merchant_callback_url: 'http://localhost:3000/callback'
+    },
+    balance: { before: 500.00, after: 400.00 },
+    createdAt: '2025-01-16T13:00:00',
+    updatedAt: '2025-01-16T13:00:00'
   },
   {
-    id: 'wr003',
-    userId: '3',
-    userName: 'Emily Johnson',
+    _id: 'wr003',
+    transaction_id: 'txn003',
+    transaction_type: 'credit',
     amount: 250.00,
-    balance: 250.00,
-    type: 'credit',
-    description: 'Deposit',
-    date: '2025-01-17T14:00:00',
-    orderId: 'ORD003',
-    openBalance: 0.00,
-    status: 'completed'
-  },
+    status: 'completed',
+    reference_id: 'ORD003',
+    remark: 'Deposit',
+    metadata: {
+      ip_address: '127.0.0.1',
+      device_info: 'Chrome/Windows',
+      location: 'Local'
+    },
+    user: {
+      id: '3',
+      name: 'Emily Johnson',
+      email: 'emily@example.com',
+      mobile: '1234567890'
+    },
+    charges: {
+      admin_charge: 0,
+      agent_charge: 0,
+      total_charges: 0
+    },
+    merchant_details: {
+      merchant_name: 'Test Merchant',
+      merchant_callback_url: 'http://localhost:3000/callback'
+    },
+    balance: { before: 0.00, after: 250.00 },
+    createdAt: '2025-01-17T14:00:00',
+    updatedAt: '2025-01-17T14:00:00'
+  }
 ];
 
 // Mock Summary Cards Data
@@ -306,6 +363,7 @@ export const adminMenuItems: MenuItem[] = [
   { title: 'Dashboard', path: '/admin', icon: 'BarChart3' },
   { title: 'Manage User', path: '/admin/manage-user', icon: 'Users' },
   { title: 'Wallet Report', path: '/admin/wallet-report', icon: 'Wallet' },
+  { title: 'Payin Report', path: '/admin/payin-report', icon: 'FileText' },
   { title: 'Payout Report', path: '/admin/payout-report', icon: 'FileText' },
   { title: 'ChargeBack', path: '/admin/chargeback', icon: 'RotateCcw' },
   { title: 'ChargeBack Report', path: '/admin/chargeback-report', icon: 'FileText' },
@@ -320,6 +378,7 @@ export const userMenuItems: MenuItem[] = [
   { title: 'Dashboard', path: '/user', icon: 'BarChart3' },
   { title: 'Fund Request', path: '/user/fund-request', icon: 'DollarSign' },
   { title: 'Wallet Report', path: '/user/wallet-report', icon: 'Wallet' },
+  { title: 'Payin Report', path: '/user/payin-report', icon: 'PayinIcon' },
   { title: 'Payout Report', path: '/user/payout-report', icon: 'FileText' },
   { title: 'Developer Settings', path: '/user/developer-settings', icon: 'Settings' },
   { title: 'Development Docs', path: '/user/development-docs', icon: 'FileCode' },
@@ -330,6 +389,7 @@ export const agentMenuItems: MenuItem[] = [
   { title: 'Add Users', path: '/agent/add-users', icon: 'UserPlus' },
   { title: 'Fund Request', path: '/agent/fund-request', icon: 'DollarSign' },
   { title: 'Wallet Report', path: '/agent/wallet-report', icon: 'Wallet' },
+  { title: 'Payin Report', path: '/agent/payin-report', icon: 'PayinIcon' },
   { title: 'Payout Report', path: '/agent/payout-report', icon: 'FileText' },
   { title: 'Developer Settings', path: '/agent/developer-settings', icon: 'Settings' },
   { title: 'Development Docs', path: '/agent/development-docs', icon: 'FileCode' },

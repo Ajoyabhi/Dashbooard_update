@@ -17,7 +17,8 @@ import ManageStaff from './pages/admin/ManageStaff';
 import ManagePayout from './pages/admin/ManagePayout';
 import BulkPayout from './pages/admin/BulkPayout';
 import WalletReport from './pages/admin/WalletReport';
-import PayoutReport from './pages/admin/PayoutReport';
+import Payout_report from './pages/admin/Payout_report';
+import PayinReport from './pages/admin/PayinReport';
 import ChargeBack from './pages/admin/ChargeBack';
 import ChargeBackReport from './pages/admin/ChargeBackReport';
 import ManageFundRequest from './pages/admin/ManageFundRequest';
@@ -25,10 +26,12 @@ import Settlement from './pages/admin/Settlement';
 import UserFundRequest from './pages/user/FundRequest';
 import UserWalletReport from './pages/user/WalletReport';
 import UserPayoutReport from './pages/user/PayoutReport';
+import UserPayinReport from './pages/user/PayinReport';
 import UserDeveloperSettings from './pages/user/DeveloperSettings';
 import UserDevelopmentDocs from './pages/user/DevelopmentDocs';
 import AgentWalletReport from './pages/agent/WalletReport';
 import AgentPayoutReport from './pages/agent/PayoutReport';
+import AgentPayinReport from './pages/agent/PayinReport';
 import AgentDeveloperSettings from './pages/agent/DeveloperSettings';
 import AgentDevelopmentDocs from './pages/agent/DevelopmentDocs';
 import AddUsers from './pages/agent/AddUsers';
@@ -46,6 +49,7 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
 
           {/* Admin Routes */}
+          <Route path="/admin/payin-report" element={<ProtectedRoute role="admin"><PayinReport /></ProtectedRoute>} />
           <Route path="/admin" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
           <Route path="/admin/manage-user" element={<ProtectedRoute role="admin"><ManageUser /></ProtectedRoute>} />
           <Route path="/admin/manage-user/add" element={<ProtectedRoute role="admin"><AddUser /></ProtectedRoute>} />
@@ -58,13 +62,14 @@ function App() {
           <Route path="/admin/manage-payout" element={<ProtectedRoute role="admin"><ManagePayout /></ProtectedRoute>} />
           <Route path="/admin/bulk-payout" element={<ProtectedRoute role="admin"><BulkPayout /></ProtectedRoute>} />
           <Route path="/admin/wallet-report" element={<ProtectedRoute role="admin"><WalletReport /></ProtectedRoute>} />
-          <Route path="/admin/payout-report" element={<ProtectedRoute role="admin"><PayoutReport /></ProtectedRoute>} />
+          <Route path="/admin/payout-report" element={<ProtectedRoute role="admin"><Payout_report /></ProtectedRoute>} />
           <Route path="/admin/chargeback" element={<ProtectedRoute role="admin"><ChargeBack /></ProtectedRoute>} />
           <Route path="/admin/chargeback-report" element={<ProtectedRoute role="admin"><ChargeBackReport /></ProtectedRoute>} />
           <Route path="/admin/manage-fund-request" element={<ProtectedRoute role="admin"><ManageFundRequest /></ProtectedRoute>} />
           <Route path="/admin/settlement" element={<ProtectedRoute role="admin"><Settlement /></ProtectedRoute>} />
 
           {/* User Routes */}
+          <Route path="/user/payin-report" element={<ProtectedRoute role="user"><UserPayinReport /></ProtectedRoute>} />
           <Route path="/user" element={<ProtectedRoute role="user"><UserDashboard /></ProtectedRoute>} />
           <Route path="/user/fund-request" element={<ProtectedRoute role="user"><UserFundRequest /></ProtectedRoute>} />
           <Route path="/user/wallet-report" element={<ProtectedRoute role="user"><UserWalletReport /></ProtectedRoute>} />
@@ -73,6 +78,7 @@ function App() {
           <Route path="/user/development-docs" element={<ProtectedRoute role="user"><UserDevelopmentDocs /></ProtectedRoute>} />
 
           {/* Agent Routes */}
+          <Route path="/agent/payin-report" element={<ProtectedRoute role="agent"><AgentPayinReport /></ProtectedRoute>} />
           <Route path="/agent" element={<ProtectedRoute role="agent"><AgentDashboard /></ProtectedRoute>} />
           <Route path="/agent/add-users" element={<ProtectedRoute role="agent"><AddUsers /></ProtectedRoute>} />
           <Route path="/agent/users/:userId" element={<ProtectedRoute role="agent"><UserView /></ProtectedRoute>} />
