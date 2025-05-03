@@ -10,6 +10,7 @@ const UserTransaction = require('../models/userTransaction.model');
 const { Op } = require('sequelize');
 const { unpayPayout } = require('../merchant_payin_payout/merchant_payout_request');
 const getClientIp = require('../utils/getClientIp');
+const mongoose = require('mongoose');
 
 /**
  * Initiate a payout
@@ -155,27 +156,31 @@ const initiatePayout = async (req, res) => {
       }
 
       // Calculate charges based on charge type
-      let adminCharge =   0;
+      let adminCharge = 0;
       let agentCharge = 0;
 
       // Calculate admin charge
       if (applicableBracket.admin_payout_charge_type === 'percentage') {
-        adminCharge = (amount * applicableBracket.admin_payout_charge) / 100;
+        adminCharge = (amount * parseFloat(applicableBracket.admin_payout_charge)) / 100;
       } else {
-        adminCharge = applicableBracket.admin_payout_charge;
+        adminCharge = parseFloat(applicableBracket.admin_payout_charge);
       }
 
       // Calculate agent charge
       if (applicableBracket.agent_payout_charge_type === 'percentage') {
-        agentCharge = (amount * applicableBracket.agent_payout_charge) / 100;
+        agentCharge = (amount * parseFloat(applicableBracket.agent_payout_charge)) / 100;
       } else {
-        agentCharge = applicableBracket.agent_payout_charge;
+        agentCharge = parseFloat(applicableBracket.agent_payout_charge);
       }
 
       // Calculate total charges
-      const totalCharges = adminCharge + agentCharge;
-
-      const user_balance_left = user.FinancialDetails.settlement - (amount + totalCharges);
+      const totalCharges = parseFloat(adminCharge);
+      
+      // Calculate final amount to deduct (amount + charges)
+      const amountToDeduct = parseFloat(amount) + totalCharges;
+      
+      // Calculate remaining balance
+      const user_balance_left = parseFloat(user.FinancialDetail.settlement) - amountToDeduct;
       
       // Update settlement in FinancialDetails using Sequelize
       await FinancialDetails.update(
@@ -187,7 +192,11 @@ const initiatePayout = async (req, res) => {
       );
 
       let userTransaction = await UserTransaction.create({
-        user_id: user_id,
+        user: {
+          id: new mongoose.Types.ObjectId(user_id),
+          user_id: user_id
+        },
+        transaction_id: uuidv4(),
         amount: amount,
         transaction_type: 'payout',
         reference_id: reference_id,
@@ -198,33 +207,37 @@ const initiatePayout = async (req, res) => {
           total_charges: totalCharges
         },
         balance: {
-          before: user.FinancialDetails.settlement,
+          before: user.FinancialDetail.settlement,
           after: user_balance_left
         },
         merchant_details: {
-          merchant_name : user.MerchantDetails.payout_merchant_name,
-          merchant_callback_url: user.MerchantDetails.payout_callback
+          merchant_name: user.MerchantDetail.payout_merchant_name,
+          merchant_callback_url: user.MerchantDetail.payout_callback
         },
         remark: 'Payout request initiated',
         metadata: {
-            requested_ip: clientIp
-        }
+          requested_ip: clientIp
+        },
+        created_by: new mongoose.Types.ObjectId(user_id),
+        created_by_model: user.user_type
       });
       await userTransaction.save();
 
       let payoutTransaction = await PayoutTransaction.create({
-        reference_id: reference_id,
-        user: user_id,
+        transaction_id: uuidv4(),
+        user: {
+          id: new mongoose.Types.ObjectId(user_id),
+          user_id: user_id.toString(),
+          name: user.name || '',
+          email: user.email || '',
+          mobile: user.mobile || '',
+          userType: user.user_type || ''
+        },
         amount: amount,
         charges: {
           admin_charge: adminCharge,
           agent_charge: agentCharge,
           total_charges: totalCharges
-        },
-        status: 'pending',
-        remark: 'Payout request initiated',
-        metadata: {
-            requested_ip: clientIp
         },
         beneficiary_details: {
           account_number: account_number,
@@ -232,13 +245,33 @@ const initiatePayout = async (req, res) => {
           bank_name: bank_name,
           beneficiary_name: beneficiary_name
         },
+        reference_id: reference_id,
+        status: 'pending',
+        gateway_response: {
+          reference_id: reference_id,
+          status: 'pending',
+          message: 'Payout request initiated',
+          raw_response: null
+        },
         metadata: {
-            requested_ip: clientIp
-        }
+          requested_ip: clientIp
+        },
+        remark: 'Payout request initiated',
+        created_by: new mongoose.Types.ObjectId(user_id),
+        created_by_model: user.user_type || 'User'
       });
-      await payoutTransaction.save();
 
-      if (user.MerchantDetails.payout_merchant_name === 'unpay') {
+      if (user.MerchantDetail.payout_merchant_name === 'unpay') {
+        const payoutData = {
+          reference_id,
+          amount,
+          beneficiary_details: {
+            account_number,
+            account_ifsc,
+            bank_name,
+            beneficiary_name
+          }
+        };
         result = await unpayPayout(payoutData);
       }
       
@@ -252,7 +285,7 @@ const initiatePayout = async (req, res) => {
         agent_charge: agentCharge,
         total_charges: totalCharges,
         user_id: user_id,
-        status: result.success ? 'completed' : 'failed',
+        status: result?.success ? 'completed' : 'failed',
         metadata: {
           merchant_response: result,
           requested_ip: clientIp
@@ -260,7 +293,7 @@ const initiatePayout = async (req, res) => {
       });
       
       // Send response based on result
-      if (result.success) {
+      if (result?.success) {
         await PayoutTransaction.updateOne(
           { reference_id: reference_id },
           { $set: { status: 'completed' } }
@@ -272,7 +305,7 @@ const initiatePayout = async (req, res) => {
         res.status(200).json({
           success: true,
           message: 'Payout processed successfully',
-          transaction_id: transaction._id,
+          transaction_id: payoutTransaction._id,
           result: result
         });
       } else {
@@ -287,8 +320,8 @@ const initiatePayout = async (req, res) => {
         res.status(400).json({
           success: false,
           message: 'Payout processing failed',
-          transaction_id: transaction._id,
-          error: result.gateway_response?.message || 'Unknown error'
+          transaction_id: payoutTransaction._id,
+          error: result?.gateway_response?.message || 'Unknown error'
         });
       }
     } catch (error) {

@@ -90,7 +90,7 @@ const userTransactionSchema = new mongoose.Schema({
   created_by_model: {
     type: String,
     required: true,
-    enum: ['User', 'Agent', 'Admin']
+    enum: ['agent', 'admin','payin_payout','payout_only','payin_only']
   }
 }, {
   timestamps: true
