@@ -13,7 +13,7 @@ const { setValidationResult, setThirdPartyApiInfo } = require('../middleware/api
  */
 const validatePaymentRequest = (req) => {
   const errors = [];
-  const { account_number, account_ifsc, bank_name, beneficiary_name, request_type, amount, reference_number } = req.body;
+  const { account_number, account_ifsc, bank_name, beneficiary_name, request_type, amount, reference_id } = req.body;
 
 
   // Validate amount
@@ -25,7 +25,7 @@ const validatePaymentRequest = (req) => {
     errors.push('Account number is required');
   }
 
-  if (!bank_name || !account_ifsc || !beneficiary_name || !request_type || !reference_number) {
+  if (!bank_name || !account_ifsc || !beneficiary_name || !request_type || !reference_id) {
     errors.push('All fields are required');
   }
 

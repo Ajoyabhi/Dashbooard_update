@@ -1,21 +1,15 @@
 const { v4: uuidv4 } = require('uuid');
 const Transaction = require('../models/transaction.model');
-const User = require('../models/User');
+const { User, UserStatus, MerchantDetails, MerchantCharges, MerchantModeCharges, FinancialDetails, UserIPs, TransactionCharges } = require('../models');
 // const Agent = require('../models/agent.model');
 const { logger } = require('../utils/logger');
 const { setValidationResult, setThirdPartyApiInfo } = require('../middleware/apiLogger.middleware');
 const { validatePaymentRequest } = require('../controllers/payment.controller');
-const UserStatus = require('../models/UserStatus');
-const MerchantDetails = require('../models/MerchantDetails');
-const MerchantCharges = require('../models/MerchantCharges');
-const MerchantModeCharges = require('../models/MerchantModeCharges');
-const FinancialDetails = require('../models/FinancialDetails');
-const UserIPs = require('../models/UserIPs');
 const PayoutTransaction = require('../models/payoutTransaction.model');
 const UserTransaction = require('../models/userTransaction.model');
-const { TransactionCharges } = require('../models');
 const { Op } = require('sequelize');
 const { unpayPayout } = require('../merchant_payin_payout/merchant_payout_request');
+const getClientIp = require('../utils/getClientIp');
 
 /**
  * Initiate a payout
@@ -35,7 +29,7 @@ const initiatePayout = async (req, res) => {
         });
       }
   
-      const { account_number, account_ifsc, bank_name, beneficiary_name, request_type, amount, reference_number } = req.body;
+      const { account_number, account_ifsc, bank_name, beneficiary_name, request_type, amount, reference_id } = req.body;
 
       const user_id = req.user.id;
         // Fetch user and all related data
@@ -50,11 +44,14 @@ const initiatePayout = async (req, res) => {
         ]
         });
 
-        const isIpWhitelisted = user.UserIPs.some(ip => ip.ip_address === req.headers['x-forwarded-for'] && ip.is_active);
+        const clientIp = getClientIp(req);
+        console.log('Client IP:', clientIp);
+
+        const isIpWhitelisted = user.UserIPs.some(ip => ip.ip_address === clientIp && ip.is_active);
         if (!isIpWhitelisted) {
             return res.status(400).json({
                 success: false,
-                message: 'User IP address is not whitelisted'
+                message: `User IP address ${clientIp} is not whitelisted`
             });
         }
 
@@ -208,7 +205,7 @@ const initiatePayout = async (req, res) => {
         },
         remark: 'Payout request initiated',
         metadata: {
-            requested_ip: req.headers['x-forwarded-for']
+            requested_ip: clientIp
         }
       });
       await userTransaction.save();
@@ -225,7 +222,7 @@ const initiatePayout = async (req, res) => {
         status: 'pending',
         remark: 'Payout request initiated',
         metadata: {
-            requested_ip: req.headers['x-forwarded-for']
+            requested_ip: clientIp
         },
         beneficiary_details: {
           account_number: account_number,
@@ -234,7 +231,7 @@ const initiatePayout = async (req, res) => {
           beneficiary_name: beneficiary_name
         },
         metadata: {
-            requested_ip: req.headers['x-forwarded-for']
+            requested_ip: clientIp
         }
       });
       await payoutTransaction.save();
@@ -256,7 +253,7 @@ const initiatePayout = async (req, res) => {
         status: result.success ? 'completed' : 'failed',
         metadata: {
           merchant_response: result,
-          requested_ip: req.headers['x-forwarded-for']
+          requested_ip: clientIp
         }
       });
       

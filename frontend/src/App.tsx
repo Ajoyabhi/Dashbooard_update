@@ -31,6 +31,10 @@ import AgentWalletReport from './pages/agent/WalletReport';
 import AgentPayoutReport from './pages/agent/PayoutReport';
 import AgentDeveloperSettings from './pages/agent/DeveloperSettings';
 import AgentDevelopmentDocs from './pages/agent/DevelopmentDocs';
+import AddUsers from './pages/agent/AddUsers';
+import RegisterUser from './pages/agent/RegisterUser';
+import UserCharges_agent from './pages/agent/UserCharges_agent';
+import UserCallbacks_agent from './pages/agent/UserCallbacks_agent';
 import NotFoundPage from './pages/NotFoundPage';
 
 function App() {
@@ -70,6 +74,11 @@ function App() {
 
           {/* Agent Routes */}
           <Route path="/agent" element={<ProtectedRoute role="agent"><AgentDashboard /></ProtectedRoute>} />
+          <Route path="/agent/add-users" element={<ProtectedRoute role="agent"><AddUsers /></ProtectedRoute>} />
+          <Route path="/agent/users/:userId" element={<ProtectedRoute role="agent"><UserView /></ProtectedRoute>} />
+          <Route path="/agent/users/:userId/charges" element={<ProtectedRoute role="agent"><UserCharges_agent /></ProtectedRoute>} />
+          <Route path="/agent/users/:userId/callbacks" element={<ProtectedRoute role="agent"><UserCallbacks_agent /></ProtectedRoute>} />
+          <Route path="/agent/add-users/register" element={<ProtectedRoute role="agent"><RegisterUser /></ProtectedRoute>} />
           <Route path="/agent/fund-request" element={<ProtectedRoute role="agent"><UserFundRequest /></ProtectedRoute>} />
           <Route path="/agent/wallet-report" element={<ProtectedRoute role="agent"><AgentWalletReport /></ProtectedRoute>} />
           <Route path="/agent/payout-report" element={<ProtectedRoute role="agent"><AgentPayoutReport /></ProtectedRoute>} />

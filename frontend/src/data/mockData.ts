@@ -23,7 +23,8 @@ import {
   HelpCircle,
   Layers,
   DollarSign,
-  FileText
+  FileText,
+  UserPlus
 } from 'lucide-react';
 
 // Mock Users
@@ -326,6 +327,7 @@ export const userMenuItems: MenuItem[] = [
 
 export const agentMenuItems: MenuItem[] = [
   { title: 'Dashboard', path: '/agent', icon: 'BarChart3' },
+  { title: 'Add Users', path: '/agent/add-users', icon: 'UserPlus' },
   { title: 'Fund Request', path: '/agent/fund-request', icon: 'DollarSign' },
   { title: 'Wallet Report', path: '/agent/wallet-report', icon: 'Wallet' },
   { title: 'Payout Report', path: '/agent/payout-report', icon: 'FileText' },
@@ -350,7 +352,8 @@ export const getIconByName = (iconName: string) => {
     HelpCircle,
     Layers,
     DollarSign,
-    FileText
+    FileText,
+    UserPlus
   };
 
   return icons[iconName as keyof typeof icons] || Users;

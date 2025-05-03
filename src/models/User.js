@@ -66,7 +66,7 @@ module.exports = (sequelize) => {
             type: DataTypes.ENUM('pvtltd', 'partnership', 'proprietorship', 'llp', 'public')
         },
         user_type: {
-            type: DataTypes.ENUM('admin', 'payin_payout', 'staff', 'agent', 'payout_only'),
+            type: DataTypes.ENUM('admin', 'payin_payout', 'staff', 'agent', 'payout_only','payin_only'),
             allowNull: false
         },
         agent_id: {

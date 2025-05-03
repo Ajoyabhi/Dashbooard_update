@@ -23,6 +23,7 @@ const PlatformChargesModel = require('./PlatformCharges');
 const UserIPsModel = require('./UserIPs');
 const TransactionChargesModel = require('./TransactionCharges');
 const SettlementTransactionModel = require('./settlementTransaction.model');
+const ManageFundRequestModel = require('./manageFundRequest.model');
 
 // Initialize models
 const User = UserModel(sequelize);
@@ -35,6 +36,7 @@ const PlatformCharges = PlatformChargesModel(sequelize);
 const UserIPs = UserIPsModel(sequelize);
 const TransactionCharges = TransactionChargesModel(sequelize);
 const SettlementTransaction = SettlementTransactionModel(sequelize);
+const ManageFundRequest = ManageFundRequestModel(sequelize);
 
 // Define relationships
 User.hasOne(UserStatus, { foreignKey: 'user_id', onDelete: 'CASCADE' });
@@ -64,6 +66,12 @@ SettlementTransaction.belongsTo(User, { foreignKey: 'user_id' });
 SettlementTransaction.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
 SettlementTransaction.belongsTo(User, { foreignKey: 'updated_by', as: 'updater' });
 
+// Add ManageFundRequest relationships
+User.hasMany(ManageFundRequest, { foreignKey: 'user_id', onDelete: 'CASCADE' });
+ManageFundRequest.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+ManageFundRequest.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
+ManageFundRequest.belongsTo(User, { foreignKey: 'updated_by', as: 'updater' });
+
 // Export models
 module.exports = {
     sequelize,
@@ -76,5 +84,6 @@ module.exports = {
     PlatformCharges,
     UserIPs,
     TransactionCharges,
-    SettlementTransaction
+    SettlementTransaction,
+    ManageFundRequest
 }; 

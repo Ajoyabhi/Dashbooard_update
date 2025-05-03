@@ -369,7 +369,7 @@ const AdminDashboard: React.FC = () => {
             pagination={false}
           />
         </div>
-
+{/* 
         <div>
           <Table
             title="Fund Requests"
@@ -377,7 +377,7 @@ const AdminDashboard: React.FC = () => {
             columns={fundRequestColumns}
             data={mockFundRequests}
           />
-        </div>
+        </div> */}
       </div>
     </DashboardLayout>
   );

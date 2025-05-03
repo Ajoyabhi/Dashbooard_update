@@ -29,7 +29,10 @@ const {
   getAdminDashboard,
   getWalletTransactions,
   settleAmount,
-  getSettlementHistory
+  getSettlementHistory,
+  getSettlementDashboard,
+  getManageFundRequest,
+  updateManageFundRequest
 } = require('../controllers/admin.controller');
 const { registerUser } = require('../controllers/auth.controller');
 const { auth, authorize } = require('../middleware/auth.middleware');
@@ -92,5 +95,11 @@ router.get('/wallet-transactions', getWalletTransactions);
 // Settlement management routes
 router.post('/settle-amount', settleAmount);
 router.get('/settlement-history/:userId', getSettlementHistory);
+router.get('/settlement-dashboard', getSettlementDashboard);
+
+// manage fund request routes
+router.get('/manage-fund-request', getManageFundRequest);
+// router.post('/manage-fund-request', addManageFundRequest);
+router.post('/manage-fund-request/:id', updateManageFundRequest);
 
 module.exports = router; 

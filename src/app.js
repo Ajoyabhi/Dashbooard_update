@@ -19,6 +19,9 @@ require('./workers/payment.worker');
 
 const app = express();
 
+// Trust proxy
+app.set('trust proxy', true);
+
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/payment-gateway', {
   useNewUrlParser: true,
@@ -41,8 +44,8 @@ app.use(logApiRequest);
 
 // Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/agents', agentRoutes);
+app.use('/api/user', userRoutes);
+app.use('/api/agent', agentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/payments', paymentRoutes);
 

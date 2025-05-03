@@ -167,14 +167,14 @@ export default function UserCharges() {
       }
 
       // Validate that the new range doesn't overlap with existing ranges
-      const hasOverlap = chargeRanges.some(range =>
-        (newChargeRange.startAmount! <= range.endAmount && newChargeRange.endAmount! >= range.startAmount)
-      );
+      // const hasOverlap = chargeRanges.some(range =>
+      //   (newChargeRange.startAmount! <= range.endAmount && newChargeRange.endAmount! >= range.startAmount)
+      // );
 
-      if (hasOverlap) {
-        setError('This range overlaps with an existing range');
-        return;
-      }
+      // if (hasOverlap) {
+      //   setError('This range overlaps with an existing range');
+      //   return;
+      // }
 
       try {
         setLoading(true);
@@ -199,6 +199,7 @@ export default function UserCharges() {
           }]);
           setNewChargeRange({ chargeType: 'percentage' });
           toast.success('Charge range added successfully');
+          fetchCharges();
           setError(null);
         } else {
           setError(response.data.message || 'Failed to add charge range');

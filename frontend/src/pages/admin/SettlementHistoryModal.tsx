@@ -143,7 +143,7 @@ const SettlementHistoryModal: React.FC<SettlementHistoryModalProps> = ({
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {transaction.createdByUser.name}
+                          {transaction.updater.user_name}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-500">
                           {transaction.remark}

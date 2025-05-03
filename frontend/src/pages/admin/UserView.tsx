@@ -60,7 +60,7 @@ export default function UserView() {
 
     const fetchUserDetails = async () => {
         try {
-            const response = await api.get(`/admin/users/${userId}`);
+            const response = await api.get(`/agent/users/${userId}`);
             setUser(response.data);
         } catch (error: any) {
             toast.error(error.response?.data?.error || 'Error fetching user details');
@@ -183,6 +183,10 @@ export default function UserView() {
                                 <div>
                                     <label className="block text-sm font-medium text-gray-500">PAN Card</label>
                                     <div className="mt-1 text-sm text-gray-900">{user.pancard || '-'}</div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-500">Aadhaar Card</label>
+                                    <div className="mt-1 text-sm text-gray-900">{user.aadhaar_card || '-'}</div>
                                 </div>
                             </div>
                         </div>

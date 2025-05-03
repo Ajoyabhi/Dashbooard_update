@@ -1,4 +1,4 @@
-const { User, UserStatus, MerchantDetails, MerchantCharges, MerchantModeCharges, FinancialDetails, UserIPs, PlatformCharges, TransactionCharges, SettlementTransaction } = require('../models');
+const { User, UserStatus, MerchantDetails, MerchantCharges, MerchantModeCharges, FinancialDetails, UserIPs, PlatformCharges, TransactionCharges, SettlementTransaction, ManageFundRequest } = require('../models');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 const PayoutTransaction = require('../models/payoutTransaction.model');
@@ -394,7 +394,29 @@ const updateUserMerchantCharges = async (req, res) => {
 
         // Start a transaction
         const result = await sequelize.transaction(async (t) => {
-            // Create new charge
+            // Check if amount bracket already exists
+            const existingCharge = await MerchantCharges.findOne({
+                where: {
+                    user_id,
+                    start_amount,
+                    end_amount
+                },
+                transaction: t
+            });
+
+            if (existingCharge) {
+                // Update existing charge
+                await existingCharge.update({
+                    admin_payin_charge,
+                    admin_payout_charge,
+                    admin_payin_charge_type,
+                    admin_payout_charge_type,
+                    updated_by: req.user.id
+                }, { transaction: t });
+                return existingCharge;
+            }
+
+            // Create new charge if no existing bracket found
             const newCharge = await MerchantCharges.create({
                 user_id,
                 start_amount,
@@ -1282,9 +1304,9 @@ const getWalletTransactions = async (req, res) => {
 // Settle amount for a user
 const settleAmount = async (req, res) => {
     try {
-        const { user_id, settlement_amount, remark } = req.body;
+        const { user_id, amount_, remark } = req.body;
 
-        if (!user_id || !settlement_amount || settlement_amount <= 0) {
+        if (!user_id || !amount_ || amount_ <= 0) {
             return res.status(400).json({
                 success: false,
                 message: 'Invalid input parameters'
@@ -1306,7 +1328,7 @@ const settleAmount = async (req, res) => {
 
             const walletBalance = parseFloat(financialDetails.wallet) || 0;
             const settlementBalance = parseFloat(financialDetails.settlement) || 0;
-            const amount = parseFloat(settlement_amount);
+            const amount = parseFloat(amount_);
 
             // Validate wallet balance
             if (walletBalance < amount) {
@@ -1412,6 +1434,189 @@ const getSettlementHistory = async (req, res) => {
     }
 };
 
+// Get settlement dashboard
+const getSettlementDashboard = async (req, res) => {
+    try {
+        // Get all users with their financial details
+        const allUsers = await User.findAll({
+            include: [
+                {
+                    model: FinancialDetails,
+                    attributes: ['wallet', 'settlement']
+                }
+            ],
+            attributes: ['id', 'name', 'user_name', 'mobile']
+        });
+
+        // Transform the data to create list of objects with required information
+        const userSettlementList = allUsers.map(user => ({
+            id: user.id,
+            name: user.name,
+            user_name: user.user_name,
+            mobile: user.mobile,
+            wallet: user.FinancialDetail ? Number(user.FinancialDetail.wallet) || 0 : 0,
+            settlement: user.FinancialDetail ? Number(user.FinancialDetail.settlement) || 0 : 0
+        }));
+
+        res.json({
+            success: true,
+            data: userSettlementList
+        });
+        
+    } catch (error) {
+        console.error('Error fetching settlement dashboard:', error);
+        res.status(500).json({
+            success: false,     
+            message: 'Error fetching settlement dashboard'
+        });
+    }
+};
+
+const getManageFundRequest = async (req, res) => {
+    try {
+        const { page = 1, pageSize = 10 } = req.query;
+        const offset = (page - 1) * pageSize;
+        const limit = parseInt(pageSize);
+
+        // Get total count without including associations
+        const totalCount = await ManageFundRequest.count();
+
+        // Get paginated fund requests with user details
+        const fundRequests = await ManageFundRequest.findAll({
+            include: [
+                {
+                    model: User,
+                    as: 'user',
+                    attributes: ['name']
+                },
+                {
+                    model: User,
+                    as: 'creator',
+                    attributes: ['name']
+                },
+                {
+                    model: User,
+                    as: 'updater',
+                    attributes: ['name']
+                }
+            ],
+            order: [['created_at', 'DESC']],
+            offset,
+            limit
+        });
+
+        // Transform data to match frontend table structure
+        const transformedRequests = fundRequests.map(request => ({
+            id: request.id,
+            name: request.user.name,
+            amount: parseFloat(request.settlement_wallet),
+            wallet: parseFloat(request.wallet_balance),
+            referenceId: request.reference_id,
+            fromBank: request.from_bank,
+            toBank: request.to_bank,
+            paymentType: request.payment_type,
+            remarks: request.remarks || '',
+            reason: request.reason,
+            status: request.status
+        }));
+
+        res.json({
+            success: true,
+            data: {
+                fundRequests: transformedRequests,
+                pagination: {
+                    currentPage: parseInt(page),
+                    totalPages: Math.ceil(totalCount / pageSize),
+                    totalItems: totalCount,
+                    pageSize: limit
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching manage fund request:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching manage fund request'
+        });
+    }
+};
+
+const updateManageFundRequest = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body;
+        
+        // Start a transaction
+        const result = await sequelize.transaction(async (t) => {
+            const manageFundRequest = await ManageFundRequest.findByPk(id, {
+                transaction: t,
+                lock: true
+            });
+
+            if (!manageFundRequest) {
+                throw new Error('Fund request not found');
+            }
+
+            if (status === 'approved') {
+                const financialDetails = await FinancialDetails.findOne({
+                    where: { user_id: manageFundRequest.user_id },
+                    transaction: t,
+                    lock: true
+                });
+
+                if (!financialDetails) {
+                    throw new Error('Financial details not found for user');
+                }
+
+                const walletBalance = parseFloat(financialDetails.wallet) || 0;
+                const amount = parseFloat(manageFundRequest.settlement_wallet);
+
+                // Update financial details
+                await financialDetails.update({
+                    wallet: walletBalance + amount
+                }, { transaction: t });
+
+                // Update fund request status
+                await manageFundRequest.update({
+                    status: status
+                }, { transaction: t });
+
+                return {
+                    success: true,
+                    message: 'Fund request approved successfully',
+                    data: {
+                        wallet_balance: walletBalance + amount,
+                        fund_request: manageFundRequest
+                    }
+                };
+            } 
+            else if (status === 'rejected') {
+                await manageFundRequest.update({
+                    status: status
+                }, { transaction: t });
+
+                return {
+                    success: true,
+                    message: 'Fund request rejected successfully',
+                    data: {
+                        fund_request: manageFundRequest
+                    }
+                };
+            } else {
+                throw new Error('Invalid status');
+            }
+        });
+
+        res.json(result);
+    } catch (error) {
+        console.error('Error updating manage fund request:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Error updating fund request'
+        });
+    }
+};
+
 module.exports = {
   getAllUsers,
   getAllAgents,
@@ -1441,5 +1646,8 @@ module.exports = {
   getAdminDashboard,
   getWalletTransactions,
   settleAmount,
-  getSettlementHistory
+  getSettlementHistory,
+  getSettlementDashboard,
+  getManageFundRequest,
+  updateManageFundRequest
 }; 
