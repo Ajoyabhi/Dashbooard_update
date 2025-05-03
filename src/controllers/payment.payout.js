@@ -141,9 +141,11 @@ const initiatePayout = async (req, res) => {
       }
 
       // Find the appropriate charge bracket for the amount
-      const applicableBracket = chargeBrackets.find(bracket => 
-        amount >= bracket.start_amount && amount <= bracket.end_amount
-      );
+      const applicableBracket = chargeBrackets.find(bracket => {
+        const startAmount = parseFloat(bracket.start_amount);
+        const endAmount = parseFloat(bracket.end_amount);
+        return amount >= startAmount && amount <= endAmount;
+      });
 
       if (!applicableBracket) {
         return res.status(400).json({
@@ -153,7 +155,7 @@ const initiatePayout = async (req, res) => {
       }
 
       // Calculate charges based on charge type
-      let adminCharge = 0;
+      let adminCharge =   0;
       let agentCharge = 0;
 
       // Calculate admin charge
