@@ -1,12 +1,12 @@
-import { useState } from 'react';
-import { Calendar, Download } from 'lucide-react';
+import React, { useState } from 'react';
+import { Search, Calendar, Download } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Table from '../../components/dashboard/Table';
-import { agentMenuItems } from '../../data/mockData';
+import { userMenuItems } from '../../data/mockData';
 import { formatCurrency, formatDate, getStatusColor } from '../../utils/formatUtils';
 
-// Mock payout transactions
-const mockPayoutTransactions = [
+// Mock payin transactions
+const mockPayinTransactions = [
   {
     orderId: 'ORD-2025-001',
     transactionId: 'TXN123456',
@@ -14,6 +14,7 @@ const mockPayoutTransactions = [
     name: 'John Smith',
     accountNo: '1234567890',
     ifsc: 'HDFC0001234',
+    upiId: 'johnsmith@upi',
     amount: 5000.00,
     charge: 50.00,
     gst: 9.00,
@@ -28,6 +29,7 @@ const mockPayoutTransactions = [
     name: 'Sarah Wilson',
     accountNo: '0987654321',
     ifsc: 'ICIC0005678',
+    upiId: 'sarahw@upi',
     amount: 2500.00,
     charge: 25.00,
     gst: 4.50,
@@ -37,7 +39,7 @@ const mockPayoutTransactions = [
   },
 ];
 
-const AgentPayoutReport = () => {
+export default function PayinReport() {
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
@@ -52,9 +54,9 @@ const AgentPayoutReport = () => {
     try {
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1000));
-      window.showToast('success', 'Payout transactions fetched successfully');
+      window.showToast('success', 'Payin transactions fetched successfully');
     } catch (error) {
-      window.showToast('error', 'Failed to fetch payout transactions');
+      window.showToast('error', 'Failed to fetch payin transactions');
     } finally {
       setLoading(false);
     }
@@ -64,6 +66,20 @@ const AgentPayoutReport = () => {
     // Handle report download
     console.log('Downloading report...');
   };
+
+  // Filter transactions based on search term
+  const filteredTransactions = mockPayinTransactions.filter(transaction => {
+    const searchString = searchTerm.toLowerCase();
+    return (
+      transaction.orderId.toLowerCase().includes(searchString) ||
+      transaction.transactionId.toLowerCase().includes(searchString) ||
+      transaction.utr.toLowerCase().includes(searchString) ||
+      transaction.name.toLowerCase().includes(searchString) ||
+      transaction.accountNo.includes(searchString) ||
+      transaction.ifsc.toLowerCase().includes(searchString) ||
+      transaction.upiId.toLowerCase().includes(searchString)
+    );
+  });
 
   const columns = [
     {
@@ -95,6 +111,13 @@ const AgentPayoutReport = () => {
     {
       header: 'IFSC',
       accessor: 'ifsc',
+      cell: (value: string) => (
+        <span className="font-mono">{value}</span>
+      ),
+    },
+    {
+      header: 'UPI ID',
+      accessor: 'upiId',
       cell: (value: string) => (
         <span className="font-mono">{value}</span>
       ),
@@ -144,7 +167,7 @@ const AgentPayoutReport = () => {
   ];
 
   return (
-    <DashboardLayout menuItems={agentMenuItems} title="Payout Report">
+    <DashboardLayout menuItems={userMenuItems} title="Payin Report">
       <div className="space-y-6">
         {/* Date Filter */}
         <div className="bg-white shadow-sm rounded-lg p-6">
@@ -191,12 +214,26 @@ const AgentPayoutReport = () => {
           </div>
         </div>
 
+        {/* Search */}
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="h-5 w-5 text-gray-400" />
+          </div>
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search by Order ID, Transaction ID, UTR, Name, Account No, IFSC, or UPI ID..."
+            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+          />
+        </div>
+
         {/* Table */}
         <div className="bg-white shadow-sm rounded-lg">
           <div className="p-6">
             <Table
               columns={columns}
-              data={mockPayoutTransactions}
+              data={filteredTransactions}
               pagination={true}
             />
           </div>
@@ -204,6 +241,4 @@ const AgentPayoutReport = () => {
       </div>
     </DashboardLayout>
   );
-};
-
-export default AgentPayoutReport;
+}
