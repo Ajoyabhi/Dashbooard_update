@@ -62,7 +62,7 @@ const initiatePayout = async (req, res) => {
         });
       }
 
-      if (reference_number.length !== 12) {
+      if (reference_id.length !== 12) {
         return res.status(400).json({ 
           success: false, 
           message: 'Reference number must be 12 digits' 
@@ -107,13 +107,13 @@ const initiatePayout = async (req, res) => {
 
       // Check for duplicate transaction with optimized query
       const existingTransaction = await PayoutTransaction.findOne(
-        { reference_number },
+        { reference_id },
         { _id: 1, status: 1 }
       ).lean();
 
       if (existingTransaction) {
         logger.warn('Duplicate transaction attempt', {
-          reference_number,
+          reference_id,
           existing_status: existingTransaction.status
         });
         
@@ -188,7 +188,7 @@ const initiatePayout = async (req, res) => {
         user_id: user_id,
         amount: amount,
         transaction_type: 'payout',
-        reference_id: reference_number,
+        reference_id: reference_id,
         status: 'pending',
         charges: {
           admin_charge: adminCharge,
@@ -211,7 +211,7 @@ const initiatePayout = async (req, res) => {
       await userTransaction.save();
 
       let payoutTransaction = await PayoutTransaction.create({
-        reference_id: reference_number,
+        reference_id: reference_id,
         user: user_id,
         amount: amount,
         charges: {
@@ -243,7 +243,7 @@ const initiatePayout = async (req, res) => {
       // Store transaction charges
       await TransactionCharges.create({
         transaction_type: 'payout',
-        reference_id: reference_number,
+        reference_id: reference_id,
         transaction_amount: amount,
         transaction_utr: result?.gateway_response?.utr || null,
         merchant_charge: adminCharge,
@@ -260,11 +260,11 @@ const initiatePayout = async (req, res) => {
       // Send response based on result
       if (result.success) {
         await PayoutTransaction.updateOne(
-          { reference_id: reference_number },
+          { reference_id: reference_id },
           { $set: { status: 'completed' } }
         );
         await UserTransaction.updateOne(
-          { reference_id: reference_number },
+          { reference_id: reference_id },
           { $set: { status: 'completed' } }
         );
         res.status(200).json({
@@ -275,11 +275,11 @@ const initiatePayout = async (req, res) => {
         });
       } else {
         await PayoutTransaction.updateOne(
-          { reference_id: reference_number },
+          { reference_id: reference_id },
           { $set: { status: 'failed' } }
         );
         await UserTransaction.updateOne(
-          { reference_id: reference_number },
+          { reference_id: reference_id },
           { $set: { status: 'failed' } }
         );
         res.status(400).json({
