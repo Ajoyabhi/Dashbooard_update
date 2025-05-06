@@ -81,6 +81,26 @@ const UserWalletReport = () => {
     }
   };
 
+  // Handle page change
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  // Handle page size change
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize);
+    setCurrentPage(1); // Reset to first page when changing page size
+  };
+
+  // Reset filters and pagination
+  const resetFilters = () => {
+    setSelectedType('all');
+    setSelectedStatus('all');
+    setDateRange({ startDate: null, endDate: null });
+    setSearchTerm('');
+    setCurrentPage(1);
+  };
+
   // Fetch transactions when filters or pagination changes
   useEffect(() => {
     fetchTransactions();
@@ -95,29 +115,12 @@ const UserWalletReport = () => {
     });
   };
 
-  const resetFilters = () => {
-    setSelectedType('all');
-    setSelectedStatus('all');
-    setDateRange({ startDate: null, endDate: null });
-    setSearchTerm('');
-    setCurrentPage(1);
-  };
-
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-  };
-
-  const handlePageSizeChange = (newPageSize: number) => {
-    setPageSize(newPageSize);
-    setCurrentPage(1);
-  };
-
   const columns = [
     {
       header: 'Type',
-      accessor: 'transaction_type',
+      accessor: 'type',
       cell: (value: string) => (
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${value === 'credit' ? 'bg-success-100 text-success-800' : 'bg-error-100 text-error-800'
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${value === 'payin' ? 'bg-success-100 text-success-800' : 'bg-error-100 text-error-800'
           }`}>
           {value.charAt(0).toUpperCase() + value.slice(1)}
         </span>
@@ -125,23 +128,23 @@ const UserWalletReport = () => {
     },
     {
       header: 'Date',
-      accessor: 'createdAt',
+      accessor: 'date',
       cell: (value: string) => formatDate(value),
     },
     {
       header: 'Order ID',
-      accessor: 'transaction_id',
+      accessor: 'orderId',
       cell: (value: string) => (
         <span className="font-medium text-primary-600">{value}</span>
       ),
     },
     {
       header: 'Description',
-      accessor: 'remark',
+      accessor: 'description',
     },
     {
       header: 'Open Balance',
-      accessor: 'balance.before',
+      accessor: 'openBalance',
       cell: (value: number) => (
         <span className="font-medium">{formatCurrency(value)}</span>
       ),
@@ -150,15 +153,15 @@ const UserWalletReport = () => {
       header: 'Amount',
       accessor: 'amount',
       cell: (value: number, row: WalletRecord) => (
-        <span className={`font-medium ${row.transaction_type === 'credit' ? 'text-success-600' : 'text-error-600'
+        <span className={`font-medium ${row.type === 'payin' ? 'text-success-600' : 'text-error-600'
           }`}>
-          {row.transaction_type === 'credit' ? '+' : '-'}{formatCurrency(value)}
+          {row.type === 'payin' ? '+' : '-'}{formatCurrency(value)}
         </span>
       ),
     },
     {
-      header: 'Wallet Balance',
-      accessor: 'balance.after',
+      header: 'Balance',
+      accessor: 'balance',
       cell: (value: number) => (
         <span className="font-medium">{formatCurrency(value)}</span>
       ),
@@ -170,6 +173,24 @@ const UserWalletReport = () => {
         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(value)}`}>
           {value.charAt(0).toUpperCase() + value.slice(1)}
         </span>
+      ),
+    },
+    {
+      header: 'Charges',
+      accessor: 'charges',
+      cell: (value: { admin_charge: number; agent_charge: number; total_charges: number }) => (
+        <div className="text-sm">
+          <div>Admin: {formatCurrency(value.admin_charge)}</div>
+          <div>Agent: {formatCurrency(value.agent_charge)}</div>
+          <div className="font-medium">Total: {formatCurrency(value.total_charges)}</div>
+        </div>
+      ),
+    },
+    {
+      header: 'Reference ID',
+      accessor: 'referenceId',
+      cell: (value: string) => (
+        <span className="font-mono text-sm">{value}</span>
       ),
     },
   ];
@@ -300,11 +321,20 @@ const UserWalletReport = () => {
             </div>
 
             {/* Table */}
-            <Table
-              columns={columns}
-              data={transactions}
-              pagination={true}
-            />
+            <div className="mt-6">
+              <Table
+                columns={columns}
+                data={transactions}
+                pagination={true}
+                currentPage={pagination.currentPage}
+                totalPages={pagination.totalPages}
+                onPageChange={handlePageChange}
+                onPageSizeChange={handlePageSizeChange}
+                pageSize={pagination.pageSize}
+                totalItems={pagination.totalItems}
+                loading={loading}
+              />
+            </div>
           </div>
         </div>
       </div>

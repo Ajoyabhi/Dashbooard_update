@@ -60,7 +60,7 @@ const getUserWalletReports = async (req, res) => {
 
     // Build filter object
     const filter = {
-      'user.id': req.user.id
+      'user.user_id': req.user.id.toString()
     };
     // Add type filter if provided
     if (req.query.type && req.query.type !== 'all') {
@@ -151,7 +151,7 @@ const getUserPayinReports = async (req, res) => {
 
     // Build filter object
     const filter = {
-      'user.id': req.user._id
+      'user.user_id': req.user.id.toString()
     };
 
     // Add status filter if provided
@@ -223,7 +223,7 @@ const getUserPayoutReports = async (req, res) => {
 
     // Build filter object
     const filter = {
-      'user.id': req.user._id
+      'user.user_id': req.user.id.toString()
     };
 
     // Add status filter if provided

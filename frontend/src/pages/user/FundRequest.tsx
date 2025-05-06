@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Search, Plus, Building2, X } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Table from '../../components/dashboard/Table';
-import { agentMenuItems } from '../../data/mockData';
+import { userMenuItems } from '../../data/mockData';
 import { formatCurrency } from '../../utils/formatUtils';
 
 // Mock bank details
@@ -135,7 +135,7 @@ export default function FundRequest() {
   ];
 
   return (
-    <DashboardLayout menuItems={agentMenuItems} title="Fund Request">
+    <DashboardLayout menuItems={userMenuItems} title="Fund Request">
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <button

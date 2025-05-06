@@ -230,21 +230,21 @@ const Table: React.FC<TableProps> = ({
                 <option value={50}>50 per page</option>
                 <option value={100}>100 per page</option>
               </select>
-              <nav className="relative z-0 inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+              <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
                 <button
                   onClick={() => handlePageChange(currentPage - 1)}
                   disabled={currentPage === 1}
                   className="relative inline-flex items-center px-2 py-2 text-gray-400 rounded-l-md border border-gray-300 bg-white text-sm font-medium hover:bg-gray-50"
                 >
-                  Previous
+                  <ChevronLeft className="h-5 w-5" />
                 </button>
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                   <button
                     key={page}
                     onClick={() => handlePageChange(page)}
                     className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${page === currentPage
-                      ? 'z-10 bg-primary-50 border-primary-500 text-primary-600'
-                      : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                        ? 'z-10 bg-primary-50 border-primary-500 text-primary-600'
+                        : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
                       }`}
                   >
                     {page}
@@ -255,7 +255,7 @@ const Table: React.FC<TableProps> = ({
                   disabled={currentPage === totalPages}
                   className="relative inline-flex items-center px-2 py-2 text-gray-400 rounded-r-md border border-gray-300 bg-white text-sm font-medium hover:bg-gray-50"
                 >
-                  Next
+                  <ChevronRight className="h-5 w-5" />
                 </button>
               </nav>
             </div>
