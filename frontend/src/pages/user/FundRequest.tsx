@@ -1,9 +1,27 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Plus, Building2, X } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Table from '../../components/dashboard/Table';
-import { agentMenuItems } from '../../data/mockData';
+import { userMenuItems } from '../../data/mockData';
 import { formatCurrency } from '../../utils/formatUtils';
+import axios from 'axios';
+
+// Create axios instance with default config
+const api = axios.create({
+  baseURL: '/api',
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+
+// Add request interceptor to add auth token
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
 // Mock bank details
 const bankDetails = {
@@ -15,64 +33,109 @@ const bankDetails = {
   swiftCode: 'HDFCINBB',
 };
 
-// Mock fund requests
-const mockFundRequests = [
-  {
-    id: 1,
-    amount: 5000.00,
-    referenceId: 'REF123456',
-    fromBank: 'HDFC Bank',
-    toBank: 'ICICI Bank',
-    paymentType: 'NEFT',
-    remarks: 'Monthly deposit',
-    status: 'pending',
-  },
-  {
-    id: 2,
-    amount: 2500.00,
-    referenceId: 'REF789012',
-    fromBank: 'SBI Bank',
-    toBank: 'Axis Bank',
-    paymentType: 'RTGS',
-    remarks: 'Weekly settlement',
-    status: 'approved',
-  },
-];
+interface FundRequest {
+  id: number;
+  amount: number;
+  referenceId: string;
+  fromBank: string;
+  toBank: string;
+  paymentType: string;
+  remarks: string;
+  reason: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface ApiError {
+  response?: {
+    data?: {
+      message?: string;
+    };
+  };
+}
 
 export default function FundRequest() {
   const [showBankDetails, setShowBankDetails] = useState(false);
   const [showAddRequest, setShowAddRequest] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [fundRequests, setFundRequests] = useState<FundRequest[]>([]);
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    totalItems: 0,
+    pageSize: 10
+  });
   
   const [newRequest, setNewRequest] = useState({
-    amount: '',
-    referenceId: '',
-    fromBank: '',
-    toBank: '',
-    paymentType: 'NEFT',
+    settlement_wallet: '',
+    reference_id: '',
+    from_bank: '',
+    to_bank: '',
+    payment_type: 'NEFT',
     remarks: '',
+    reason: ''
   });
+
+  // Fetch fund requests
+  const fetchFundRequests = async (page = 1) => {
+    try {
+      setLoading(true);
+      const response = await api.get(`/user/fund-requests?page=${page}&pageSize=${pagination.pageSize}`);
+      if (response.data.success) {
+        setFundRequests(response.data.data.fundRequests);
+        setPagination(response.data.data.pagination);
+      }
+    } catch (error) {
+      const apiError = error as ApiError;
+      const errorMessage = apiError.response?.data?.message || 'Failed to fetch fund requests';
+      window.showToast('error', errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchFundRequests();
+  }, []);
 
   const handleSubmit = async () => {
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      setLoading(true);
       
-      // Show success message
-      window.showToast('success', 'Fund request submitted successfully');
+      // Validate required fields
+      if (!newRequest.reference_id || !newRequest.from_bank || !newRequest.to_bank || !newRequest.reason) {
+        window.showToast('error', 'Please fill in all required fields');
+        return;
+      }
+
+      const response = await api.post('/user/fund-request', newRequest);
       
-      // Reset form and close modal
-      setNewRequest({
-        amount: '',
-        referenceId: '',
-        fromBank: '',
-        toBank: '',
-        paymentType: 'NEFT',
-        remarks: '',
-      });
-      setShowAddRequest(false);
-    } catch (error) {
-      window.showToast('error', 'Failed to submit request');
+      if (response.data.success) {
+        window.showToast('success', 'Fund request submitted successfully');
+        
+        // Reset form and close modal
+        setNewRequest({
+          settlement_wallet: '',
+          reference_id: '',
+          from_bank: '',
+          to_bank: '',
+          payment_type: 'NEFT',
+          remarks: '',
+          reason: ''
+        });
+        setShowAddRequest(false);
+        
+        // Refresh the fund requests list
+        fetchFundRequests();
+      }
+    } catch (error: unknown) {
+      const apiError = error as ApiError;
+      const errorMessage = apiError.response?.data?.message || 'Failed to submit request';
+      window.showToast('error', errorMessage);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -132,10 +195,19 @@ export default function FundRequest() {
         </span>
       ),
     },
+    {
+      header: 'Created At',
+      accessor: 'createdAt',
+      cell: (value: string) => (
+        <span className="text-sm text-gray-600">
+          {new Date(value).toLocaleString()}
+        </span>
+      ),
+    }
   ];
 
   return (
-    <DashboardLayout menuItems={agentMenuItems} title="Fund Request">
+    <DashboardLayout menuItems={userMenuItems} title="Fund Request">
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <button
@@ -174,8 +246,12 @@ export default function FundRequest() {
           <div className="p-6">
             <Table
               columns={columns}
-              data={mockFundRequests}
+              data={fundRequests}
               pagination={true}
+              currentPage={pagination.currentPage}
+              totalPages={pagination.totalPages}
+              onPageChange={fetchFundRequests}
+              loading={loading}
             />
           </div>
         </div>
@@ -254,28 +330,25 @@ export default function FundRequest() {
               
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Amount</label>
-                  <div className="mt-1 relative rounded-md shadow-sm">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <span className="text-gray-500 sm:text-sm">$</span>
-                    </div>
-                    <input
-                      type="number"
-                      value={newRequest.amount}
-                      onChange={(e) => setNewRequest({ ...newRequest, amount: e.target.value })}
-                      className="block w-full pl-7 pr-12 border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                      placeholder="0.00"
-                    />
-                  </div>
+                  <label className="block text-sm font-medium text-gray-700">Settlement Wallet</label>
+                  <input
+                    type="number"
+                    value={newRequest.settlement_wallet}
+                    onChange={(e) => setNewRequest({ ...newRequest, settlement_wallet: e.target.value })}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                    placeholder="0.00"
+                    required
+                  />
                 </div>
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Reference ID</label>
                   <input
                     type="text"
-                    value={newRequest.referenceId}
-                    onChange={(e) => setNewRequest({ ...newRequest, referenceId: e.target.value })}
+                    value={newRequest.reference_id}
+                    onChange={(e) => setNewRequest({ ...newRequest, reference_id: e.target.value })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                    required
                   />
                 </div>
                 
@@ -283,9 +356,10 @@ export default function FundRequest() {
                   <label className="block text-sm font-medium text-gray-700">From Bank</label>
                   <input
                     type="text"
-                    value={newRequest.fromBank}
-                    onChange={(e) => setNewRequest({ ...newRequest, fromBank: e.target.value })}
+                    value={newRequest.from_bank}
+                    onChange={(e) => setNewRequest({ ...newRequest, from_bank: e.target.value })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                    required
                   />
                 </div>
                 
@@ -293,23 +367,35 @@ export default function FundRequest() {
                   <label className="block text-sm font-medium text-gray-700">To Bank</label>
                   <input
                     type="text"
-                    value={newRequest.toBank}
-                    onChange={(e) => setNewRequest({ ...newRequest, toBank: e.target.value })}
+                    value={newRequest.to_bank}
+                    onChange={(e) => setNewRequest({ ...newRequest, to_bank: e.target.value })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                    required
                   />
                 </div>
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Payment Type</label>
                   <select
-                    value={newRequest.paymentType}
-                    onChange={(e) => setNewRequest({ ...newRequest, paymentType: e.target.value })}
+                    value={newRequest.payment_type}
+                    onChange={(e) => setNewRequest({ ...newRequest, payment_type: e.target.value })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
                   >
                     <option value="NEFT">NEFT</option>
                     <option value="RTGS">RTGS</option>
                     <option value="IMPS">IMPS</option>
                   </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Reason</label>
+                  <textarea
+                    value={newRequest.reason}
+                    onChange={(e) => setNewRequest({ ...newRequest, reason: e.target.value })}
+                    rows={3}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                    required
+                  />
                 </div>
                 
                 <div>
@@ -332,9 +418,14 @@ export default function FundRequest() {
                 </button>
                 <button
                   onClick={handleSubmit}
-                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
+                  disabled={loading}
+                  className={`px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
+                    loading
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-primary-600 hover:bg-primary-700'
+                  }`}
                 >
-                  Submit
+                  {loading ? 'Submitting...' : 'Submit'}
                 </button>
               </div>
             </div>
