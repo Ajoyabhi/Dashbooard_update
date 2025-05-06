@@ -269,7 +269,8 @@ const initiatePayout = async (req, res) => {
             account_number,
             account_ifsc,
             bank_name,
-            beneficiary_name
+            beneficiary_name,
+            mobile: user.mobile
           }
         };
         result = await unpayPayout(payoutData);

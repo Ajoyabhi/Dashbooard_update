@@ -82,82 +82,8 @@ const processPayment = async (paymentData) => {
   }
 };
 
-/**
- * Process a payout via the payment gateway
- * @param {Object} payoutData - Payout data
- * @returns {Promise<Object>} - Payout result
- */
-const processPayout = async (payoutData) => {
-  try {
-    logger.info('Processing payout', { 
-      transaction_id: payoutData.transaction_id,
-      amount: payoutData.amount
-    });
 
-    // Update transaction status to processing
-    await Transaction.findByIdAndUpdate(
-      payoutData.transaction_id,
-      { status: 'processing' }
-    );
-
-    // Call the payment gateway API
-    const startTime = Date.now();
-    const response = await paymentGatewayClient.post('/v1/payouts', {
-      amount: payoutData.amount,
-      currency: payoutData.currency || 'INR',
-      recipient: payoutData.recipient,
-      description: payoutData.description || 'Payout via Payment Gateway',
-      metadata: payoutData.metadata || {}
-    });
-    const processingTime = Date.now() - startTime;
-
-    logger.info('Payout gateway response received', {
-      transaction_id: payoutData.transaction_id,
-      status: response.data.status,
-      reference_id: response.data.id,
-      processing_time: processingTime
-    });
-
-    // Update transaction with gateway response
-    const updatedTransaction = await Transaction.findByIdAndUpdate(
-      payoutData.transaction_id,
-      {
-        status: response.data.status === 'success' ? 'completed' : 'failed',
-        'gateway_response.reference_id': response.data.id,
-        'gateway_response.status': response.data.status,
-        'gateway_response.message': response.data.message,
-        'gateway_response.raw_response': response.data
-      },
-      { new: true }
-    );
-
-    return {
-      success: response.data.status === 'success',
-      transaction: updatedTransaction,
-      gateway_response: response.data
-    };
-  } catch (error) {
-    logger.error('Error processing payout', {
-      transaction_id: payoutData.transaction_id,
-      error: error.message
-    });
-
-    // Update transaction with error
-    await Transaction.findByIdAndUpdate(
-      payoutData.transaction_id,
-      {
-        status: 'failed',
-        'gateway_response.status': 'error',
-        'gateway_response.message': error.message,
-        'gateway_response.raw_response': error.response ? error.response.data : null
-      }
-    );
-
-    throw error;
-  }
-};
 
 module.exports = {
   processPayment,
-  processPayout
 }; 

@@ -1,4 +1,8 @@
 const User = require('../models/User');
+const UserTransaction = require('../models/userTransaction.model');
+const PayinTransaction = require('../models/payinTransaction.model');
+const PayoutTransaction = require('../models/payoutTransaction.model');
+
 
 const getUserProfile = async (req, res) => {
   try {
@@ -48,7 +52,245 @@ const updateUserProfile = async (req, res) => {
   }
 };
 
+const getUserWalletReports = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // Build filter object
+    const filter = {
+      'user.id': req.user.id
+    };
+    // Add type filter if provided
+    if (req.query.type && req.query.type !== 'all') {
+      filter.transaction_type = req.query.type;
+    }
+
+    // Add status filter if provided
+    if (req.query.status && req.query.status !== 'all') {
+      filter.status = req.query.status;
+    }
+
+    // Add date range filter if provided
+    if (req.query.startDate || req.query.endDate) {
+      filter.createdAt = {};
+      if (req.query.startDate) {
+        filter.createdAt.$gte = new Date(req.query.startDate);
+      }
+      if (req.query.endDate) {
+        filter.createdAt.$lte = new Date(req.query.endDate);
+      }
+    }
+
+    // Add search filter if provided
+    if (req.query.search) {
+      const searchRegex = new RegExp(req.query.search, 'i');
+      filter.$or = [
+        { 'user.name': searchRegex },
+        { transaction_id: searchRegex },
+        { reference_id: searchRegex },
+        { remark: searchRegex }
+      ];
+    }
+
+    // Get total count for pagination
+    const totalItems = await UserTransaction.countDocuments(filter);
+    const totalPages = Math.ceil(totalItems / limit);
+
+    // Fetch transactions with pagination
+    const transactions = await UserTransaction.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    // Format response
+    const formattedTransactions = transactions.map(transaction => ({
+      type: transaction.transaction_type,
+      date: transaction.createdAt,
+      orderId: transaction.transaction_id,
+      description: transaction.remark,
+      openBalance: transaction.balance.before,
+      amount: transaction.amount,
+      balance: transaction.balance.after,
+      status: transaction.status,
+      charges: transaction.charges,
+      referenceId: transaction.reference_id
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        transactions: formattedTransactions,
+        pagination: {
+          totalItems,
+          totalPages,
+          currentPage: page,
+          pageSize: limit,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error in getUserWalletReports:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching wallet reports',
+      error: error.message
+    });
+  }
+};
+
+const getUserPayinReports = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // Build filter object
+    const filter = {
+      'user.id': req.user._id
+    };
+
+    // Add status filter if provided
+    if (req.query.status && req.query.status !== 'all') {
+      filter.status = req.query.status;
+    }
+
+    // Add date range filter if provided
+    if (req.query.startDate || req.query.endDate) {
+      filter.createdAt = {};
+      if (req.query.startDate) {
+        filter.createdAt.$gte = new Date(req.query.startDate);
+      }
+      if (req.query.endDate) {
+        filter.createdAt.$lte = new Date(req.query.endDate);
+      }
+    }
+
+    // Add search filter if provided
+    if (req.query.search) {
+      const searchRegex = new RegExp(req.query.search, 'i');
+      filter.$or = [
+        { 'user.name': searchRegex },
+        { transaction_id: searchRegex },
+        { reference_id: searchRegex }
+      ];
+    }
+
+    // Get total count for pagination
+    const totalItems = await PayinTransaction.countDocuments(filter);
+    const totalPages = Math.ceil(totalItems / limit);
+
+    // Fetch transactions with pagination
+    const transactions = await PayinTransaction.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    res.json({
+      success: true,
+      data: {
+        transactions,
+        pagination: {
+          totalItems,
+          totalPages,
+          currentPage: page,
+          pageSize: limit,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error in getUserPayinReports:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching payin reports',
+      error: error.message
+    });
+  }
+};
+
+const getUserPayoutReports = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // Build filter object
+    const filter = {
+      'user.id': req.user._id
+    };
+
+    // Add status filter if provided
+    if (req.query.status && req.query.status !== 'all') {
+      filter.status = req.query.status;
+    }
+
+    // Add date range filter if provided
+    if (req.query.startDate || req.query.endDate) {
+      filter.createdAt = {};
+      if (req.query.startDate) {
+        filter.createdAt.$gte = new Date(req.query.startDate);
+      }
+      if (req.query.endDate) {
+        filter.createdAt.$lte = new Date(req.query.endDate);
+      }
+    }
+
+    // Add search filter if provided
+    if (req.query.search) {
+      const searchRegex = new RegExp(req.query.search, 'i');
+      filter.$or = [
+        { 'user.name': searchRegex },
+        { transaction_id: searchRegex },
+        { reference_id: searchRegex }
+      ];
+    }
+
+    // Get total count for pagination
+    const totalItems = await PayoutTransaction.countDocuments(filter);
+    const totalPages = Math.ceil(totalItems / limit);
+
+    // Fetch transactions with pagination
+    const transactions = await PayoutTransaction.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    res.json({
+      success: true,
+      data: {
+        transactions,
+        pagination: {
+          totalItems,
+          totalPages,
+          currentPage: page,
+          pageSize: limit,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error in getUserPayoutReports:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching payout reports',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   getUserProfile,
-  updateUserProfile
+  updateUserProfile,
+  getUserWalletReports,
+  getUserPayinReports,
+  getUserPayoutReports
 }; 

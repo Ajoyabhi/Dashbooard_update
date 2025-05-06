@@ -1,10 +1,8 @@
 const { v4: uuidv4 } = require('uuid');
-const { payinQueue, payoutQueue } = require('../config/queue.config');
-const Transaction = require('../models/transaction.model');
-const User = require('../models/User');
-// const Agent = require('../models/agent.model');
+const { payinQueue } = require('../config/queue.config');
 const { logger } = require('../utils/logger');
-const { setValidationResult, setThirdPartyApiInfo } = require('../middleware/apiLogger.middleware');
+const { setValidationResult } = require('../middleware/apiLogger.middleware');
+const getClientIp = require('../utils/getClientIp');
 
 /**
  * Validate payment request
@@ -14,7 +12,6 @@ const { setValidationResult, setThirdPartyApiInfo } = require('../middleware/api
 const validatePaymentRequest = (req) => {
   const errors = [];
   const { account_number, account_ifsc, bank_name, beneficiary_name, request_type, amount, reference_id } = req.body;
-
 
   // Validate amount
   if (!amount || isNaN(amount) || amount <= 0) {
@@ -35,8 +32,6 @@ const validatePaymentRequest = (req) => {
   };
 };
 
-
-
 /**
  * Initiate a payment
  * @param {Object} req - Express request object
@@ -44,14 +39,33 @@ const validatePaymentRequest = (req) => {
  */
 const initiatePayment = async (req, res) => {
   try {
-    const { amount, currency = 'USD' } = req.body;
+    // Validate request
+    const validationResult = validatePaymentRequest(req);
+    setValidationResult(req, validationResult);
+    if (!validationResult.isValid) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid request', 
+        errors: validationResult.errors 
+      });
+    }
+
+    const { account_number, account_ifsc, bank_name, beneficiary_name, request_type, amount, reference_id } = req.body;
+    const user_id = req.user.id;
+    const clientIp = getClientIp(req);
     const transaction_id = uuidv4();
 
     // Create job data
     const jobData = {
+      user_id,
       transaction_id,
       amount,
-      currency
+      account_number,
+      account_ifsc,
+      bank_name,
+      beneficiary_name,
+      reference_id,
+      clientIp
     };
 
     // Add job to queue
@@ -70,6 +84,7 @@ const initiatePayment = async (req, res) => {
       transaction_id,
       job_id: job.id
     });
+
   } catch (error) {
     logger.error('Error queuing payment task', { error: error.message });
     res.status(500).json({ 
@@ -88,7 +103,7 @@ const getTransactionStatus = async (req, res) => {
   try {
     const { transaction_id } = req.params;
 
-    const transaction = await Transaction.findById(transaction_id);
+    const transaction = await PayinTransaction.findById(transaction_id);
     if (!transaction) {
       return res.status(404).json({ 
         success: false, 
@@ -98,13 +113,12 @@ const getTransactionStatus = async (req, res) => {
 
     // Check if user has access to this transaction
     const isAdmin = req.user.userType === 'admin';
-    const isSender = transaction.sender.id.toString() === req.user._id.toString();
-    const isRecipient = transaction.recipient.id.toString() === req.user._id.toString();
+    const isRecipient = transaction.user.id.toString() === req.user._id.toString();
     const isAgentOfRecipient = req.user.userType === 'agent' && 
-                              transaction.recipient.model === 'User' &&
-                              transaction.recipient.id.toString() === req.user._id.toString();
+                              transaction.user.model === 'User' &&
+                              transaction.user.id.toString() === req.user._id.toString();
 
-    if (!isAdmin && !isSender && !isRecipient && !isAgentOfRecipient) {
+    if (!isAdmin && !isRecipient && !isAgentOfRecipient) {
       return res.status(403).json({ 
         success: false, 
         message: 'You do not have access to this transaction' 
@@ -132,8 +146,44 @@ const getTransactionStatus = async (req, res) => {
   }
 };
 
+/**
+ * Handle Unpay payment callback
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const handleUnpayCallback = async (req, res) => {
+  try {
+    logger.info('Received Unpay callback', { body: req.body });
+
+    // Add callback to queue
+    const job = await payinQueue.add('callback', req.body, {
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 5000
+      }
+    });
+
+    // Send immediate response
+    res.json({ 
+      success: true, 
+      message: 'Callback queued for processing',
+      job_id: job.id
+    });
+
+  } catch (error) {
+    logger.error('Error queuing Unpay callback', {
+      error: error.message,
+      stack: error.stack,
+      body: req.body
+    });
+    res.status(500).json({ success: false, message: 'Error processing callback' });
+  }
+};
+
 module.exports = {
   initiatePayment,
   getTransactionStatus,
-  validatePaymentRequest
+  validatePaymentRequest,
+  handleUnpayCallback
 }; 

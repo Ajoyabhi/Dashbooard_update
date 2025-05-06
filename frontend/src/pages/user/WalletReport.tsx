@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Table from '../../components/dashboard/Table';
-import { userMenuItems, mockWalletRecords } from '../../data/mockData';
+import { userMenuItems } from '../../data/mockData';
 import { formatCurrency, formatDate, getStatusColor } from '../../utils/formatUtils';
 import { WalletRecord, FilterOption, DateRange } from '../../types';
 import { Download, Filter, Search, X } from 'lucide-react';
+import api from '../../utils/axios';
 
 const UserWalletReport = () => {
   const [searchTerm, setSearchTerm] = React.useState('');
@@ -15,6 +16,18 @@ const UserWalletReport = () => {
     endDate: null,
   });
   const [showFilters, setShowFilters] = React.useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [loading, setLoading] = useState(false);
+  const [transactions, setTransactions] = useState<WalletRecord[]>([]);
+  const [pagination, setPagination] = useState({
+    totalItems: 0,
+    totalPages: 0,
+    currentPage: 1,
+    pageSize: 10,
+    hasNextPage: false,
+    hasPrevPage: false,
+  });
 
   const typeOptions: FilterOption[] = [
     { label: 'All Types', value: 'all' },
@@ -29,23 +42,49 @@ const UserWalletReport = () => {
     { label: 'Failed', value: 'failed' },
   ];
 
-  // Filter records based on selected criteria
-  const filteredRecords = mockWalletRecords.filter((record) => {
-    const matchesSearch = 
-      record.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      record.orderId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      record.description.toLowerCase().includes(searchTerm.toLowerCase());
+  // Fetch transactions with pagination and filters
+  const fetchTransactions = async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams({
+        page: currentPage.toString(),
+        limit: pageSize.toString(),
+        type: selectedType,
+        status: selectedStatus,
+        search: searchTerm,
+      });
 
-    const matchesType = selectedType === 'all' || record.type === selectedType;
-    const matchesStatus = selectedStatus === 'all' || record.status === selectedStatus;
+      if (dateRange.startDate) {
+        params.append('startDate', dateRange.startDate.toISOString());
+      }
+      if (dateRange.endDate) {
+        params.append('endDate', dateRange.endDate.toISOString());
+      }
 
-    const recordDate = new Date(record.date);
-    const matchesDateRange =
-      (!dateRange.startDate || recordDate >= dateRange.startDate) &&
-      (!dateRange.endDate || recordDate <= dateRange.endDate);
+      const response = await api.get(`/user/wallet_reports?${params}`);
+      const { transactions, pagination: paginationData } = response.data.data;
 
-    return matchesSearch && matchesType && matchesStatus && matchesDateRange;
-  });
+      setTransactions(transactions);
+      setPagination({
+        totalItems: paginationData.totalItems,
+        totalPages: paginationData.totalPages,
+        currentPage: paginationData.currentPage,
+        pageSize: paginationData.pageSize,
+        hasNextPage: paginationData.hasNextPage,
+        hasPrevPage: paginationData.hasPrevPage,
+      });
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      // Handle error (show toast notification, etc.)
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch transactions when filters or pagination changes
+  useEffect(() => {
+    fetchTransactions();
+  }, [currentPage, pageSize, selectedType, selectedStatus, dateRange, searchTerm]);
 
   const handleDownload = () => {
     console.log('Downloading report with filters:', {
@@ -60,39 +99,49 @@ const UserWalletReport = () => {
     setSelectedType('all');
     setSelectedStatus('all');
     setDateRange({ startDate: null, endDate: null });
+    setSearchTerm('');
+    setCurrentPage(1);
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize);
+    setCurrentPage(1);
   };
 
   const columns = [
     {
       header: 'Type',
-      accessor: 'type',
+      accessor: 'transaction_type',
       cell: (value: string) => (
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-          value === 'credit' ? 'bg-success-100 text-success-800' : 'bg-error-100 text-error-800'
-        }`}>
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${value === 'credit' ? 'bg-success-100 text-success-800' : 'bg-error-100 text-error-800'
+          }`}>
           {value.charAt(0).toUpperCase() + value.slice(1)}
         </span>
       ),
     },
     {
       header: 'Date',
-      accessor: 'date',
+      accessor: 'createdAt',
       cell: (value: string) => formatDate(value),
     },
     {
       header: 'Order ID',
-      accessor: 'orderId',
+      accessor: 'transaction_id',
       cell: (value: string) => (
         <span className="font-medium text-primary-600">{value}</span>
       ),
     },
     {
       header: 'Description',
-      accessor: 'description',
+      accessor: 'remark',
     },
     {
       header: 'Open Balance',
-      accessor: 'openBalance',
+      accessor: 'balance.before',
       cell: (value: number) => (
         <span className="font-medium">{formatCurrency(value)}</span>
       ),
@@ -101,16 +150,15 @@ const UserWalletReport = () => {
       header: 'Amount',
       accessor: 'amount',
       cell: (value: number, row: WalletRecord) => (
-        <span className={`font-medium ${
-          row.type === 'credit' ? 'text-success-600' : 'text-error-600'
-        }`}>
-          {row.type === 'credit' ? '+' : '-'}{formatCurrency(value)}
+        <span className={`font-medium ${row.transaction_type === 'credit' ? 'text-success-600' : 'text-error-600'
+          }`}>
+          {row.transaction_type === 'credit' ? '+' : '-'}{formatCurrency(value)}
         </span>
       ),
     },
     {
       header: 'Wallet Balance',
-      accessor: 'balance',
+      accessor: 'balance.after',
       cell: (value: number) => (
         <span className="font-medium">{formatCurrency(value)}</span>
       ),
@@ -133,7 +181,7 @@ const UserWalletReport = () => {
           <div className="p-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
               <h2 className="text-lg font-medium text-gray-900">Wallet Transactions</h2>
-              
+
               <div className="flex items-center space-x-2">
                 <button
                   onClick={() => setShowFilters(!showFilters)}
@@ -142,7 +190,7 @@ const UserWalletReport = () => {
                   <Filter className="h-4 w-4 mr-1" />
                   Filters
                 </button>
-                
+
                 <button
                   onClick={handleDownload}
                   className="inline-flex items-center px-3 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
@@ -254,7 +302,7 @@ const UserWalletReport = () => {
             {/* Table */}
             <Table
               columns={columns}
-              data={filteredRecords}
+              data={transactions}
               pagination={true}
             />
           </div>
