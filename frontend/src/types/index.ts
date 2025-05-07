@@ -87,9 +87,9 @@ export interface ChargebackRecord {
 export interface WalletRecord {
   _id: string;
   transaction_id: string;
-  transaction_type: string;
+  transaction_type: 'credit' | 'debit';
   amount: number;
-  status: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
   reference_id: string;
   remark: string;
   metadata: {

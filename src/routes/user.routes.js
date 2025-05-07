@@ -5,7 +5,9 @@ const {
   updateUserProfile,
   getUserWalletReports,
   getUserPayinReports,
-  getUserPayoutReports
+  getUserPayoutReports,
+  getUserFundRequests,
+  createFundRequest
 } = require('../controllers/user.controller');
 const { auth, authorize } = require('../middleware/auth.middleware');
 
@@ -20,5 +22,9 @@ router.put('/profile', updateUserProfile);
 router.get('/wallet_reports', getUserWalletReports);
 router.get('/payin_reports', getUserPayinReports);
 router.get('/payout_reports', getUserPayoutReports);
+
+// User fund request routes
+router.get('/fund-requests', getUserFundRequests);
+router.post('/fund-request', createFundRequest);
 
 module.exports = router; 

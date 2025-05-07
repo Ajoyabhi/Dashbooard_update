@@ -2,41 +2,56 @@ import React, { useState } from 'react';
 import { Search, Calendar, Download } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Table from '../../components/dashboard/Table';
-import { userMenuItems } from '../../data/mockData';
+import { agentMenuItems } from '../../data/mockData';
 import { formatCurrency, formatDate, getStatusColor } from '../../utils/formatUtils';
+import { toast } from 'react-hot-toast';
 
 // Mock payin transactions
 const mockPayinTransactions = [
   {
-    orderId: 'ORD-2025-001',
-    transactionId: 'TXN123456',
+    _id: 'payin-001',
+    order_id: 'ORD-2025-001',
+    transaction_id: 'TXN123456',
     utr: 'UTR789012',
-    name: 'John Smith',
-    accountNo: '1234567890',
-    ifsc: 'HDFC0001234',
-    upiId: 'johnsmith@upi',
+    user: {
+      name: 'John Smith',
+      account_no: '1234567890',
+      ifsc: 'HDFC0001234',
+      upi_id: 'johnsmith@upi'
+    },
     amount: 5000.00,
-    charge: 50.00,
-    gst: 9.00,
-    netAmount: 4941.00,
+    charges: {
+      admin_charge: 50.00,
+      gst: 9.00,
+      total_charges: 59.00
+    },
+    net_amount: 4941.00,
     status: 'completed',
-    date: '2025-01-15T10:30:00',
+    created_at: '2025-01-15T10:30:00',
+    updated_at: '2025-01-15T10:30:00'
   },
   {
-    orderId: 'ORD-2025-002',
-    transactionId: 'TXN789012',
+    _id: 'payin-002',
+    order_id: 'ORD-2025-002',
+    transaction_id: 'TXN789012',
     utr: 'UTR345678',
-    name: 'Sarah Wilson',
-    accountNo: '0987654321',
-    ifsc: 'ICIC0005678',
-    upiId: 'sarahw@upi',
+    user: {
+      name: 'Sarah Wilson',
+      account_no: '0987654321',
+      ifsc: 'ICIC0005678',
+      upi_id: 'sarahw@upi'
+    },
     amount: 2500.00,
-    charge: 25.00,
-    gst: 4.50,
-    netAmount: 2470.50,
+    charges: {
+      admin_charge: 25.00,
+      gst: 4.50,
+      total_charges: 29.50
+    },
+    net_amount: 2470.50,
     status: 'pending',
-    date: '2025-01-16T14:45:00',
-  },
+    created_at: '2025-01-16T14:45:00',
+    updated_at: '2025-01-16T14:45:00'
+  }
 ];
 
 export default function PayinReport() {
@@ -46,7 +61,7 @@ export default function PayinReport() {
 
   const handleDateSubmit = async () => {
     if (!selectedDate) {
-      window.showToast('error', 'Please select a date');
+      toast.error('Please select a date');
       return;
     }
 
@@ -54,9 +69,9 @@ export default function PayinReport() {
     try {
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1000));
-      window.showToast('success', 'Payin transactions fetched successfully');
+      toast.success('Payin transactions fetched successfully');
     } catch (error) {
-      window.showToast('error', 'Failed to fetch payin transactions');
+      toast.error('Failed to fetch payin transactions');
     } finally {
       setLoading(false);
     }
@@ -65,33 +80,34 @@ export default function PayinReport() {
   const handleDownload = () => {
     // Handle report download
     console.log('Downloading report...');
+    toast.success('Report download started');
   };
 
   // Filter transactions based on search term
   const filteredTransactions = mockPayinTransactions.filter(transaction => {
     const searchString = searchTerm.toLowerCase();
     return (
-      transaction.orderId.toLowerCase().includes(searchString) ||
-      transaction.transactionId.toLowerCase().includes(searchString) ||
+      transaction.order_id.toLowerCase().includes(searchString) ||
+      transaction.transaction_id.toLowerCase().includes(searchString) ||
       transaction.utr.toLowerCase().includes(searchString) ||
-      transaction.name.toLowerCase().includes(searchString) ||
-      transaction.accountNo.includes(searchString) ||
-      transaction.ifsc.toLowerCase().includes(searchString) ||
-      transaction.upiId.toLowerCase().includes(searchString)
+      transaction.user.name.toLowerCase().includes(searchString) ||
+      transaction.user.account_no.includes(searchString) ||
+      transaction.user.ifsc.toLowerCase().includes(searchString) ||
+      transaction.user.upi_id.toLowerCase().includes(searchString)
     );
   });
 
   const columns = [
     {
       header: 'Order ID',
-      accessor: 'orderId',
+      accessor: 'order_id',
       cell: (value: string) => (
         <span className="font-medium text-primary-600">{value}</span>
       ),
     },
     {
       header: 'Transaction ID',
-      accessor: 'transactionId',
+      accessor: 'transaction_id',
     },
     {
       header: 'UTR',
@@ -99,25 +115,25 @@ export default function PayinReport() {
     },
     {
       header: 'Name',
-      accessor: 'name',
+      accessor: 'user.name',
     },
     {
       header: 'A/C No',
-      accessor: 'accountNo',
+      accessor: 'user.account_no',
       cell: (value: string) => (
         <span className="font-mono">{value}</span>
       ),
     },
     {
       header: 'IFSC',
-      accessor: 'ifsc',
+      accessor: 'user.ifsc',
       cell: (value: string) => (
         <span className="font-mono">{value}</span>
       ),
     },
     {
       header: 'UPI ID',
-      accessor: 'upiId',
+      accessor: 'user.upi_id',
       cell: (value: string) => (
         <span className="font-mono">{value}</span>
       ),
@@ -131,21 +147,21 @@ export default function PayinReport() {
     },
     {
       header: 'Charge',
-      accessor: 'charge',
+      accessor: 'charges.admin_charge',
       cell: (value: number) => (
         <span className="text-gray-600">{formatCurrency(value)}</span>
       ),
     },
     {
       header: 'GST',
-      accessor: 'gst',
+      accessor: 'charges.gst',
       cell: (value: number) => (
         <span className="text-gray-600">{formatCurrency(value)}</span>
       ),
     },
     {
       header: 'Net Amount',
-      accessor: 'netAmount',
+      accessor: 'net_amount',
       cell: (value: number) => (
         <span className="font-medium">{formatCurrency(value)}</span>
       ),
@@ -161,13 +177,13 @@ export default function PayinReport() {
     },
     {
       header: 'Date',
-      accessor: 'date',
+      accessor: 'created_at',
       cell: (value: string) => formatDate(value),
     },
   ];
 
   return (
-    <DashboardLayout menuItems={userMenuItems} title="Payin Report">
+    <DashboardLayout menuItems={agentMenuItems} title="Payin Report">
       <div className="space-y-6">
         {/* Date Filter */}
         <div className="bg-white shadow-sm rounded-lg p-6">
@@ -189,20 +205,19 @@ export default function PayinReport() {
                 />
               </div>
             </div>
-            
+
             <div className="flex items-center space-x-3">
               <button
                 onClick={handleDateSubmit}
                 disabled={loading}
-                className={`inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
-                  loading
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-primary-600 hover:bg-primary-700'
-                }`}
+                className={`inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${loading
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-primary-600 hover:bg-primary-700'
+                  }`}
               >
                 {loading ? 'Loading...' : 'Submit'}
               </button>
-              
+
               <button
                 onClick={handleDownload}
                 className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"

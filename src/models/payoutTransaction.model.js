@@ -70,7 +70,7 @@ const payoutTransactionSchema = new mongoose.Schema({
     default: 'pending'
   },
   gateway_response: {
-    reference_id: String,
+    utr: String,
     status: String,
     message: String,
     raw_response: mongoose.Schema.Types.Mixed

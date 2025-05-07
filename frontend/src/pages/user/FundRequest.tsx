@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, Plus, Building2, X } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Table from '../../components/dashboard/Table';
 import { userMenuItems } from '../../data/mockData';
 import { formatCurrency } from '../../utils/formatUtils';
+import api from '../../utils/axios';
 
 // Mock bank details
 const bankDetails = {
@@ -15,35 +16,13 @@ const bankDetails = {
   swiftCode: 'HDFCINBB',
 };
 
-// Mock fund requests
-const mockFundRequests = [
-  {
-    id: 1,
-    amount: 5000.00,
-    referenceId: 'REF123456',
-    fromBank: 'HDFC Bank',
-    toBank: 'ICICI Bank',
-    paymentType: 'NEFT',
-    remarks: 'Monthly deposit',
-    status: 'pending',
-  },
-  {
-    id: 2,
-    amount: 2500.00,
-    referenceId: 'REF789012',
-    fromBank: 'SBI Bank',
-    toBank: 'Axis Bank',
-    paymentType: 'RTGS',
-    remarks: 'Weekly settlement',
-    status: 'approved',
-  },
-];
-
 export default function FundRequest() {
   const [showBankDetails, setShowBankDetails] = useState(false);
   const [showAddRequest, setShowAddRequest] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  
+  const [fundRequests, setFundRequests] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
   const [newRequest, setNewRequest] = useState({
     amount: '',
     referenceId: '',
@@ -51,27 +30,64 @@ export default function FundRequest() {
     toBank: '',
     paymentType: 'NEFT',
     remarks: '',
+    reason: '',
   });
+
+  useEffect(() => {
+    fetchFundRequests();
+  }, []);
+
+  const fetchFundRequests = async () => {
+    try {
+      setIsLoading(true);
+      const response = await api.get('/user/fund-requests');
+      const data = await response.data;
+      setFundRequests(data.data?.fundRequests || []);
+    } catch (error) {
+      console.error('Error fetching fund requests:', error);
+      window.showToast('error', 'Failed to fetch fund requests');
+      setFundRequests([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSubmit = async () => {
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Show success message
-      window.showToast('success', 'Fund request submitted successfully');
-      
-      // Reset form and close modal
-      setNewRequest({
-        amount: '',
-        referenceId: '',
-        fromBank: '',
-        toBank: '',
-        paymentType: 'NEFT',
-        remarks: '',
+      const response = await api.post('/user/fund-request', {
+        amount: parseFloat(newRequest.amount),
+        reference_id: newRequest.referenceId,
+        from_bank: newRequest.fromBank,
+        to_bank: newRequest.toBank,
+        payment_type: newRequest.paymentType,
+        remarks: newRequest.remarks,
+        reason: newRequest.reason
       });
-      setShowAddRequest(false);
+
+      const data = await response.data;
+
+      if (data.success) {
+        window.showToast('success', 'Fund request submitted successfully');
+
+        // Reset form and close modal
+        setNewRequest({
+          amount: '',
+          referenceId: '',
+          fromBank: '',
+          toBank: '',
+          paymentType: 'NEFT',
+          remarks: '',
+          reason: '',
+        });
+        setShowAddRequest(false);
+
+        // Refresh the fund requests list
+        fetchFundRequests();
+      } else {
+        window.showToast('error', data.message || 'Failed to submit request');
+      }
     } catch (error) {
+      console.error('Error submitting fund request:', error);
       window.showToast('error', 'Failed to submit request');
     }
   };
@@ -87,6 +103,13 @@ export default function FundRequest() {
     {
       header: 'Amount',
       accessor: 'amount',
+      cell: (value: number) => (
+        <span className="font-medium">{formatCurrency(value)}</span>
+      ),
+    },
+    {
+      header: 'Wallet Balance',
+      accessor: 'walletBalance',
       cell: (value: number) => (
         <span className="font-medium">{formatCurrency(value)}</span>
       ),
@@ -123,11 +146,10 @@ export default function FundRequest() {
       header: 'Status',
       accessor: 'status',
       cell: (value: string) => (
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-          value === 'approved' ? 'bg-success-100 text-success-800' :
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${value === 'approved' ? 'bg-success-100 text-success-800' :
           value === 'rejected' ? 'bg-error-100 text-error-800' :
-          'bg-warning-100 text-warning-800'
-        }`}>
+            'bg-warning-100 text-warning-800'
+          }`}>
           {value.charAt(0).toUpperCase() + value.slice(1)}
         </span>
       ),
@@ -145,7 +167,7 @@ export default function FundRequest() {
             <Building2 className="h-5 w-5 mr-2" />
             Show Bank Details
           </button>
-          
+
           <button
             onClick={() => setShowAddRequest(true)}
             className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
@@ -174,7 +196,7 @@ export default function FundRequest() {
           <div className="p-6">
             <Table
               columns={columns}
-              data={mockFundRequests}
+              data={fundRequests}
               pagination={true}
             />
           </div>
@@ -193,39 +215,39 @@ export default function FundRequest() {
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-500">Bank Name</label>
                   <p className="mt-1 text-sm text-gray-900">{bankDetails.bankName}</p>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-500">Account Name</label>
                   <p className="mt-1 text-sm text-gray-900">{bankDetails.accountName}</p>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-500">Account Number</label>
                   <p className="mt-1 text-sm text-gray-900">{bankDetails.accountNumber}</p>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-500">IFSC Code</label>
                   <p className="mt-1 text-sm text-gray-900">{bankDetails.ifscCode}</p>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-500">Branch Name</label>
                   <p className="mt-1 text-sm text-gray-900">{bankDetails.branchName}</p>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-500">SWIFT Code</label>
                   <p className="mt-1 text-sm text-gray-900">{bankDetails.swiftCode}</p>
                 </div>
               </div>
-              
+
               <div className="mt-6">
                 <button
                   onClick={() => setShowBankDetails(false)}
@@ -251,7 +273,7 @@ export default function FundRequest() {
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Amount</label>
@@ -268,7 +290,7 @@ export default function FundRequest() {
                     />
                   </div>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Reference ID</label>
                   <input
@@ -278,7 +300,7 @@ export default function FundRequest() {
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700">From Bank</label>
                   <input
@@ -288,7 +310,7 @@ export default function FundRequest() {
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700">To Bank</label>
                   <input
@@ -298,7 +320,7 @@ export default function FundRequest() {
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Payment Type</label>
                   <select
@@ -311,7 +333,7 @@ export default function FundRequest() {
                     <option value="IMPS">IMPS</option>
                   </select>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Remarks</label>
                   <textarea
@@ -321,8 +343,20 @@ export default function FundRequest() {
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
                   />
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Reason</label>
+                  <textarea
+                    value={newRequest.reason}
+                    onChange={(e) => setNewRequest({ ...newRequest, reason: e.target.value })}
+                    rows={3}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                    placeholder="Enter the reason for this fund request"
+                  />
+                </div>
+
               </div>
-              
+
               <div className="mt-6 flex justify-end space-x-3">
                 <button
                   onClick={() => setShowAddRequest(false)}

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import SummaryCard from '../../components/dashboard/SummaryCard';
 import Table from '../../components/dashboard/Table';
@@ -6,6 +7,8 @@ import { userMenuItems, mockSummaryCardsData, mockTransactions, mockPayouts } fr
 import { formatCurrency, formatDate, getStatusColor } from '../../utils/formatUtils';
 
 const UserDashboard: React.FC = () => {
+  const navigate = useNavigate();
+
   // Filter transactions for this user (in a real app, this would come from the API)
   const userTransactions = mockTransactions.slice(0, 3);
   const userPayouts = mockPayouts.slice(0, 2);
@@ -96,6 +99,22 @@ const UserDashboard: React.FC = () => {
     },
   ];
 
+  const handleQuickAction = (action: string) => {
+    switch (action) {
+      case 'payment':
+        navigate('/user/development-docs');
+        break;
+      case 'funds':
+        navigate('/user/fund-request');
+        break;
+      case 'apiKey':
+        navigate('/user/developer-settings');
+        break;
+      default:
+        break;
+    }
+  };
+
   return (
     <DashboardLayout menuItems={userMenuItems} title="User Dashboard">
       <div className="space-y-6">
@@ -104,18 +123,27 @@ const UserDashboard: React.FC = () => {
           <div className="bg-white p-6 rounded-lg shadow-card border border-gray-200">
             <h3 className="text-lg font-medium text-gray-800 mb-4">Quick Actions</h3>
             <div className="space-y-3">
-              <button className="w-full bg-primary-600 hover:bg-primary-700 text-white py-2 px-4 rounded-md transition">
-                Request Payout
+              <button
+                onClick={() => handleQuickAction('payment')}
+                className="w-full bg-primary-600 hover:bg-primary-700 text-white py-2 px-4 rounded-md transition"
+              >
+                Request Payment
               </button>
-              <button className="w-full bg-secondary-600 hover:bg-secondary-700 text-white py-2 px-4 rounded-md transition">
+              <button
+                onClick={() => handleQuickAction('funds')}
+                className="w-full bg-secondary-600 hover:bg-secondary-700 text-white py-2 px-4 rounded-md transition"
+              >
                 Add Funds
               </button>
-              <button className="w-full bg-accent-600 hover:bg-accent-700 text-white py-2 px-4 rounded-md transition">
+              <button
+                onClick={() => handleQuickAction('apiKey')}
+                className="w-full bg-accent-600 hover:bg-accent-700 text-white py-2 px-4 rounded-md transition"
+              >
                 Generate API Key
               </button>
             </div>
           </div>
-          
+
           {/* Summary Cards */}
           {mockSummaryCardsData.slice(0, 2).map((card, index) => (
             <SummaryCard
@@ -129,7 +157,7 @@ const UserDashboard: React.FC = () => {
             />
           ))}
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {mockSummaryCardsData.slice(2).map((card, index) => (
             <SummaryCard
@@ -143,7 +171,7 @@ const UserDashboard: React.FC = () => {
             />
           ))}
         </div>
-        
+
         {/* API Status */}
         <div className="bg-white p-6 rounded-lg shadow-card border border-gray-200">
           <div className="flex items-center justify-between mb-4">
@@ -153,13 +181,13 @@ const UserDashboard: React.FC = () => {
               <span className="text-sm text-success-700 font-medium">All Systems Operational</span>
             </div>
           </div>
-          
+
           <div className="border border-gray-200 rounded-md overflow-hidden">
             <div className="grid grid-cols-2 bg-gray-50 border-b border-gray-200">
               <div className="py-2 px-4 text-sm font-medium text-gray-700">Service</div>
               <div className="py-2 px-4 text-sm font-medium text-gray-700">Status</div>
             </div>
-            
+
             <div className="divide-y divide-gray-200">
               <div className="grid grid-cols-2">
                 <div className="py-3 px-4 text-sm text-gray-800">API v1</div>
@@ -168,7 +196,7 @@ const UserDashboard: React.FC = () => {
                   Operational
                 </div>
               </div>
-              
+
               <div className="grid grid-cols-2">
                 <div className="py-3 px-4 text-sm text-gray-800">API v2</div>
                 <div className="py-3 px-4 text-sm text-success-700 flex items-center">
@@ -176,7 +204,7 @@ const UserDashboard: React.FC = () => {
                   Operational
                 </div>
               </div>
-              
+
               <div className="grid grid-cols-2">
                 <div className="py-3 px-4 text-sm text-gray-800">Webhooks</div>
                 <div className="py-3 px-4 text-sm text-success-700 flex items-center">
@@ -187,7 +215,7 @@ const UserDashboard: React.FC = () => {
             </div>
           </div>
         </div>
-        
+
         {/* Tables */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Table
@@ -197,7 +225,7 @@ const UserDashboard: React.FC = () => {
             data={userTransactions}
             pagination={false}
           />
-          
+
           <Table
             title="Recent Payouts"
             description="Your latest payout requests"

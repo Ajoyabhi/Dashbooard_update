@@ -181,6 +181,12 @@ payinQueue.process(async (job) => {
         agent_charge: agentCharge,
         total_charges: totalCharges
       },
+      gateway_response: {
+        utr: reference_id,
+        status: 'pending',
+        message: 'Payin request initiated',
+        raw_response: null
+      },
       balance: {
         before: user.FinancialDetail.settlement,
         after: user_balance_left
@@ -223,7 +229,7 @@ payinQueue.process(async (job) => {
       reference_id: reference_id,
       status: 'pending',
       gateway_response: {
-        reference_id: reference_id,
+        utr: reference_id,
         status: 'pending',
         message: 'Payin request initiated',
         raw_response: null
@@ -279,13 +285,29 @@ payinQueue.process(async (job) => {
         timestamp: new Date().toISOString()
       });
 
-      await PayinTransaction.update(
-        { status: 'completed', gateway_response: result },
-        { where: { transaction_id: reference_id } }
+      await PayinTransaction.updateOne(
+        { reference_id },
+        { $set: { 
+          status: 'completed', 
+          gateway_response: { 
+            utr: result.gateway_response.utr, 
+            status: 'completed', 
+            message: 'Payin request completed', 
+            raw_response: result 
+          } 
+        }}
       );
       await UserTransaction.updateOne(
         { reference_id },
-        { $set: { status: 'completed' } }
+        { $set: { 
+          status: 'completed', 
+          gateway_response: { 
+            utr: result.gateway_response.utr, 
+            status: 'completed', 
+            message: 'Payin request completed', 
+            raw_response: result 
+          } 
+        }}
       );
     } else {
       await PayinTransaction.updateOne(

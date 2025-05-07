@@ -31,15 +31,15 @@ const AgentWalletReport = () => {
 
   // Filter records based on selected criteria
   const filteredRecords = mockWalletRecords.filter((record) => {
-    const matchesSearch = 
-      record.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      record.orderId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      record.description.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch =
+      record.user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      record.reference_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      record.remark.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesType = selectedType === 'all' || record.type === selectedType;
+    const matchesType = selectedType === 'all' || record.transaction_type === selectedType;
     const matchesStatus = selectedStatus === 'all' || record.status === selectedStatus;
 
-    const recordDate = new Date(record.date);
+    const recordDate = new Date(record.createdAt);
     const matchesDateRange =
       (!dateRange.startDate || recordDate >= dateRange.startDate) &&
       (!dateRange.endDate || recordDate <= dateRange.endDate);
@@ -65,34 +65,33 @@ const AgentWalletReport = () => {
   const columns = [
     {
       header: 'Type',
-      accessor: 'type',
+      accessor: 'transaction_type',
       cell: (value: string) => (
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-          value === 'credit' ? 'bg-success-100 text-success-800' : 'bg-error-100 text-error-800'
-        }`}>
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${value === 'credit' ? 'bg-success-100 text-success-800' : 'bg-error-100 text-error-800'
+          }`}>
           {value.charAt(0).toUpperCase() + value.slice(1)}
         </span>
       ),
     },
     {
       header: 'Date',
-      accessor: 'date',
+      accessor: 'createdAt',
       cell: (value: string) => formatDate(value),
     },
     {
-      header: 'Order ID',
-      accessor: 'orderId',
+      header: 'Reference ID',
+      accessor: 'reference_id',
       cell: (value: string) => (
         <span className="font-medium text-primary-600">{value}</span>
       ),
     },
     {
       header: 'Description',
-      accessor: 'description',
+      accessor: 'remark',
     },
     {
       header: 'Open Balance',
-      accessor: 'openBalance',
+      accessor: 'balance.before',
       cell: (value: number) => (
         <span className="font-medium">{formatCurrency(value)}</span>
       ),
@@ -101,16 +100,15 @@ const AgentWalletReport = () => {
       header: 'Amount',
       accessor: 'amount',
       cell: (value: number, row: WalletRecord) => (
-        <span className={`font-medium ${
-          row.type === 'credit' ? 'text-success-600' : 'text-error-600'
-        }`}>
-          {row.type === 'credit' ? '+' : '-'}{formatCurrency(value)}
+        <span className={`font-medium ${row.transaction_type === 'credit' ? 'text-success-600' : 'text-error-600'
+          }`}>
+          {row.transaction_type === 'credit' ? '+' : '-'}{formatCurrency(value)}
         </span>
       ),
     },
     {
-      header: 'Wallet Balance',
-      accessor: 'balance',
+      header: 'Balance',
+      accessor: 'balance.after',
       cell: (value: number) => (
         <span className="font-medium">{formatCurrency(value)}</span>
       ),
@@ -133,7 +131,7 @@ const AgentWalletReport = () => {
           <div className="p-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
               <h2 className="text-lg font-medium text-gray-900">Wallet Transactions</h2>
-              
+
               <div className="flex items-center space-x-2">
                 <button
                   onClick={() => setShowFilters(!showFilters)}
@@ -142,7 +140,7 @@ const AgentWalletReport = () => {
                   <Filter className="h-4 w-4 mr-1" />
                   Filters
                 </button>
-                
+
                 <button
                   onClick={handleDownload}
                   className="inline-flex items-center px-3 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"

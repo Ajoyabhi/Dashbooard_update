@@ -46,7 +46,7 @@ const payinTransactionSchema = new mongoose.Schema({
     default: 'pending'
   },
   gateway_response: {
-    reference_id: String,
+    utr: String,
     status: String,
     message: String,
     upi_string: String,

@@ -56,6 +56,12 @@ const userTransactionSchema = new mongoose.Schema({
     required: true
   } 
   },
+  gateway_response: {
+    utr: String,
+    status: String,
+    message: String,
+    raw_response: mongoose.Schema.Types.Mixed
+  },
   balance: {
     before: {
       type: Number,

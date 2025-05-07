@@ -387,7 +387,7 @@ export const userMenuItems: MenuItem[] = [
 export const agentMenuItems: MenuItem[] = [
   { title: 'Dashboard', path: '/agent', icon: 'BarChart3' },
   { title: 'Add Users', path: '/agent/add-users', icon: 'UserPlus' },
-  { title: 'Fund Request', path: '/agent/fund-request', icon: 'DollarSign' },
+  // { title: 'Fund Request', path: '/agent/fund-request', icon: 'DollarSign' },
   { title: 'Wallet Report', path: '/agent/wallet-report', icon: 'Wallet' },
   { title: 'Payin Report', path: '/agent/payin-report', icon: 'PayinIcon' },
   { title: 'Payout Report', path: '/agent/payout-report', icon: 'FileText' },
