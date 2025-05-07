@@ -169,7 +169,11 @@ payinQueue.process(async (job) => {
     const userTransaction = await UserTransaction.create({
       user: {
         id: new mongoose.Types.ObjectId(user_id),
-        user_id: user_id
+        user_id: user_id,
+        name: user.name || '',
+        email: user.email || '',
+        mobile: user.mobile || '',
+        userType: user.user_type || ''
       },
       transaction_id: job.data.transaction_id,
       amount: amount,
