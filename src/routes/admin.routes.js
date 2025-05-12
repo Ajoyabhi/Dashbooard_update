@@ -32,7 +32,9 @@ const {
   getSettlementHistory,
   getSettlementDashboard,
   getManageFundRequest,
-  updateManageFundRequest
+  updateManageFundRequest,
+  getChargeback,
+  handleChargebackAction
 } = require('../controllers/admin.controller');
 const { registerUser } = require('../controllers/auth.controller');
 const { auth, authorize } = require('../middleware/auth.middleware');
@@ -101,5 +103,9 @@ router.get('/settlement-dashboard', getSettlementDashboard);
 router.get('/manage-fund-request', getManageFundRequest);
 // router.post('/manage-fund-request', addManageFundRequest);
 router.post('/manage-fund-request/:id', updateManageFundRequest);
+
+// chargeback routes
+router.get('/chargeback', getChargeback);
+router.post('/chargeback/:id/:action', handleChargebackAction);
 
 module.exports = router; 

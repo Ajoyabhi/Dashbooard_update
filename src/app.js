@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -6,6 +7,15 @@ const { logger, stream } = require('./utils/logger');
 const { captureResponseBody, measureProcessingTime, logApiRequest } = require('./middleware/apiLogger.middleware');
 const helmet = require('helmet');
 const { sequelize } = require('./config/database');
+const config = require('./config');
+
+// Debug Redis configuration
+logger.info('Redis Configuration:', {
+  host: process.env.REDIS_HOST,
+  port: process.env.REDIS_PORT,
+  tls: process.env.REDIS_TLS,
+  hasPassword: !!process.env.REDIS_PASSWORD
+});
 
 // Import routes
 const authRoutes = require('./routes/auth.routes');
@@ -14,21 +24,40 @@ const agentRoutes = require('./routes/agent.routes');
 const adminRoutes = require('./routes/admin.routes');
 const paymentRoutes = require('./routes/payment.routes');
 
-// Import workers
-require('./workers/payment.worker');
-
 const app = express();
 
 // Trust proxy
 app.set('trust proxy', true);
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/payment-gateway', {
+const mongoOptions = {
   useNewUrlParser: true,
-  useUnifiedTopology: true
+  useUnifiedTopology: true,
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 45000,
+  family: 4,  // Force IPv4
+  directConnection: true,
+  retryWrites: true,
+  w: 'majority'
+};
+
+logger.info('Attempting to connect to MongoDB with URI:', config.mongodb.uri);
+
+mongoose.connect(config.mongodb.uri, mongoOptions)
+.then(() => {
+  logger.info('Connected to MongoDB successfully');
 })
-.then(() => logger.info('Connected to MongoDB'))
-.catch(err => logger.error('MongoDB connection error:', err));
+.catch(err => {
+  logger.error('MongoDB connection error:', err);
+  if (err.name === 'MongooseServerSelectionError') {
+    logger.error('MongoDB connection details:', {
+      uri: config.mongodb.uri,
+      error: err.message,
+      code: err.code,
+      name: err.name
+    });
+  }
+});
 
 // Middleware
 app.use(helmet());

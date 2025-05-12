@@ -1,21 +1,21 @@
-const cluster = require('cluster');
-const numCPUs = require('os').cpus().length;
 const { logger } = require('../utils/logger');
+const { payinQueue } = require('../config/queue.config');
 
-if (cluster.isMaster) {
-  logger.info(`Master ${process.pid} is running`);
+// Start the worker directly without clustering
+logger.info('Starting payment worker...');
 
-  // Fork workers
-  for (let i = 0; i < numCPUs; i++) {
-    cluster.fork();
-  }
-
-  cluster.on('exit', (worker, code, signal) => {
-    logger.warn(`Worker ${worker.process.pid} died. Restarting...`);
-    cluster.fork();
-  });
-} else {
-  // Workers can share any TCP connection
+// Verify Redis connection and start worker
+payinQueue.isReady().then(() => {
+  logger.info('Payin queue is ready and connected to Redis');
+  
+  // Import the worker to start processing
   require('../workers/payment.worker');
-  logger.info(`Worker ${process.pid} started`);
-} 
+  
+  logger.info(`Worker ${process.pid} started and processing jobs`);
+}).catch(error => {
+  logger.error('Error connecting to Redis for payin queue:', {
+    error: error.message,
+    stack: error.stack
+  });
+  process.exit(1);
+}); 

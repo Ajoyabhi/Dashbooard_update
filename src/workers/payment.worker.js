@@ -1,34 +1,59 @@
 const { payinQueue } = require('../config/queue.config');
-const { processPayment } = require('../services/payment.service');
 const { logger } = require('../utils/logger');
 const { User, UserStatus, MerchantDetails, MerchantCharges, MerchantModeCharges, FinancialDetails, UserIPs, TransactionCharges } = require('../models');
 const PayinTransaction = require('../models/payinTransaction.model');
 const UserTransaction = require('../models/userTransaction.model');
-// const unpay = require('@api/unpay');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
 // const { unpayPayin } = require('../merchant_payin_payout/merchant_payin_request');
 const mongoose = require('mongoose');
+const config = require('../config');
+
+// Connect to MongoDB
+const mongoOptions = {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 45000,
+  family: 4,  // Force IPv4
+  directConnection: true,
+  retryWrites: true,
+  w: 'majority'
+};
+
+logger.info('Attempting to connect to MongoDB with URI:', config.mongodb.uri);
+
+mongoose.connect(config.mongodb.uri, mongoOptions)
+.then(() => {
+  logger.info('Connected to MongoDB successfully');
+})
+.catch(err => {
+  logger.error('MongoDB connection error:', err);
+  if (err.name === 'MongooseServerSelectionError') {
+    logger.error('MongoDB connection details:', {
+      uri: config.mongodb.uri,
+      error: err.message,
+      code: err.code,
+      name: err.name
+    });
+  }
+  process.exit(1);
+});
 
 // Log when worker is initialized
 logger.info('Payment worker initialized');
 
-// Verify Redis connection
-payinQueue.isReady().then(() => {
-  logger.info('Payin queue is ready and connected to Redis');
-}).catch(error => {
-  logger.error('Error connecting to Redis for payin queue:', {
-    error: error.message,
-    stack: error.stack
-  });
-});
+// Process multiple jobs concurrently
+const CONCURRENCY = 10; // Process 10 jobs at a time
+logger.info(`Starting worker with concurrency of ${CONCURRENCY}`);
 
-// Process payin jobs
-payinQueue.process(async (job) => {
+// Start processing jobs with concurrency
+payinQueue.process(CONCURRENCY, async (job) => {
   try {
     logger.info('Starting to process payin job', { 
       jobId: job.id,
       transaction_id: job.data.transaction_id,
-      data: job.data
+      data: job.data,
+      concurrency: CONCURRENCY
     });
 
     const {
@@ -43,7 +68,7 @@ payinQueue.process(async (job) => {
     } = job.data;
 
     // Fetch user and all related data
-    const user =  await User.findByPk(user_id, {
+    const user = await User.findByPk(user_id, {
       include: [
         { model: UserStatus },
         { model: MerchantDetails },
@@ -246,12 +271,11 @@ payinQueue.process(async (job) => {
       created_by_model: user.user_type || 'User'
     });
 
-    console.log("payinTransaction");
-
     logger.debug('DEBUG: Starting payment processing', {
       reference_id,
       timestamp: new Date().toISOString()
     });
+
     const payinData = {
       user_id,
       amount,
@@ -263,18 +287,16 @@ payinQueue.process(async (job) => {
       clientIp
     };
 
-    const result = await unpayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp);  
-    // Process payment
-    // const result = await processPayment({
-    //   user_id,
-    //   amount,
-    //   account_number,
-    //   account_ifsc,
-    //   bank_name,
-    //   beneficiary_name,
-    //   reference_id,
-    //   clientIp
-    // });
+    // const result = await unpayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp);
+    const result = {
+      success: true,
+      gateway_response: {
+        utr: '1234567890',
+        status: 'completed',
+        message: 'Payin request completed', 
+        raw_response: null
+      }
+    };
 
     logger.debug('DEBUG: Payment processing completed', {
       reference_id,
@@ -348,9 +370,8 @@ payinQueue.process(async (job) => {
     };
 
   } catch (error) {
-    logger.error('Error processing payin job', { 
+    logger.error('Error processing payin job', {
       jobId: job.id,
-      transaction_id: job.data.transaction_id,
       error: error.message,
       stack: error.stack
     });
@@ -358,331 +379,44 @@ payinQueue.process(async (job) => {
   }
 });
 
-// Process callback jobs
-payinQueue.process('callback', async (job) => {
-  try {
-    logger.info('Processing Unpay callback', { 
-      jobId: job.id,
-      data: job.data 
-    });
-
-    const { txnid, status, message, upi_tr, upi_string } = job.data;
-
-    // Validate callback data
-    if (!txnid || !status) {
-      throw new Error('Invalid callback data');
-    }
-
-    // Find the transaction
-    const payinTransaction = await PayinTransaction.findOne({ reference_id: txnid });
-    if (!payinTransaction) {
-      throw new Error(`Transaction not found: ${txnid}`);
-    }
-
-    // Update transaction status based on callback
-    const statusMap = {
-      'TXN': 'completed',
-      'TUP': 'pending',
-      'TXF': 'failed',
-      'ERR': 'failed'
-    };
-
-    const newStatus = statusMap[status] || 'failed';
-
-    // Update all related records
-    await Promise.all([
-      // Update PayinTransaction
-      PayinTransaction.updateOne(
-        { reference_id: txnid },
-        {
-          $set: {
-            status: newStatus,
-            gateway_response: {
-              reference_id: upi_tr,
-              status: status,
-              message: message,
-              upi_string: upi_string
-            }
-          }
-        }
-      ),
-
-      // Update UserTransaction
-      UserTransaction.updateOne(
-        { reference_id: txnid },
-        {
-          $set: {
-            status: newStatus,
-            gateway_response: {
-              reference_id: upi_tr,
-              status: status,
-              message: message,
-              upi_string: upi_string
-            }
-          }
-        }
-      ),
-
-      // Update TransactionCharges
-      TransactionCharges.update(
-        {
-          status: newStatus,
-          transaction_utr: upi_tr,
-          metadata: {
-            ...job.data,
-            callback_received_at: new Date()
-          }
-        },
-        {
-          where: { reference_id: txnid }
-        }
-      )
-    ]);
-
-    logger.info('Successfully processed Unpay callback', {
-      txnid,
-      status,
-      newStatus
-    });
-
-    return { success: true };
-
-  } catch (error) {
-    logger.error('Error processing Unpay callback', {
-      jobId: job.id,
-      error: error.message,
-      stack: error.stack,
-      data: job.data
-    });
-    throw error;
-  }
-});
-
-// Job completion handlers
+// Handle job events
 payinQueue.on('completed', (job, result) => {
   logger.info('Payin job completed successfully', { 
     jobId: job.id,
-    transaction_id: job.data.transaction_id,
-    result: result
+    result
   });
 });
 
-// Job failure handlers with retry logic
 payinQueue.on('failed', (job, error) => {
   logger.error('Payin job failed', { 
     jobId: job.id,
-    transaction_id: job.data.transaction_id,
-    error: error.message,
-    stack: error.stack,
-    attempts: job.attemptsMade
-  });
-  if (job.attemptsMade < 3) {
-    logger.info('Retrying payin job', { 
-      jobId: job.id,
-      transaction_id: job.data.transaction_id,
-      attempt: job.attemptsMade + 1
-    });
-  } else {
-    logger.error('Payin job failed after maximum retries', { 
-      jobId: job.id,
-      transaction_id: job.data.transaction_id
-    });
-  }
-});
-
-// Queue error handlers
-payinQueue.on('error', (error) => {
-  logger.error('Payin queue error:', { 
     error: error.message,
     stack: error.stack
   });
 });
 
-payinQueue.on('stalled', (job) => {
-  logger.warn('Payin job stalled:', { 
-    jobId: job.id,
-    transaction_id: job.data.transaction_id
-  });
+// Handle process events
+process.on('SIGTERM', async () => {
+  logger.info('Shutting down worker...');
+  await payinQueue.close();
+  process.exit(0);
 });
 
-const unpayPayin = async (payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp) => {
-  const startTime = Date.now();
-  logger.info('Starting unpayPayin process', { reference: payinData.reference_id });
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught exception in worker', {
+    error: error.message,
+    stack: error.stack
+  });
+  process.exit(1);
+});
 
-  try {
-    logger.info('Initializing Unpay client');
-    const aesKey = process.env.UNPAY_KEY;
-    const aesIV = process.env.UNPAY_IV;
-
-    // Validate encryption parameters
-    if (!aesKey || !aesIV) {
-      throw new Error('Missing encryption parameters');
-    }
-    console.log("aesKey", aesKey);
-    console.log("aesIV", aesIV);
-    // Prepare parameters according to API docs
-    const parameters = {
-      partner_id: process.env.UNPAY_PARTNER_ID,
-      txnid: payinData.reference_id,
-      amount: payinData.amount.toString(),
-      callback: process.env.UNPAY_CALLBACK_URL
-    };
-
-    logger.info('Preparing payin request', { parameters });
-
-    // Encrypt the parameters
-    const encryptedBody = await encryptText(JSON.stringify(parameters), aesKey, aesIV);
-    logger.info('Encrypted payload generated');
-
-    // Prepare request body
-    const requestBody = {
-      body: encryptedBody
-    };
-
-    logger.info('Sending request to Unpay API');
-    const response = await fetch('https://unpay.in/tech/api/payin/order/create', {
-      method: 'POST',
-      headers: {
-        'accept': 'application/json',
-        'api-key': process.env.UNPAY_API_KEY,
-        'content-type': 'application/json'
-      },
-      body: JSON.stringify(requestBody)
-    });
-
-    const result = await response.json();
-    console.log(result);
-    logger.info('Received response from Unpay API', { status: result.statuscode });
-
-    // Handle different response status codes
-    switch (result.statuscode) {
-      case 'TXN':
-        logger.info('Transaction successful', { 
-          upi_tr: result.upi_tr,
-          upi_string: result.upi_string 
-        });
-
-        // Create transaction charges
-        await TransactionCharges.create({
-          transaction_type: 'payin',
-          reference_id: payinData.reference_id,
-          transaction_amount: payinData.amount,
-          transaction_utr: result.upi_tr,
-          merchant_charge: adminCharge,
-          agent_charge: agentCharge,
-          total_charges: totalCharges,
-          user_id: user_id,
-          status: 'completed',
-          metadata: {
-            merchant_response: result,
-            requested_ip: clientIp
-          }
-        }); 
-
-        // Update user transaction
-        await UserTransaction.updateOne(
-          {
-            reference_id: payinData.reference_id
-          },
-          {
-            $set: {
-              status: 'success',
-              gateway_response: {
-                reference_id: result.upi_tr,
-                status: 'success',
-                message: result.message,
-                upi_string: result.upi_string
-              }
-            }
-          }
-        );
-        logger.info('User transaction updated', { reference: payinData.reference_id });
-
-        // Update payin transaction
-        await PayinTransaction.updateOne(
-          {
-            reference_id: payinData.reference_id
-          },
-          {
-            $set: {
-              status: 'completed',
-              gateway_response: {
-                reference_id: result.upi_tr,
-                status: 'success',
-                message: result.message,
-                upi_string: result.upi_string
-              }
-            }
-          }
-        );
-        logger.info('Payin transaction updated', { reference: payinData.reference_id });
-
-        return {  
-          success: true,
-          gateway_response: {
-            reference_id: result.upi_tr,
-            status: 'success',
-            message: result.message,
-            upi_string: result.upi_string
-          }
-        };
-
-      case 'TUP':
-        logger.info('Transaction pending', { message: result.message });
-        return {
-          success: false,
-          gateway_response: {
-            status: 'pending',
-            message: result.message
-          }
-        };
-
-      case 'TXF':
-      case 'ERR':
-        logger.error('Transaction failed', { 
-          reference: payinData.reference_id, 
-          message: result.message 
-        });
-        return {
-          success: false,
-          gateway_response: {
-            status: 'failed',
-            message: result.message
-          }
-        };
-
-      default:
-        throw new Error(`Unknown status code: ${result.statuscode}`);
-    }
-
-  } catch (error) {
-    logger.error('Error in unpayPayin', { 
-      reference: payinData.reference_id, 
-      error: error.message,
-      stack: error.stack 
-    });
-    
-    // Update transactions to failed status
-    await Promise.all([
-      UserTransaction.updateOne(
-        { reference_id: payinData.reference_id },
-        { $set: { status: 'failed' } }
-      ),
-      PayinTransaction.updateOne(
-        { reference_id: payinData.reference_id },
-        { $set: { status: 'failed' } }
-      )
-    ]);
-
-    return {
-      success: false,
-      gateway_response: {
-        status: 'failed',
-        message: error.message
-      }
-    };
-  }
-};
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled rejection in worker', {
+    reason,
+    promise
+  });
+  process.exit(1);
+});
 
 module.exports = {
   payinQueue

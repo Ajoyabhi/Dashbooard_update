@@ -15,31 +15,71 @@ const logFormat = winston.format.combine(
   winston.format.json()
 );
 
+// Filter out verbose SQL queries
+const filterSqlQueries = winston.format((info) => {
+  if (info.sql) {
+    return false; // Don't log SQL queries
+  }
+  return info;
+})();
+
 // Create logger instance
 const logger = winston.createLogger({
-  level: 'info',
-  format: logFormat,
+  level: process.env.LOG_LEVEL || 'info',
+  format: winston.format.combine(
+    filterSqlQueries,
+    logFormat
+  ),
   transports: [
-    // Write all logs to console
+    // Console transport
     new winston.transports.Console({
       format: winston.format.combine(
         winston.format.colorize(),
         winston.format.simple()
       )
     }),
-    // Write all logs with level 'error' and below to error.log
-    new winston.transports.File({ filename: 'error.log', level: 'error' }),
-    // Write all logs with level 'info' and below to combined.log
-    new winston.transports.File({ filename: 'combined.log' })
+    // File transport for all logs
+    new winston.transports.File({
+      filename: path.join('src/logs', 'combined.log'),
+      maxsize: 5242880, // 5MB
+      maxFiles: 5,
+    }),
+    // File transport for errors
+    new winston.transports.File({
+      filename: path.join('src/logs', 'error.log'),
+      level: 'error',
+      maxsize: 5242880, // 5MB
+      maxFiles: 5,
+    })
   ]
 });
 
 // Create a stream object for Morgan
 const stream = {
   write: (message) => {
-    logger.info(message.trim());
+    // Don't log SQL queries
+    if (!message.includes('SELECT') && !message.includes('INSERT') && !message.includes('UPDATE') && !message.includes('DELETE')) {
+      logger.info(message.trim());
+    }
   }
 };
+
+// Log unhandled exceptions and rejections
+logger.exceptions.handle(
+  new winston.transports.File({
+    filename: path.join('src/logs', 'exceptions.log'),
+    maxsize: 5242880, // 5MB
+    maxFiles: 5,
+  })
+);
+
+logger.rejections.handle(
+  new winston.transports.File({
+    filename: path.join('src/logs', 'rejections.log'),
+    maxsize: 5242880, // 5MB
+    maxFiles: 5,
+  })
+);
 
 // Helper function to mask sensitive data
 const maskSensitiveData = (data) => {

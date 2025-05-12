@@ -69,83 +69,84 @@ const morganStream = {
 // Create the Morgan middleware
 const morganMiddleware = morgan(morganFormat, { stream: morganStream });
 
-// Create a middleware to capture the response body
-const captureResponseBody = (req, res, next) => {
-  const originalSend = res.send;
-  res.send = function(body) {
-    res._responseBody = body;
-    return originalSend.apply(res, arguments);
-  };
-  next();
-};
+// Middleware to log API requests
+const logApiRequest = (req, res, next) => {
+    const start = Date.now();
+    
+    // Log request details
+    logger.info('API Request:', {
+        method: req.method,
+        url: req.originalUrl,
+        ip: req.ip,
+        userAgent: req.get('user-agent'),
+        timestamp: new Date().toISOString()
+    });
 
-// Create a middleware to measure processing time
-const measureProcessingTime = (req, res, next) => {
-  const start = process.hrtime();
-  
-  res.on('finish', () => {
-    const diff = process.hrtime(start);
-    const time = diff[0] * 1e3 + diff[1] * 1e-6;
-    res._processingTime = Math.round(time);
-  });
-  
-  next();
-};
-
-// Create a middleware to log API requests to the database
-const logApiRequest = async (req, res, next) => {
-  const startTime = Date.now();
-  
-  // Store the original end function
-  const originalEnd = res.end;
-  
-  // Override the end function to capture the response
-  res.end = function(chunk, encoding) {
-    // Restore the original end function
-    res.end = originalEnd;
-    
-    // Call the original end function
-    res.end(chunk, encoding);
-    
-    // Calculate processing time
-    const processingTime = Date.now() - startTime;
-    
-    // Skip logging for unauthenticated requests
-    if (!req.user) {
-      return;
+    // Log request body for non-GET requests
+    if (req.method !== 'GET' && req.body) {
+        logger.debug('Request Body:', {
+            url: req.originalUrl,
+            body: req.body
+        });
     }
-    
-    // Create the log entry
-    const logEntry = {
-      timestamp: new Date(),
-      method: req.method,
-      endpoint: req.originalUrl,
-      status_code: res.statusCode,
-      user_id: req.user._id,
-      user_model: req.user.userType === 'user' ? 'User' : 
-                 req.user.userType === 'agent' ? 'Agent' : 'Admin',
-      ip_address: req.ip,
-      user_agent: req.get('user-agent'),
-      request_headers: maskSensitiveData(req.headers),
-      request_body: maskSensitiveData(req.body),
-      response_body: res._responseBody ? maskSensitiveData(JSON.parse(res._responseBody)) : null,
-      validation_result: req._validationResult || null,
-      processing_time: processingTime,
-      third_party_api: req._thirdPartyApi || null
+
+    // Capture response
+    const originalSend = res.send;
+    res.send = function (body) {
+        const responseTime = Date.now() - start;
+        
+        // Log response
+        logger.info('API Response:', {
+            method: req.method,
+            url: req.originalUrl,
+            statusCode: res.statusCode,
+            responseTime: `${responseTime}ms`,
+            timestamp: new Date().toISOString()
+        });
+
+        // Log response body for errors
+        if (res.statusCode >= 400) {
+            logger.error('Error Response:', {
+                url: req.originalUrl,
+                statusCode: res.statusCode,
+                body: body
+            });
+        }
+
+        return originalSend.call(this, body);
     };
-    
-    // Save the log entry to the database
-    try {
-      const apiLog = new ApiLog(logEntry);
-      apiLog.save().catch(err => {
-        logger.error('Error saving API log to database', { error: err.message });
-      });
-    } catch (error) {
-      logger.error('Error creating API log entry', { error: error.message });
-    }
-  };
-  
-  next();
+
+    next();
+};
+
+// Middleware to measure processing time
+const measureProcessingTime = (req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => {
+        const duration = Date.now() - start;
+        logger.debug('Request Processing Time:', {
+            method: req.method,
+            url: req.originalUrl,
+            duration: `${duration}ms`
+        });
+    });
+    next();
+};
+
+// Middleware to capture response body
+const captureResponseBody = (req, res, next) => {
+    const originalSend = res.send;
+    res.send = function (body) {
+        if (res.statusCode >= 400) {
+            logger.debug('Response Body:', {
+                url: req.originalUrl,
+                statusCode: res.statusCode,
+                body: body
+            });
+        }
+        return originalSend.call(this, body);
+    };
+    next();
 };
 
 // Helper function to set validation result

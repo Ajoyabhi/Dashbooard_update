@@ -13,7 +13,7 @@ module.exports = {
         password: process.env.DB_PASSWORD || ''
     },
     mongodb: {
-        uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/techturect'
+        uri: process.env.MONGODB_URI || 'mongodb://paydexadmin:j123KJkslw21Bk34G@10.10.22.98:27017/techturect?authSource=admin'
     },
     jwt: {
         secret: process.env.JWT_SECRET || 'your-super-secret-key-change-this-in-production',

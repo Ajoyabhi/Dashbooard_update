@@ -14,14 +14,15 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3000',
         changeOrigin: true,
-        secure: false,
-        logLevel: 'debug'
+        secure: false
       }
-    }
+    },
+    port: 3002
   },
   // Enable source maps for better debugging
   build: {
-    sourcemap: true
+    sourcemap: true,
+    chunkSizeWarningLimit: 2000
   },
   // Enable detailed logging
   logLevel: 'info'

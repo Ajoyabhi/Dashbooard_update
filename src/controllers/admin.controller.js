@@ -801,13 +801,13 @@ const addUserIP = async (req, res) => {
         }
 
         // Validate IP address format
-        const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
-        if (!ipRegex.test(ip_address)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid IP address format'
-            });
-        }
+        // const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+        // if (!ipRegex.test(ip_address)) {
+        //     return res.status(400).json({
+        //         success: false,
+        //         message: 'Invalid IP address format'
+        //     });
+        // }
 
         // Check if IP already exists for this user
         const existingIP = await UserIPs.findOne({
@@ -1617,6 +1617,96 @@ const updateManageFundRequest = async (req, res) => {
     }
 };
 
+const getChargeback = async (req, res) => {
+    try {
+        const { utr_number } = req.query;
+
+        if (!utr_number) {
+            return res.status(400).json({
+                success: false,
+                message: 'UTR number is required'
+            });
+        }
+
+        // Search in UserTransaction collection for the UTR number in gateway_response
+        const transaction = await UserTransaction.findOne({
+            'gateway_response.utr': utr_number
+        }).populate('user', 'name email mobile');
+
+        if (!transaction) {
+            return res.status(404).json({
+                success: false,
+                message: 'Transaction not found'
+            });
+        }
+
+        // Transform the data to match frontend requirements
+        const transformedData = {
+            id: transaction._id,
+            name: transaction.user?.name || 'N/A',
+            email: transaction.user?.email || 'N/A',
+            mobile: transaction.user?.mobile || 'N/A',
+            amount: transaction.amount || 0,
+            admin_charges: transaction.charges?.admin_charge || 0,
+            reference_id: transaction.reference_id || 'N/A',
+            transaction_type: transaction.transaction_type || 'N/A',
+            status: transaction.status || 'N/A',
+            utr_number: utr_number
+        };
+
+        res.json({
+            success: true,
+            data: transformedData
+        });
+
+    } catch (error) {
+        console.error('Error fetching chargeback:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching chargeback'
+        });
+    }
+};
+
+const handleChargebackAction = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { action } = req.params;
+
+        if (!['accept', 'reject'].includes(action)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid action'
+            });
+        }
+
+        const transaction = await UserTransaction.findById(id);
+        if (!transaction) {
+            return res.status(404).json({
+                success: false,
+                message: 'Transaction not found'
+            });
+        }
+
+        // Update transaction status based on action
+        transaction.status = action === 'accept' ? 'chargeback_approved' : 'chargeback_rejected';
+        await transaction.save();
+
+        res.json({
+            success: true,
+            message: `Chargeback ${action}ed successfully`,
+            data: transaction
+        });
+
+    } catch (error) {
+        console.error('Error handling chargeback action:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error handling chargeback action'
+        });
+    }
+};
+
 module.exports = {
   getAllUsers,
   getAllAgents,
@@ -1649,5 +1739,7 @@ module.exports = {
   getSettlementHistory,
   getSettlementDashboard,
   getManageFundRequest,
-  updateManageFundRequest
+  updateManageFundRequest,
+  getChargeback,
+  handleChargebackAction
 }; 
