@@ -84,12 +84,17 @@ const initiatePayment = async (req, res) => {
     });
 
     // Send response
-    res.status(200).json({
-      success: true,
-      message: 'Payment processed successfully',
-      transaction_id,
-      result
-    });
+    if(result.success){ 
+      res.status(200).json({
+        transaction_id,
+        result
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: result.message
+      });
+    }
 
   } catch (error) {
     logger.error('Error processing payment', { error: error.message });
@@ -183,5 +188,7 @@ const getTransactionStatus = async (req, res) => {
 module.exports = {
   initiatePayment,
   handleUnpayCallback,
-  getTransactionStatus
+  getTransactionStatus,
+  validatePaymentRequest,
+  setValidationResult
 }; 

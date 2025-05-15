@@ -60,7 +60,7 @@ const userTransactionSchema = new mongoose.Schema({
     utr: String,
     status: String,
     message: String,
-    raw_response: mongoose.Schema.Types.Mixed
+    merchant_response: String,
   },
   balance: {
     before: {
@@ -74,7 +74,7 @@ const userTransactionSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'processing', 'completed', 'failed'],
+    enum: ['pending', 'processing', 'completed', 'failed', 'payin_qr_generated'],
     default: 'pending'
   },
   reference_id: {

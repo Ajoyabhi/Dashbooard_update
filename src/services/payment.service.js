@@ -3,6 +3,7 @@ const { User, UserStatus, MerchantDetails, MerchantCharges, MerchantModeCharges,
 const PayinTransaction = require('../models/payinTransaction.model');
 const UserTransaction = require('../models/userTransaction.model');
 const mongoose = require('mongoose');
+const { encryptText } = require('../merchant_payin_payout/utils_payout');
 
 /**
  * Process a payin request
@@ -83,7 +84,10 @@ const processPayin = async (data) => {
     ).lean();
 
     if (existingTransaction) {
-      throw new Error('Transaction with this reference ID already exists. Please use a different reference ID for new transactions.');
+      return {
+        success: false,
+        message: 'Transaction with this reference ID already exists. Please use a different reference ID for new transactions.'
+      };
     }
 
     // Find charge brackets
@@ -154,10 +158,10 @@ const processPayin = async (data) => {
         total_charges: totalCharges
       },
       gateway_response: {
-        utr: reference_id,
+        utr: null,
         status: 'pending',
         message: 'Payin request initiated',
-        raw_response: null
+        merchant_response: null
       },
       balance: {
         before: user.FinancialDetail.settlement,
@@ -174,6 +178,7 @@ const processPayin = async (data) => {
       created_by: new mongoose.Types.ObjectId(user_id),
       created_by_model: user.user_type
     });
+    await userTransaction.save();
 
     // Create payin transaction
     const payinTransaction = await PayinTransaction.create({
@@ -201,10 +206,10 @@ const processPayin = async (data) => {
       reference_id: reference_id,
       status: 'pending',
       gateway_response: {
-        utr: reference_id,
+        utr: null,
         status: 'pending',
         message: 'Payin request initiated',
-        raw_response: null
+        merchant_response: null
       },
       metadata: {
         requested_ip: clientIp
@@ -213,7 +218,22 @@ const processPayin = async (data) => {
       created_by: new mongoose.Types.ObjectId(user_id),
       created_by_model: user.user_type || 'User'
     });
-
+    await payinTransaction.save();
+    await TransactionCharges.create({
+      transaction_type: 'payin',
+      reference_id: reference_id,
+      transaction_amount: parseFloat(amount),
+      transaction_utr: null,
+      merchant_charge: parseFloat(adminCharge),
+      agent_charge: parseFloat(agentCharge),
+      total_charges: parseFloat(totalCharges),
+      user_id: parseInt(user_id),
+      status: 'pending',
+      metadata: {
+        merchant_response: null,
+        requested_ip: clientIp
+      }
+    });
     logger.debug('DEBUG: Starting payment processing', {
       reference_id,
       timestamp: new Date().toISOString()
@@ -230,16 +250,16 @@ const processPayin = async (data) => {
       clientIp
     };
 
-    // const result = await unpayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp);
-    const result = {
-      success: true,
-      gateway_response: {
-        utr: '1234567890',
-        status: 'completed',
-        message: 'Payin request completed', 
-        raw_response: null
-      }
-    };
+    const result = await unpayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp);
+    // const result = {
+    //   success: true,
+    //   gateway_response: {
+    //     utr: '1234567890',
+    //     status: 'completed',
+    //     message: 'Payin request completed', 
+    //     raw_response: null
+    //   }
+    // };
 
     logger.debug('DEBUG: Payment processing completed', {
       reference_id,
@@ -248,7 +268,7 @@ const processPayin = async (data) => {
     });
 
     // Update transaction status
-    if (result?.success) {
+    if (result?.status == "TXN") {
       logger.debug('DEBUG: Updating transaction status to completed', {
         reference_id,
         timestamp: new Date().toISOString()
@@ -257,27 +277,43 @@ const processPayin = async (data) => {
       await PayinTransaction.updateOne(
         { reference_id },
         { $set: { 
-          status: 'completed', 
+          status: 'payin_qr_generated', 
           gateway_response: { 
-            utr: result.gateway_response.utr, 
-            status: 'completed', 
-            message: 'Payin request completed', 
-            raw_response: result 
+            utr: null, 
+            status: 'payin_qr_generated', 
+            message: 'Payin qr string generated', 
+            merchant_response: result.data.apitxnid 
           } 
         }}
       );
       await UserTransaction.updateOne(
         { reference_id },
         { $set: { 
-          status: 'completed', 
+          status: 'payin_qr_generated', 
           gateway_response: { 
-            utr: result.gateway_response.utr, 
-            status: 'completed', 
-            message: 'Payin request completed', 
-            raw_response: result 
+            utr: null, 
+            status: 'payin_qr_generated', 
+            message: 'Payin qr string generated', 
+            merchant_response: result.data.apitxnid 
           } 
         }}
       );
+      await TransactionCharges.update(
+        {
+          transaction_utr: result.data.apitxnid,
+          status: 'payin_qr_generated'
+        },
+        {
+          where: {
+            reference_id: reference_id
+          } 
+        }
+      );
+      return {
+        success: true,
+        transaction_id: result.data.apitxnid,
+        upi_string: result.data.qrString
+      };
     } else {
       await PayinTransaction.updateOne(
         { reference_id },
@@ -287,30 +323,96 @@ const processPayin = async (data) => {
         { reference_id },
         { $set: { status: 'failed' } }
       );
+      await TransactionCharges.update(
+        {
+          status: 'failed'
+        },
+        {
+          where: {
+            reference_id: reference_id
+          }
+        }
+      );      
+      logger.error('DEBUG: Payin request failed', {
+        reference_id,
+        status: 'failed',
+        message: result.message,
+        timestamp: new Date().toISOString()
+      });
+      return {
+        success: false,
+        message: 'Payin request failed'
+      };
     }
+  } catch (error) {
+    logger.error('Error processing payin request', {
+      error: error.message,
+      stack: error.stack
+    });
+    throw error;
+  }
+};
 
-    // Store transaction charges
-    await TransactionCharges.create({
-      transaction_type: 'payin',
-      reference_id: reference_id,
-      transaction_amount: parseFloat(amount),
-      transaction_utr: result?.gateway_response?.utr || null,
-      merchant_charge: parseFloat(adminCharge),
-      agent_charge: parseFloat(agentCharge),
-      total_charges: parseFloat(totalCharges),
-      user_id: parseInt(user_id),
-      status: result?.success ? 'completed' : 'failed',
-      metadata: {
-        merchant_response: result,
-        requested_ip: clientIp
-      }
+const unpayPayin = async (payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp) => {
+  try {
+    const { amount, reference_id } = payinData;
+    
+    // Get merchant details from database
+    const merchantDetails = await MerchantDetails.findOne({ where: { user_id } });
+    if (!merchantDetails) {
+      throw new Error('Merchant details not found');
+    }
+    const aesKey = "brTaJLaVgWvshn3zHM4qt0lI1DqjFeUz";
+    const aesIV = "uBiWATDOnfTvhfJO";
+    const apiKey = "Tn3ybTJGKaDMhhj9jl89aULGf9OI0S8ZPkq0GD42";
+    const partnerId = "1809";
+    const webhookUrl = merchantDetails.payin_callback;
+
+    // Prepare request body
+    const requestBody = {
+      partner_id: partnerId,
+      amount: parseInt(amount),
+      apitxnid: reference_id,
+      webhook: webhookUrl
+    };
+
+    const encryptedRequestBody = await encryptText(JSON.stringify(requestBody), aesKey, aesIV);
+
+    // Make API request to Unpay
+    const response = await fetch('https://unpay.in/tech/api/next/upi/request/qr', {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'api-key': apiKey,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        body: encryptedRequestBody 
+      })
     });
 
-    return {
-      success: result?.success || false,
-      transaction_id: payinTransaction._id,
-      result: result
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(`Unpay API error: ${result.message || 'Unknown error'}`);
+    }
+    console.log(result);
+    if(result.status == "TXN"){
+      return {
+        status: result.status,
+        message: result.message,
+        data: {
+        apitxnid: result.data?.apitxnid,
+        qrString: result.data?.qrString,
+        }
     };
+    } else {
+      return {
+        status: result.status,
+        message: result.message,
+        data: result.data
+      };
+    }
 
   } catch (error) {
     logger.error('Error processing payin request', {
@@ -320,6 +422,7 @@ const processPayin = async (data) => {
     throw error;
   }
 };
+
 
 module.exports = {
   processPayin

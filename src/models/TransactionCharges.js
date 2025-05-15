@@ -45,7 +45,7 @@ module.exports = (sequelize) => {
             }
         },
         status: {
-            type: DataTypes.ENUM('pending', 'completed', 'failed'),
+            type: DataTypes.ENUM('pending', 'completed', 'failed', 'payin_qr_generated'),
             defaultValue: 'pending'
         },
         metadata: {

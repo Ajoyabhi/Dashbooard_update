@@ -42,7 +42,7 @@ const payinTransactionSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'completed', 'failed'],
+    enum: ['pending', 'completed', 'failed', 'payin_qr_generated'],
     default: 'pending'
   },
   gateway_response: {
@@ -50,7 +50,7 @@ const payinTransactionSchema = new mongoose.Schema({
     status: String,
     message: String,
     upi_string: String,
-    raw_response: mongoose.Schema.Types.Mixed
+    merchant_response: String,
   },
   metadata: {
     requested_ip: String,

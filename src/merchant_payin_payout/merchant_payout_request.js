@@ -4,6 +4,7 @@ const UserTransaction = require('../models/userTransaction.model');
 const { TransactionCharges } = require('../models');
 const winston = require('winston');
 const { encryptText } = require('./utils_payout');
+require('dotenv').config();
 
 // Configure logger
 const logger = winston.createLogger({
@@ -65,7 +66,7 @@ async function unpayPayout(payoutData) {
 
         console.log("result", result);
 
-        logger.info('Received response from Unpay API', { status: result.status });
+        logger.info('Received response from Unpay API', { status: result['statuscode'] });
 
         // Create API log
         const apiLog = await ApiLogs.create({
@@ -73,36 +74,33 @@ async function unpayPayout(payoutData) {
             response: JSON.stringify(result),
             service: 'PAYOUT',
             service_api: 'UNPAY',
-            status: result.status === 'success' ? 'success' : 'error',
+            status: result['statuscode'] === 'TXN' ? 'success' : 'error',
             error_message: result.message || null,
             execution_time: Date.now() - startTime
         });
         await apiLog.save();
         logger.info('API log created', { logId: apiLog._id });
 
-        if (result.status === 'TXN') {
-            let message = result.message;
-            let txn_id = result.txnid;
+        if (result['statuscode'] === 'TXN') {
+            let message = result['message'];
+            let txn_id = result['txnid'];
             let utr = result['refno'];
             
             logger.info('Transaction successful', { txn_id, utr });
 
             // Create transaction charges using Sequelize
-            await TransactionCharges.create({
-                transaction_type: 'payout',
-                reference_id: payoutData.reference_id,
-                transaction_amount: payoutData.amount,
-                transaction_utr: utr,
-                merchant_charge: adminCharge,
-                agent_charge: agentCharge,
-                total_charges: totalCharges,
-                user_id: payoutData.user_id,
-                status: 'completed',
-                metadata: {
+            await TransactionCharges.update(
+                {
+                    status: 'completed',
                     merchant_response: result,
-                    requested_ip: clientIp
+                    transaction_utr: utr
+                },
+                {
+                    where: {
+                        reference_id: payoutData.reference_id
+                    }       
                 }
-            });
+            )
 
             logger.info('Transaction charges stored', { reference: payoutData.reference_id });
 
@@ -114,7 +112,7 @@ async function unpayPayout(payoutData) {
                     $set: {
                         status: 'success',
                         gateway_response: {
-                            reference_id: txn_id,
+                            reference_id: payoutData.reference_id,
                             status: 'success',
                             message: message,
                             utr: utr
@@ -122,7 +120,6 @@ async function unpayPayout(payoutData) {
                     }
                 }
             );
-            await userTransaction.save();
             logger.info('User transaction updated', { reference: payoutData.reference });
 
             let payoutTransaction = await PayoutTransaction.updateOne(
@@ -133,7 +130,7 @@ async function unpayPayout(payoutData) {
                     $set: {
                         status: 'success',
                         gateway_response: { 
-                            reference_id: txn_id,
+                            reference_id: payoutData.reference_id,
                             status: 'success',
                             message: message,
                             utr: utr
@@ -141,87 +138,79 @@ async function unpayPayout(payoutData) {
                     }
                 }
             );          
-            await payoutTransaction.save();
             logger.info('Payout transaction updated', { reference: payoutData.reference_id });
 
             return {
                 data: { 
-                    status: result.status,
-                    message: result.message,
-                    error: result.error,
+                    status: result['statuscode'],
+                    message: result['message'],
+                    error: result['error'],
                     txn_id: txn_id
                 },
                 status: 200
             }
         } else {
             logger.warn('Transaction failed', { 
-                status: result.status,
-                message: result.message 
+                status: result['statuscode'],
+                message: result['message'] 
             });
 
             // Create failed transaction charges using Sequelize
-            await TransactionCharges.create({
-                transaction_type: 'payout',
-                reference_id: payoutData.reference_id,
-                transaction_amount: payoutData.amount,
-                transaction_utr: null,
-                merchant_charge: adminCharge,
-                agent_charge: agentCharge,
-                total_charges: totalCharges,
-                user_id: payoutData.user_id,
-                status: 'failed',
-                metadata: {
+            await TransactionCharges.update(
+                {
+                    status: 'failed',
                     merchant_response: result,
-                    requested_ip: clientIp
+                    transaction_utr: null
+                },
+                {
+                    where: {
+                        reference_id: payoutData.reference_id
+                    }
                 }
-            });
+            );
 
             logger.info('Failed transaction charges stored', { reference: payoutData.reference_id });
 
             let userTransaction = await UserTransaction.updateOne(
                 {
-                    reference_id: payoutData.reference_id,
-                    status: 'failed'
+                    reference_id: payoutData.reference_id
                 },
                 {
                     $set: {
                         status: 'failed',
                         gateway_response: {
-                            reference_id: txn_id,
+                            reference_id: payoutData.reference_id,
                             status: 'failed',
                             message: result.message
                         }
                     }
                 }
             );
-            await userTransaction.save();
             logger.info('User transaction updated to failed', { reference: payoutData.reference });
 
             let payoutTransaction = await PayoutTransaction.updateOne(
                 {
-                    reference_id: payoutData.reference_id,
-                    status: 'failed'
+                    reference_id: payoutData.reference_id
                 },
                 {
                     $set: {
                         status: 'failed',
                         gateway_response: {
-                            reference_id: txn_id,
+                            reference_id: payoutData.reference_id,
                             status: 'failed',
                             message: result.message
                         }
                     }
                 }
             );
-            await payoutTransaction.save();
             logger.info('Payout transaction updated to failed', { reference: payoutData.reference_id });
 
             return {
                 data: { 
-                    status: result.status,
-                    message: result.message,
-                    error: result.error,
-                    txn_id: txn_id
+                    status: result['statuscode'],
+                    message: result['message'],
+                    error: result['error'],
+                    txn_id: payoutData.reference_id
                 },
                 status: 200
             };
@@ -230,7 +219,7 @@ async function unpayPayout(payoutData) {
         logger.error('Error in unpayPayout', {
             error: error.message,
             stack: error.stack,
-            reference: payoutData.reference
+            reference: payoutData.reference_id
         });
         
         return {
