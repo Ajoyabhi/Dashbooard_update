@@ -7,7 +7,12 @@ export interface User {
   name: string;
   user_name: string;
   email: string;
-  user_type: 'admin' | 'payin_payout' | 'staff' | 'agent' | 'payout_only';
+  mobile: string;
+  user_type: UserRole;
+  company_name?: string;
+  business_type?: string;
+  avatar?: string;
+  role?: string;
   status?: {
     status: boolean;
     payout_status: boolean;

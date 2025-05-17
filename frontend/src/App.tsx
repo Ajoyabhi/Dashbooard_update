@@ -1,5 +1,6 @@
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { Toaster } from './components/ui/Toaster';
 import LoginPage from './pages/auth/LoginPage';
 import AdminDashboard from './pages/admin/Dashboard';
@@ -39,62 +40,79 @@ import RegisterUser from './pages/agent/RegisterUser';
 import UserCharges_agent from './pages/agent/UserCharges_agent';
 import UserCallbacks_agent from './pages/agent/UserCallbacks_agent';
 import NotFoundPage from './pages/NotFoundPage';
+import Profile from './pages/Profile';
+import ChangePassword from './pages/ChangePassword';
+import { UserRole } from './types';
+
+function AppRoutes() {
+  const { user } = useAuth();
+
+  return (
+    <>
+      <Toaster />
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+
+        {/* Admin Routes */}
+        <Route path="/admin/payin-report" element={<ProtectedRoute role="admin"><PayinReport /></ProtectedRoute>} />
+        <Route path="/admin" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
+        <Route path="/admin/manage-user" element={<ProtectedRoute role="admin"><ManageUser /></ProtectedRoute>} />
+        <Route path="/admin/manage-user/add" element={<ProtectedRoute role="admin"><AddUser /></ProtectedRoute>} />
+        <Route path="/admin/manage-user/:userId" element={<ProtectedRoute role="admin"><UserView /></ProtectedRoute>} />
+        <Route path="/admin/manage-user/:userId/edit" element={<ProtectedRoute role="admin"><UserEdit /></ProtectedRoute>} />
+        <Route path="/admin/manage-user/:userId/charges" element={<ProtectedRoute role="admin"><UserCharges /></ProtectedRoute>} />
+        <Route path="/admin/manage-user/:userId/callbacks" element={<ProtectedRoute role="admin"><UserCallbacks /></ProtectedRoute>} />
+        <Route path="/admin/manage-user/:userId/add-fund" element={<ProtectedRoute role="admin"><AddFund /></ProtectedRoute>} />
+        <Route path="/admin/manage-staff" element={<ProtectedRoute role="admin"><ManageStaff /></ProtectedRoute>} />
+        <Route path="/admin/manage-payout" element={<ProtectedRoute role="admin"><ManagePayout /></ProtectedRoute>} />
+        <Route path="/admin/bulk-payout" element={<ProtectedRoute role="admin"><BulkPayout /></ProtectedRoute>} />
+        <Route path="/admin/wallet-report" element={<ProtectedRoute role="admin"><WalletReport /></ProtectedRoute>} />
+        <Route path="/admin/payout-report" element={<ProtectedRoute role="admin"><Payout_report /></ProtectedRoute>} />
+        <Route path="/admin/chargeback" element={<ProtectedRoute role="admin"><ChargeBack /></ProtectedRoute>} />
+        <Route path="/admin/chargeback-report" element={<ProtectedRoute role="admin"><ChargeBackReport /></ProtectedRoute>} />
+        <Route path="/admin/manage-fund-request" element={<ProtectedRoute role="admin"><ManageFundRequest /></ProtectedRoute>} />
+        <Route path="/admin/settlement" element={<ProtectedRoute role="admin"><Settlement /></ProtectedRoute>} />
+
+        {/* User Routes */}
+        <Route path="/user/payin-report" element={<ProtectedRoute role="user"><UserPayinReport /></ProtectedRoute>} />
+        <Route path="/user" element={<ProtectedRoute role="user"><UserDashboard /></ProtectedRoute>} />
+        <Route path="/user/fund-request" element={<ProtectedRoute role="user"><UserFundRequest /></ProtectedRoute>} />
+        <Route path="/user/wallet-report" element={<ProtectedRoute role="user"><UserWalletReport /></ProtectedRoute>} />
+        <Route path="/user/payout-report" element={<ProtectedRoute role="user"><UserPayoutReport /></ProtectedRoute>} />
+        <Route path="/user/developer-settings" element={<ProtectedRoute role="user"><UserDeveloperSettings /></ProtectedRoute>} />
+        <Route path="/user/development-docs" element={<ProtectedRoute role="user"><UserDevelopmentDocs /></ProtectedRoute>} />
+
+        {/* Agent Routes */}
+        <Route path="/agent/payin-report" element={<ProtectedRoute role="agent"><AgentPayinReport /></ProtectedRoute>} />
+        <Route path="/agent" element={<ProtectedRoute role="agent"><AgentDashboard /></ProtectedRoute>} />
+        <Route path="/agent/add-users" element={<ProtectedRoute role="agent"><AddUsers /></ProtectedRoute>} />
+        <Route path="/agent/users/:userId" element={<ProtectedRoute role="agent"><UserView /></ProtectedRoute>} />
+        <Route path="/agent/users/:userId/charges" element={<ProtectedRoute role="agent"><UserCharges_agent /></ProtectedRoute>} />
+        <Route path="/agent/users/:userId/callbacks" element={<ProtectedRoute role="agent"><UserCallbacks_agent /></ProtectedRoute>} />
+        <Route path="/agent/add-users/register" element={<ProtectedRoute role="agent"><RegisterUser /></ProtectedRoute>} />
+        <Route path="/agent/fund-request" element={<ProtectedRoute role="agent"><UserFundRequest /></ProtectedRoute>} />
+        <Route path="/agent/wallet-report" element={<ProtectedRoute role="agent"><AgentWalletReport /></ProtectedRoute>} />
+        <Route path="/agent/payout-report" element={<ProtectedRoute role="agent"><AgentPayoutReport /></ProtectedRoute>} />
+        <Route path="/agent/developer-settings" element={<ProtectedRoute role="agent"><AgentDeveloperSettings /></ProtectedRoute>} />
+        <Route path="/agent/development-docs" element={<ProtectedRoute role="agent"><AgentDevelopmentDocs /></ProtectedRoute>} />
+
+        {/* Profile and Change Password routes */}
+        <Route path="/profile" element={<ProtectedRoute role={user?.user_type as UserRole}><Profile /></ProtectedRoute>} />
+        <Route path="/change-password" element={<ProtectedRoute role={user?.user_type as UserRole}><ChangePassword /></ProtectedRoute>} />
+
+        {/* Default and 404 routes */}
+        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+    </>
+  );
+}
 
 function App() {
   return (
     <Router>
       <AuthProvider>
-        <Toaster />
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-
-          {/* Admin Routes */}
-          <Route path="/admin/payin-report" element={<ProtectedRoute role="admin"><PayinReport /></ProtectedRoute>} />
-          <Route path="/admin" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/admin/manage-user" element={<ProtectedRoute role="admin"><ManageUser /></ProtectedRoute>} />
-          <Route path="/admin/manage-user/add" element={<ProtectedRoute role="admin"><AddUser /></ProtectedRoute>} />
-          <Route path="/admin/manage-user/:userId" element={<ProtectedRoute role="admin"><UserView /></ProtectedRoute>} />
-          <Route path="/admin/manage-user/:userId/edit" element={<ProtectedRoute role="admin"><UserEdit /></ProtectedRoute>} />
-          <Route path="/admin/manage-user/:userId/charges" element={<ProtectedRoute role="admin"><UserCharges /></ProtectedRoute>} />
-          <Route path="/admin/manage-user/:userId/callbacks" element={<ProtectedRoute role="admin"><UserCallbacks /></ProtectedRoute>} />
-          <Route path="/admin/manage-user/:userId/add-fund" element={<ProtectedRoute role="admin"><AddFund /></ProtectedRoute>} />
-          <Route path="/admin/manage-staff" element={<ProtectedRoute role="admin"><ManageStaff /></ProtectedRoute>} />
-          <Route path="/admin/manage-payout" element={<ProtectedRoute role="admin"><ManagePayout /></ProtectedRoute>} />
-          <Route path="/admin/bulk-payout" element={<ProtectedRoute role="admin"><BulkPayout /></ProtectedRoute>} />
-          <Route path="/admin/wallet-report" element={<ProtectedRoute role="admin"><WalletReport /></ProtectedRoute>} />
-          <Route path="/admin/payout-report" element={<ProtectedRoute role="admin"><Payout_report /></ProtectedRoute>} />
-          <Route path="/admin/chargeback" element={<ProtectedRoute role="admin"><ChargeBack /></ProtectedRoute>} />
-          <Route path="/admin/chargeback-report" element={<ProtectedRoute role="admin"><ChargeBackReport /></ProtectedRoute>} />
-          <Route path="/admin/manage-fund-request" element={<ProtectedRoute role="admin"><ManageFundRequest /></ProtectedRoute>} />
-          <Route path="/admin/settlement" element={<ProtectedRoute role="admin"><Settlement /></ProtectedRoute>} />
-
-          {/* User Routes */}
-          <Route path="/user/payin-report" element={<ProtectedRoute role="user"><UserPayinReport /></ProtectedRoute>} />
-          <Route path="/user" element={<ProtectedRoute role="user"><UserDashboard /></ProtectedRoute>} />
-          <Route path="/user/fund-request" element={<ProtectedRoute role="user"><UserFundRequest /></ProtectedRoute>} />
-          <Route path="/user/wallet-report" element={<ProtectedRoute role="user"><UserWalletReport /></ProtectedRoute>} />
-          <Route path="/user/payout-report" element={<ProtectedRoute role="user"><UserPayoutReport /></ProtectedRoute>} />
-          <Route path="/user/developer-settings" element={<ProtectedRoute role="user"><UserDeveloperSettings /></ProtectedRoute>} />
-          <Route path="/user/development-docs" element={<ProtectedRoute role="user"><UserDevelopmentDocs /></ProtectedRoute>} />
-
-          {/* Agent Routes */}
-          <Route path="/agent/payin-report" element={<ProtectedRoute role="agent"><AgentPayinReport /></ProtectedRoute>} />
-          <Route path="/agent" element={<ProtectedRoute role="agent"><AgentDashboard /></ProtectedRoute>} />
-          <Route path="/agent/add-users" element={<ProtectedRoute role="agent"><AddUsers /></ProtectedRoute>} />
-          <Route path="/agent/users/:userId" element={<ProtectedRoute role="agent"><UserView /></ProtectedRoute>} />
-          <Route path="/agent/users/:userId/charges" element={<ProtectedRoute role="agent"><UserCharges_agent /></ProtectedRoute>} />
-          <Route path="/agent/users/:userId/callbacks" element={<ProtectedRoute role="agent"><UserCallbacks_agent /></ProtectedRoute>} />
-          <Route path="/agent/add-users/register" element={<ProtectedRoute role="agent"><RegisterUser /></ProtectedRoute>} />
-          <Route path="/agent/fund-request" element={<ProtectedRoute role="agent"><UserFundRequest /></ProtectedRoute>} />
-          <Route path="/agent/wallet-report" element={<ProtectedRoute role="agent"><AgentWalletReport /></ProtectedRoute>} />
-          <Route path="/agent/payout-report" element={<ProtectedRoute role="agent"><AgentPayoutReport /></ProtectedRoute>} />
-          <Route path="/agent/developer-settings" element={<ProtectedRoute role="agent"><AgentDeveloperSettings /></ProtectedRoute>} />
-          <Route path="/agent/development-docs" element={<ProtectedRoute role="agent"><AgentDevelopmentDocs /></ProtectedRoute>} />
-
-          {/* Default and 404 routes */}
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
+        <AppRoutes />
       </AuthProvider>
     </Router>
   );
