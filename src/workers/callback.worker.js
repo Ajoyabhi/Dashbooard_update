@@ -30,27 +30,32 @@ callbackQueue.process(async (job) => {
     });
 
     const {
-      reference_id,
+      statuscode,
       status,
+      amount,
+      apitxnid,
+      txnid,
       utr,
-      message,
-      raw_response
+      message
     } = job.data;
 
-    // Find the transaction
-    const transaction = await PayinTransaction.findOne({ reference_id });
+    // Map Unpay status to our status format
+    const mappedStatus = statuscode === 'TXN' ? 'completed' : 'failed';
+
+    // Find the transaction using apitxnid as reference_id
+    const transaction = await PayinTransaction.findOne({ reference_id: apitxnid });
     if (!transaction) {
-      throw new Error(`Transaction not found for reference_id: ${reference_id}`);
+      throw new Error(`Transaction not found for reference_id: ${apitxnid}`);
     }
 
     // Update transaction status
     const updateData = {
-      status: status.toLowerCase(),
+      status: mappedStatus,
       gateway_response: {
         utr,
-        status: status.toLowerCase(),
-        message,
-        raw_response
+        status: mappedStatus,
+        message: message || 'Transaction processed',
+        raw_response: job.data // Store the complete callback data
       }
     };
 
@@ -58,34 +63,37 @@ callbackQueue.process(async (job) => {
     await Promise.all([
       // Update payin transaction
       PayinTransaction.updateOne(
-        { reference_id },
+        { reference_id: apitxnid },
         { $set: updateData }
       ),
       // Update user transaction
       UserTransaction.updateOne(
-        { reference_id },
+        { reference_id: apitxnid },
         { $set: updateData }
       ),
       // Update transaction charges using Sequelize syntax
       TransactionCharges.update(
-        { status: status.toLowerCase() },
         { 
-          where: { reference_id },
+          status: mappedStatus,
+          transaction_utr: utr
+        },
+        { 
+          where: { reference_id: apitxnid },
           returning: true
         }
       )
     ]);
 
     logger.info('Callback processed successfully', {
-      reference_id,
-      status,
+      reference_id: apitxnid,
+      status: mappedStatus,
       utr
     });
 
     return {
       success: true,
-      reference_id,
-      status
+      reference_id: apitxnid,
+      status: mappedStatus
     };
 
   } catch (error) {

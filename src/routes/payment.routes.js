@@ -27,6 +27,7 @@ router.get('/transaction/:transaction_id',
 );
 
 // Unpay callback route - no authentication needed as it's called by Unpay
+router.get('/unpay/callback', handleUnpayCallback);
 router.post('/unpay/callback', handleUnpayCallback);
 
 module.exports = router; 

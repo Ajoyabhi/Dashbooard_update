@@ -38,6 +38,23 @@ const validatePaymentRequest = (req) => {
   };
 };
 
+
+const validatePaymentRequestpayin = (req) => {
+  const errors = [];
+  const {name, order_amount, email, phone, reference_id } = req.body;
+
+  if (!name) errors.push('Name is required');
+  if (!order_amount) errors.push('Order amount is required');
+  if (!email) errors.push('Email is required');
+  if (!phone) errors.push('Phone is required');
+  if (!reference_id) errors.push('Order ID is required');
+
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
+};
+
 /**
  * Set validation result in request
  * @param {Object} req - Express request object
@@ -47,6 +64,9 @@ const setValidationResult = (req, result) => {
   req.validationResult = result;
 };
 
+const setValidationResultpayin = (req, result) => {
+  req.validationResult = result;
+};
 /**
  * Initiate a payment
  * @param {Object} req - Express request object
@@ -55,8 +75,8 @@ const setValidationResult = (req, result) => {
 const initiatePayment = async (req, res) => {
   try {
     // Validate request
-    const validationResult = validatePaymentRequest(req);
-    setValidationResult(req, validationResult);
+    const validationResult = validatePaymentRequestpayin(req);
+    setValidationResultpayin(req, validationResult);
     if (!validationResult.isValid) {
       return res.status(400).json({ 
         success: false, 
@@ -65,7 +85,7 @@ const initiatePayment = async (req, res) => {
       });
     }
 
-    const { account_number, account_ifsc, bank_name, beneficiary_name, request_type, amount, reference_id } = req.body;
+    const {name, order_amount, email, phone, reference_id} = req.body;
     const user_id = req.user.id;
     const clientIp = getClientIp(req);
     const transaction_id = uuidv4();
@@ -74,11 +94,10 @@ const initiatePayment = async (req, res) => {
     const result = await processPayin({
       user_id,
       transaction_id,
-      amount,
-      account_number,
-      account_ifsc,
-      bank_name,
-      beneficiary_name,
+      name,
+      order_amount,
+      email,
+      phone,
       reference_id,
       clientIp
     });
@@ -112,10 +131,28 @@ const initiatePayment = async (req, res) => {
  */
 const handleUnpayCallback = async (req, res) => {
   try {
-    logger.info('Received Unpay callback', { body: req.body });
+    // Get callback data from either query params (GET) or body (POST)
+    const callbackData = req.method === 'GET' ? req.query : req.body;
+    
+    logger.info('Received Unpay callback', { 
+      method: req.method,
+      data: callbackData 
+    });
+
+    // Validate required parameters
+    const requiredParams = ['statuscode', 'status', 'amount', 'apitxnid', 'txnid', 'utr'];
+    const missingParams = requiredParams.filter(param => !callbackData[param]);
+    
+    if (missingParams.length > 0) {
+      logger.error('Missing required parameters in callback', { missingParams });
+      return res.status(400).json({ 
+        success: false, 
+        message: `Missing required parameters: ${missingParams.join(', ')}`
+      });
+    }
 
     // Add callback to queue
-    const job = await callbackQueue.add(req.body, {
+    const job = await callbackQueue.add(callbackData, {
       attempts: 3,
       backoff: {
         type: 'exponential',
@@ -134,7 +171,7 @@ const handleUnpayCallback = async (req, res) => {
     logger.error('Error queuing Unpay callback', {
       error: error.message,
       stack: error.stack,
-      body: req.body
+      data: req.method === 'GET' ? req.query : req.body
     });
     res.status(500).json({ success: false, message: 'Error processing callback' });
   }
@@ -190,5 +227,6 @@ module.exports = {
   handleUnpayCallback,
   getTransactionStatus,
   validatePaymentRequest,
-  setValidationResult
+  setValidationResult,
+  validatePaymentRequestpayin
 }; 

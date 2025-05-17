@@ -299,17 +299,47 @@ const initiatePayout = async (req, res) => {
       
       // Send response based on result
       if (result?.status == 200) {
+        await payoutTransaction.updateOne(
+          { reference_id: reference_id },
+          { $set: { status: "completed", gateway_response: { reference_id, status: "completed", message: result.data.message, merchant_response: result.data.txn_id } } }
+        );
+        await userTransaction.updateOne(
+          { reference_id: reference_id },
+          { $set: { status: "completed", gateway_response: { reference_id, status: "completed", message: result.data.message, merchant_response: result.data.txn_id } } }
+        );
+        await TransactionCharges.update(
+          {
+            status: 'completed',
+            merchant_response: result.data.txn_id
+          },
+          { where: { reference_id: reference_id } }
+        );
         res.status(200).json({
           success: true,
           message: 'Payout processed successfully',
-          transaction_id: payoutTransaction._id,
+          transaction_id: result.data.txn_id,
           result: result.data.message
         });
       } else {
+        await payoutTransaction.updateOne(
+          { reference_id: reference_id },
+          { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result?.data?.message || 'Unknown error' } } }
+        );
+        await userTransaction.updateOne(
+          { reference_id: reference_id },
+          { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result?.data?.message || 'Unknown error' } } }
+        );
+        await TransactionCharges.update(
+          {
+            status: 'failed',
+            merchant_response: result.data.txn_id
+          },
+          { where: { reference_id: reference_id } }
+        );
         res.status(400).json({
           success: false,
           message: 'Payout processing failed',
-          transaction_id: payoutTransaction._id,
+          transaction_id: result.data.txn_id,
           error: result?.data?.message || 'Unknown error'
         });
       }

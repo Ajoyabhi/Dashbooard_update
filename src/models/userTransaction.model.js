@@ -61,6 +61,7 @@ const userTransactionSchema = new mongoose.Schema({
     status: String,
     message: String,
     merchant_response: String,
+    raw_response: mongoose.Schema.Types.Mixed,
   },
   balance: {
     before: {

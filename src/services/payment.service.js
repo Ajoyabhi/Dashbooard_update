@@ -19,11 +19,10 @@ const processPayin = async (data) => {
 
     const {
       user_id,
-      amount,
-      account_number,
-      account_ifsc,
-      bank_name,
-      beneficiary_name,
+      order_amount,
+      name,
+      email,
+      phone,
       reference_id,
       clientIp
     } = data;
@@ -51,7 +50,7 @@ const processPayin = async (data) => {
     }
 
     // Validate amount
-    if (amount < 100) {
+    if (order_amount < 100) {
       throw new Error('Minimum payin amount is 100');
     }
 
@@ -104,7 +103,7 @@ const processPayin = async (data) => {
     const applicableBracket = chargeBrackets.find(bracket => {
       const startAmount = parseFloat(bracket.start_amount);
       const endAmount = parseFloat(bracket.end_amount);
-      return amount >= startAmount && amount <= endAmount;
+      return order_amount >= startAmount && order_amount <= endAmount;
     });
 
     if (!applicableBracket) {
@@ -116,19 +115,19 @@ const processPayin = async (data) => {
     let agentCharge = 0;
 
     if (applicableBracket.admin_payin_charge_type === 'percentage') {
-      adminCharge = (amount * parseFloat(applicableBracket.admin_payin_charge)) / 100;
+      adminCharge = (order_amount * parseFloat(applicableBracket.admin_payin_charge)) / 100;
     } else {
       adminCharge = parseFloat(applicableBracket.admin_payin_charge);
     }
 
     if (applicableBracket.agent_payin_charge_type === 'percentage') {
-      agentCharge = (amount * parseFloat(applicableBracket.agent_payin_charge)) / 100;
+      agentCharge = (order_amount * parseFloat(applicableBracket.agent_payin_charge)) / 100;
     } else {
       agentCharge = parseFloat(applicableBracket.agent_payin_charge);
     }
 
     const totalCharges = parseFloat(adminCharge);
-    const amountToDeduct = parseFloat(amount) + totalCharges;
+    const amountToDeduct = parseFloat(order_amount) + totalCharges;
     const user_balance_left = parseFloat(user.FinancialDetail.settlement) - amountToDeduct;
 
     // Update settlement
@@ -142,13 +141,13 @@ const processPayin = async (data) => {
       user: {
         id: new mongoose.Types.ObjectId(user_id),
         user_id: user_id,
-        name: user.name || '',
-        email: user.email || '',
-        mobile: user.mobile || '',
+        name: name || '',
+        email: email || '',
+        mobile: phone || '',
         userType: user.user_type || ''
       },
       transaction_id: data.transaction_id,
-      amount: amount,
+      amount: order_amount,
       transaction_type: 'payin',
       reference_id: reference_id,
       status: 'pending',
@@ -191,17 +190,16 @@ const processPayin = async (data) => {
         mobile: user.mobile || '',
         userType: user.user_type || ''
       },
-      amount: amount,
+      amount: order_amount,
       charges: {
         admin_charge: adminCharge,
         agent_charge: agentCharge,
         total_charges: totalCharges
       },
       beneficiary_details: {
-        account_number,
-        account_ifsc,
-        bank_name,
-        beneficiary_name
+        name,
+        email,
+        phone
       },
       reference_id: reference_id,
       status: 'pending',
@@ -222,7 +220,7 @@ const processPayin = async (data) => {
     await TransactionCharges.create({
       transaction_type: 'payin',
       reference_id: reference_id,
-      transaction_amount: parseFloat(amount),
+      transaction_amount: parseFloat(order_amount),
       transaction_utr: null,
       merchant_charge: parseFloat(adminCharge),
       agent_charge: parseFloat(agentCharge),
@@ -241,11 +239,10 @@ const processPayin = async (data) => {
 
     const payinData = {
       user_id,
-      amount,
-      account_number,
-      account_ifsc,
-      bank_name,
-      beneficiary_name,
+      order_amount,
+      name,
+      email,
+      phone,
       reference_id,
       clientIp
     };
@@ -268,7 +265,7 @@ const processPayin = async (data) => {
     });
 
     // Update transaction status
-    if (result?.status == "TXN") {
+    if (result?.statuscode == "TXN") {
       logger.debug('DEBUG: Updating transaction status to completed', {
         reference_id,
         timestamp: new Date().toISOString()
@@ -301,7 +298,7 @@ const processPayin = async (data) => {
       await TransactionCharges.update(
         {
           transaction_utr: result.data.apitxnid,
-          status: 'payin_qr_generated'
+          status: 'pending'
         },
         {
           where: {
@@ -311,8 +308,8 @@ const processPayin = async (data) => {
       );
       return {
         success: true,
-        transaction_id: result.data.apitxnid,
-        upi_string: result.data.qrString
+        reference_id: result.data.apitxnid,
+        payment_url: encodeURI(result.data.qrString)
       };
     } else {
       await PayinTransaction.updateOne(
@@ -355,7 +352,7 @@ const processPayin = async (data) => {
 
 const unpayPayin = async (payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp) => {
   try {
-    const { amount, reference_id } = payinData;
+    const { order_amount, reference_id } = payinData;
     
     // Get merchant details from database
     const merchantDetails = await MerchantDetails.findOne({ where: { user_id } });
@@ -366,12 +363,12 @@ const unpayPayin = async (payinData, adminCharge, agentCharge, totalCharges, use
     const aesIV = "uBiWATDOnfTvhfJO";
     const apiKey = "Tn3ybTJGKaDMhhj9jl89aULGf9OI0S8ZPkq0GD42";
     const partnerId = "1809";
-    const webhookUrl = merchantDetails.payin_callback;
-
+    const webhookUrl = "https://api.zentexpay.in/api/payments/unpay/callback";
+    console.log("webhookUrl", webhookUrl);
     // Prepare request body
     const requestBody = {
       partner_id: partnerId,
-      amount: parseInt(amount),
+      amount: parseInt(order_amount),
       apitxnid: reference_id,
       webhook: webhookUrl
     };
@@ -397,7 +394,7 @@ const unpayPayin = async (payinData, adminCharge, agentCharge, totalCharges, use
       throw new Error(`Unpay API error: ${result.message || 'Unknown error'}`);
     }
     console.log(result);
-    if(result.status == "TXN"){
+    if(result.statuscode == "TXN"){
       return {
         status: result.status,
         message: result.message,
@@ -408,7 +405,7 @@ const unpayPayin = async (payinData, adminCharge, agentCharge, totalCharges, use
     };
     } else {
       return {
-        status: result.status,
+        statuscode: result.statuscode,
         message: result.message,
         data: result.data
       };

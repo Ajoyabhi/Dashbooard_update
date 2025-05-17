@@ -73,7 +73,7 @@ const payoutTransactionSchema = new mongoose.Schema({
     utr: String,
     status: String,
     message: String,
-    raw_response: mongoose.Schema.Types.Mixed
+    merchant_response: String
   },
   metadata: {
     type: mongoose.Schema.Types.Mixed

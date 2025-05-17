@@ -81,10 +81,12 @@ async function unpayPayout(payoutData) {
         await apiLog.save();
         logger.info('API log created', { logId: apiLog._id });
 
-        if (result['statuscode'] === 'TXN') {
+        if (result['statuscode'] == 'TXN') {
+            console.log("result in txn status", result);
             let message = result['message'];
             let txn_id = result['txnid'];
             let utr = result['refno'];
+            let transaction_id = result['txnid'];
             
             logger.info('Transaction successful', { txn_id, utr });
 
@@ -92,7 +94,6 @@ async function unpayPayout(payoutData) {
             await TransactionCharges.update(
                 {
                     status: 'completed',
-                    merchant_response: result,
                     transaction_utr: utr
                 },
                 {
@@ -112,7 +113,7 @@ async function unpayPayout(payoutData) {
                     $set: {
                         status: 'success',
                         gateway_response: {
-                            reference_id: payoutData.reference_id,
+                            merchant_response: transaction_id,
                             status: 'success',
                             message: message,
                             utr: utr
@@ -130,7 +131,7 @@ async function unpayPayout(payoutData) {
                     $set: {
                         status: 'success',
                         gateway_response: { 
-                            reference_id: payoutData.reference_id,
+                            merchant_response: transaction_id,
                             status: 'success',
                             message: message,
                             utr: utr
@@ -144,8 +145,8 @@ async function unpayPayout(payoutData) {
                 data: { 
                     status: result['statuscode'],
                     message: result['message'],
-                    error: result['error'],
-                    txn_id: txn_id
+                    txn_id: txn_id,
+                    utr: utr
                 },
                 status: 200
             }
@@ -160,7 +161,7 @@ async function unpayPayout(payoutData) {
                 {
                     status: 'failed',
                     merchant_response: result,
-                    transaction_utr: null
+                    utr: null
                 },
                 {
                     where: {
@@ -179,7 +180,7 @@ async function unpayPayout(payoutData) {
                     $set: {
                         status: 'failed',
                         gateway_response: {
-                            reference_id: payoutData.reference_id,
+                            merchant_response: result,
                             status: 'failed',
                             message: result.message
                         }
@@ -196,7 +197,7 @@ async function unpayPayout(payoutData) {
                     $set: {
                         status: 'failed',
                         gateway_response: {
-                            reference_id: payoutData.reference_id,
+                            merchant_response: result,
                             status: 'failed',
                             message: result.message
                         }
@@ -210,7 +211,7 @@ async function unpayPayout(payoutData) {
                     status: result['statuscode'],
                     message: result['message'],
                     error: result['error'],
-                    txn_id: payoutData.reference_id
+                    txn_id: result['txnid']
                 },
                 status: 200
             };

@@ -50,7 +50,7 @@ const payinTransactionSchema = new mongoose.Schema({
     status: String,
     message: String,
     upi_string: String,
-    merchant_response: String,
+    raw_response: mongoose.Schema.Types.Mixed,
   },
   metadata: {
     requested_ip: String,
