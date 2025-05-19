@@ -127,24 +127,29 @@ const processPayin = async (data) => {
     }
 
     const totalCharges = parseFloat(adminCharge);
-    const amountToDeduct = parseFloat(order_amount) + totalCharges;
-    const user_balance_left = parseFloat(user.FinancialDetail.settlement) - amountToDeduct;
-
-    // Update settlement
-    await FinancialDetails.update(
-      { settlement: user_balance_left },
-      { where: { user_id } }
-    );
+    
+    // Initialize wallet if it's null
+    if (!user.FinancialDetail || user.FinancialDetail.wallet === null) {
+      await FinancialDetails.create({
+        user_id: user_id,
+        wallet: 0,
+        settlement: 0,
+        lien: 0,
+        rolling_reserve: 0
+      });
+    }
+    
 
     // Create user transaction
     const userTransaction = await UserTransaction.create({
       user: {
         id: new mongoose.Types.ObjectId(user_id),
         user_id: user_id,
+      },
+      beneficiary_details:{
         name: name || '',
         email: email || '',
-        mobile: phone || '',
-        userType: user.user_type || ''
+        mobile: phone || ''
       },
       transaction_id: data.transaction_id,
       amount: order_amount,
@@ -163,8 +168,8 @@ const processPayin = async (data) => {
         merchant_response: null
       },
       balance: {
-        before: user.FinancialDetail.settlement,
-        after: user_balance_left
+        before: user.FinancialDetail.wallet,
+        after: user.FinancialDetail.wallet
       },
       merchant_details: {
         merchant_name: user.MerchantDetail.payin_merchant_name,
@@ -197,9 +202,9 @@ const processPayin = async (data) => {
         total_charges: totalCharges
       },
       beneficiary_details: {
-        name,
-        email,
-        phone
+        beneficiary_name: name || '',
+        beneficiary_email: email || '',
+        beneficiary_phone: phone || ''
       },
       reference_id: reference_id,
       status: 'pending',
@@ -247,16 +252,15 @@ const processPayin = async (data) => {
       clientIp
     };
 
-    const result = await unpayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp);
-    // const result = {
-    //   success: true,
-    //   gateway_response: {
-    //     utr: '1234567890',
-    //     status: 'completed',
-    //     message: 'Payin request completed', 
-    //     raw_response: null
-    //   }
-    // };
+    // const result = await unpayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp);
+    const result = {
+      statuscode: "TXN",
+      data: {
+        status: 'completed',
+       "apitxnid": "123454789191",
+        "qrString": "upi://pay?mc=4900&pa=yespay.unps11809@yesbankltd&pn=Techturet technologies private limited&am=100&tr=123454789191&cu=INR"
+      }
+    };
 
     logger.debug('DEBUG: Payment processing completed', {
       reference_id,

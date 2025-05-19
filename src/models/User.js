@@ -82,6 +82,14 @@ module.exports = (sequelize) => {
         remember_token: {
             type: DataTypes.STRING(100)
         },
+        reset_token: {
+            type: DataTypes.STRING(255),
+            allowNull: true
+        },
+        reset_token_expiry: {
+            type: DataTypes.DATE,
+            allowNull: true
+        },
         created_by: {
             type: DataTypes.INTEGER,
             references: {

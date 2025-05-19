@@ -52,7 +52,7 @@ const Profile: React.FC = () => {
 
       try {
         console.log('Fetching profile for user ID:', user.id);
-        const response = await api.get('/api/profile');
+        const response = await api.get('/auth/profile');
         console.log('Profile API Response:', response.data);
 
         if (response.data) {

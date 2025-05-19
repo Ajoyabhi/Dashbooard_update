@@ -7,12 +7,16 @@ const {
   getUserPayinReports,
   getUserPayoutReports,
   getUserFundRequests,
-  createFundRequest
+  createFundRequest,
+  getUserDashboard
 } = require('../controllers/user.controller');
 const { auth, authorize } = require('../middleware/auth.middleware');
 
 // All routes require user authentication
 router.use(auth, authorize('payin_payout', 'staff', 'agent', 'payout_only', 'payin_only'));
+
+//dashboard
+router.get('/dashboard', getUserDashboard);
 
 // User profile routes
 router.get('/profile', getUserProfile);

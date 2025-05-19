@@ -63,6 +63,13 @@ const initiatePayout = async (req, res) => {
         });
       }
 
+      if(user.FinancialDetail.settlement < amount){
+        return res.status(400).json({
+          success: false,
+          message: 'Insufficient balance'
+        });
+      }
+
       if (reference_id.length !== 12) {
         return res.status(400).json({ 
           success: false, 
@@ -194,7 +201,10 @@ const initiatePayout = async (req, res) => {
       let userTransaction = await UserTransaction.create({
         user: {
           id: new mongoose.Types.ObjectId(user_id),
-          user_id: user_id
+          user_id: user_id,
+        },
+        beneficiary_details:{
+          name: beneficiary_name
         },
         transaction_id: uuidv4(),
         amount: amount,
@@ -292,28 +302,8 @@ const initiatePayout = async (req, res) => {
         };
         result = await unpayPayout(payoutData);
       }
-      
-      // Store transaction charges
       console.log(result);
-
-      
-      // Send response based on result
-      if (result?.status == 200) {
-        await payoutTransaction.updateOne(
-          { reference_id: reference_id },
-          { $set: { status: "completed", gateway_response: { reference_id, status: "completed", message: result.data.message, merchant_response: result.data.txn_id } } }
-        );
-        await userTransaction.updateOne(
-          { reference_id: reference_id },
-          { $set: { status: "completed", gateway_response: { reference_id, status: "completed", message: result.data.message, merchant_response: result.data.txn_id } } }
-        );
-        await TransactionCharges.update(
-          {
-            status: 'completed',
-            merchant_response: result.data.txn_id
-          },
-          { where: { reference_id: reference_id } }
-        );
+      if (result['statuscode'] == 'TXN')  {
         res.status(200).json({
           success: true,
           message: 'Payout processed successfully',
@@ -321,21 +311,6 @@ const initiatePayout = async (req, res) => {
           result: result.data.message
         });
       } else {
-        await payoutTransaction.updateOne(
-          { reference_id: reference_id },
-          { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result?.data?.message || 'Unknown error' } } }
-        );
-        await userTransaction.updateOne(
-          { reference_id: reference_id },
-          { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result?.data?.message || 'Unknown error' } } }
-        );
-        await TransactionCharges.update(
-          {
-            status: 'failed',
-            merchant_response: result.data.txn_id
-          },
-          { where: { reference_id: reference_id } }
-        );
         res.status(400).json({
           success: false,
           message: 'Payout processing failed',
@@ -344,10 +319,16 @@ const initiatePayout = async (req, res) => {
         });
       }
     } catch (error) {
-      logger.error('Error processing payout', { error: error.message });
+      logger.error('Error processing payout', { 
+        error: error.message,
+        stack: error.stack,
+        validationResult: req.validationResult,
+        requestBody: req.body
+      });
       res.status(500).json({ 
         success: false, 
-        message: 'Error processing payout' 
+        message: 'Error processing payout',
+        error: error.message
       });
     }
 };

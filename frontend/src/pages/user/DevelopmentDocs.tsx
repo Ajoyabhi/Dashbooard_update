@@ -11,7 +11,7 @@ export default function DevelopmentDocs() {
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Getting Started</h2>
           <div className="prose max-w-none">
             <p className="text-gray-600 mb-4">
-              Welcome to our payment gateway API documentation. This guide will help you integrate our payment services into your application.
+              Welcome to ZentexPay API documentation. This guide will help you integrate our payment services into your application for both payin and payout operations.
             </p>
           </div>
         </div>
@@ -20,11 +20,11 @@ export default function DevelopmentDocs() {
           <h2 className="text-xl font-semibold text-gray-800 mb-4">API Authentication</h2>
           <div className="prose max-w-none">
             <p className="text-gray-600 mb-4">
-              All API requests require authentication using your API key. You can generate your API key from the Developer Settings page.
+              All API requests require authentication using a JWT token. The token is valid for 24 hours from the time of generation.
             </p>
             <div className="bg-gray-50 p-4 rounded-md">
               <code className="text-sm text-gray-800">
-                Authorization: Bearer YOUR_API_KEY
+                Authorization: YOUR_JWT_TOKEN
               </code>
             </div>
           </div>
@@ -34,34 +34,63 @@ export default function DevelopmentDocs() {
           <h2 className="text-xl font-semibold text-gray-800 mb-4">API Endpoints</h2>
           <div className="space-y-4">
             <div className="border-b border-gray-200 pb-4">
-              <h3 className="text-lg font-medium text-gray-800 mb-2">Create Payment</h3>
+              <h3 className="text-lg font-medium text-gray-800 mb-2">Payin</h3>
               <p className="text-gray-600 mb-2">Create a new payment transaction</p>
               <div className="bg-gray-50 p-4 rounded-md">
                 <code className="text-sm text-gray-800">
-                  POST /api/v1/payments
+                  POST https://api.zentexpay.in/api/payments/payin
                 </code>
+              </div>
+              <div className="mt-4">
+                <h4 className="text-md font-medium text-gray-800 mb-2">Request Body:</h4>
+                <pre className="bg-gray-50 p-4 rounded-md text-sm text-gray-800">
+                  {`{
+    "order_amount": "500",
+    "email": "user@example.com",
+    "phone": "9876543210",
+    "name": "John Smith",
+    "reference_id": "PAY123456789"
+}`}
+                </pre>
               </div>
             </div>
 
             <div className="border-b border-gray-200 pb-4">
-              <h3 className="text-lg font-medium text-gray-800 mb-2">Get Payment Status</h3>
-              <p className="text-gray-600 mb-2">Check the status of a payment</p>
+              <h3 className="text-lg font-medium text-gray-800 mb-2">Payout</h3>
+              <p className="text-gray-600 mb-2">Initiate a payout transaction</p>
               <div className="bg-gray-50 p-4 rounded-md">
                 <code className="text-sm text-gray-800">
-                  GET /api/v1/payments/{'{payment_id}'}
+                  POST https://api.zentexpay.in/api/payments/payout/
                 </code>
               </div>
+              <div className="mt-4">
+                <h4 className="text-md font-medium text-gray-800 mb-2">Request Body:</h4>
+                <pre className="bg-gray-50 p-4 rounded-md text-sm text-gray-800">
+                  {`{
+    "amount": "2000",
+    "account_number": "9876543210",
+    "account_ifsc": "SBIN0001234",
+    "bank_name": "State Bank of India",
+    "beneficiary_name": "Jane Doe",
+    "request_type": "IMPS",
+    "reference_id": "POUT987654321"
+}`}
+                </pre>
+              </div>
             </div>
+          </div>
+        </div>
 
-            <div>
-              <h3 className="text-lg font-medium text-gray-800 mb-2">Webhook Integration</h3>
-              <p className="text-gray-600 mb-2">Configure webhooks to receive payment notifications</p>
-              <div className="bg-gray-50 p-4 rounded-md">
-                <code className="text-sm text-gray-800">
-                  POST /api/v1/webhooks
-                </code>
-              </div>
-            </div>
+        <div className="bg-white p-6 rounded-lg shadow-card border border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">Important Notes</h2>
+          <div className="prose max-w-none">
+            <ul className="list-disc pl-6 text-gray-600 space-y-2">
+              <li>The reference_id can be any combination of 12 characters (numbers or alphabets)</li>
+              <li>JWT authentication token expires after 24 hours</li>
+              <li>All amounts should be provided as strings</li>
+              <li>Phone numbers must be exactly 10 digits</li>
+              <li>Make sure to include the Content-Type: application/json header in your requests</li>
+            </ul>
           </div>
         </div>
 
@@ -74,15 +103,42 @@ export default function DevelopmentDocs() {
                 <pre className="text-sm text-gray-800">
                   {`const axios = require('axios');
 
-const createPayment = async () => {
+// Payin Example
+const createPayin = async () => {
   try {
-    const response = await axios.post('https://api.example.com/v1/payments', {
-      amount: 1000,
-      currency: 'INR',
-      description: 'Test payment'
+    const response = await axios.post('https://api.zentexpay.in/api/payments/payin', {
+      order_amount: "500",
+      email: "user@example.com",
+      phone: "9876543210",
+      name: "John Smith",
+      reference_id: "PAY123456789"
     }, {
       headers: {
-        'Authorization': 'Bearer YOUR_API_KEY'
+        'Authorization': 'YOUR_JWT_TOKEN',
+        'Content-Type': 'application/json'
+      }
+    });
+    console.log(response.data);
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+// Payout Example
+const createPayout = async () => {
+  try {
+    const response = await axios.post('https://api.zentexpay.in/api/payments/payout/', {
+      amount: "2000",
+      account_number: "9876543210",
+      account_ifsc: "SBIN0001234",
+      bank_name: "State Bank of India",
+      beneficiary_name: "Jane Doe",
+      request_type: "IMPS",
+      reference_id: "POUT987654321"
+    }, {
+      headers: {
+        'Authorization': 'YOUR_JWT_TOKEN',
+        'Content-Type': 'application/json'
       }
     });
     console.log(response.data);

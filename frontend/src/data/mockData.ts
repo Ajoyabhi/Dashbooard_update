@@ -293,7 +293,7 @@ export const mockWalletRecords: WalletRecord[] = [
 // Mock Summary Cards Data
 export const mockSummaryCardsData: SummaryCardData[] = [
   {
-    title: 'Total Users',
+    title: 'Wallet Balance',
     value: '28',
     percentage: 12,
     trend: 'up',
@@ -301,7 +301,7 @@ export const mockSummaryCardsData: SummaryCardData[] = [
     color: 'primary',
   },
   {
-    title: 'Available Balance',
+    title: 'Settlement Balance',
     value: '17,041,147.47',
     percentage: 3.2,
     trend: 'up',
@@ -339,23 +339,7 @@ export const mockSummaryCardsData: SummaryCardData[] = [
     trend: 'up',
     icon: 'CreditCard',
     color: 'error',
-  },
-  {
-    title: 'Today Profit',
-    value: '24.66',
-    percentage: 5.3,
-    trend: 'up',
-    icon: 'DollarSign',
-    color: 'warning',
-  },
-  {
-    title: 'Total Profit',
-    value: '554.16',
-    percentage: 2.1,
-    trend: 'up',
-    icon: 'CreditCard',
-    color: 'error',
-  },
+  }
 ];
 
 // Menu Items

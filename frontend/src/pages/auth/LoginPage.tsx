@@ -114,7 +114,7 @@ const LoginPage: React.FC = () => {
               </div>
             </div>
 
-            <a href="#" className="forgot-link">Forgot Password?</a>
+            <a href="/forgot-password" className="forgot-link">Forgot Password?</a>
             <button
               type="submit"
               className={`btn ${loading ? 'loading' : ''}`}

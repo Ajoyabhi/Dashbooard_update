@@ -3,6 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Toaster } from './components/ui/Toaster';
 import LoginPage from './pages/auth/LoginPage';
+import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
+import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 import AdminDashboard from './pages/admin/Dashboard';
 import UserDashboard from './pages/user/Dashboard';
 import AgentDashboard from './pages/agent/Dashboard';
@@ -52,6 +54,8 @@ function AppRoutes() {
       <Toaster />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
 
         {/* Admin Routes */}
         <Route path="/admin/payin-report" element={<ProtectedRoute role="admin"><PayinReport /></ProtectedRoute>} />
@@ -97,8 +101,24 @@ function AppRoutes() {
         <Route path="/agent/development-docs" element={<ProtectedRoute role="agent"><AgentDevelopmentDocs /></ProtectedRoute>} />
 
         {/* Profile and Change Password routes */}
-        <Route path="/profile" element={<ProtectedRoute role={user?.user_type as UserRole}><Profile /></ProtectedRoute>} />
-        <Route path="/change-password" element={<ProtectedRoute role={user?.user_type as UserRole}><ChangePassword /></ProtectedRoute>} />
+        <Route path="/profile" element={
+          <ProtectedRoute role={user?.user_type === 'payin_payout' ? 'user' : (user?.user_type as UserRole)}>
+            <div className="flex h-screen">
+              <div className="flex-1 flex flex-col">
+                <Profile />
+              </div>
+            </div>
+          </ProtectedRoute>
+        } />
+        <Route path="/change-password" element={
+          <ProtectedRoute role={user?.user_type === 'payin_payout' ? 'user' : (user?.user_type as UserRole)}>
+            <div className="flex h-screen">
+              <div className="flex-1 flex flex-col">
+                <ChangePassword />
+              </div>
+            </div>
+          </ProtectedRoute>
+        } />
 
         {/* Default and 404 routes */}
         <Route path="/" element={<Navigate to="/login" replace />} />

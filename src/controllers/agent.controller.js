@@ -1,5 +1,10 @@
-const { User, UserStatus, FinancialDetails, MerchantDetails,MerchantCharges } = require('../models');
+const { User, UserStatus, FinancialDetails, MerchantDetails,MerchantCharges, TransactionCharges } = require('../models');
+const UserTransaction  = require('../models/userTransaction.model');
+const PayinTransaction = require('../models/payinTransaction.model');
+const PayoutTransaction = require('../models/payoutTransaction.model');
 const { Op } = require('sequelize');
+const sequelize = require('../models').sequelize;
+
 
 const getRegisteredUsers = async (req, res) => {
     try {
@@ -304,6 +309,400 @@ const updateUserCallbacks = async (req, res) => {
     }
 };
 
+const getWalletReports = async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const skip = (page - 1) * limit;
+        const agentId = req.user.id;
+
+        // First get all users created by this agent
+        const users = await User.findAll({
+            where: { created_by: agentId },
+            attributes: ['id']
+        });
+
+        const userIds = users.map(user => user.id);
+
+        // Build filter object
+        const filter = {
+            'user.user_id': { $in: userIds }
+        };
+
+        // Add type filter if provided
+        if (req.query.type && req.query.type !== 'all') {
+            filter.transaction_type = req.query.type;
+        }
+
+        // Add status filter if provided
+        if (req.query.status && req.query.status !== 'all') {
+            filter.status = req.query.status;
+        }
+
+        // Add date range filter if provided
+        if (req.query.startDate || req.query.endDate) {
+            filter.createdAt = {};
+            if (req.query.startDate) {
+                filter.createdAt.$gte = new Date(req.query.startDate);
+            }
+            if (req.query.endDate) {
+                filter.createdAt.$lte = new Date(req.query.endDate);
+            }
+        }
+
+        // Add search filter if provided
+        if (req.query.search) {
+            const searchRegex = new RegExp(req.query.search, 'i');
+            filter.$or = [
+                { 'user.name': searchRegex },
+                { transaction_id: searchRegex },
+                { reference_id: searchRegex },
+                { remark: searchRegex }
+            ];
+        }
+
+        // Get total count for pagination
+        const totalItems = await UserTransaction.countDocuments(filter);
+        const totalPages = Math.ceil(totalItems / limit);
+
+        // Fetch transactions with pagination
+        const transactions = await UserTransaction.find(filter)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .lean();
+
+        // Format response
+        const formattedTransactions = transactions.map(transaction => ({
+            type: transaction.transaction_type,
+            date: transaction.createdAt,
+            orderId: transaction.transaction_id,
+            remark: transaction.remark,
+            openBalance: transaction.balance.before,
+            amount: transaction.amount,
+            balance: transaction.balance.after,
+            status: transaction.status,
+            charges: transaction.charges,
+            reference_id: transaction.reference_id,
+            agent_charges: transaction.charges.agent_charge         
+        }));
+
+        res.json({
+            success: true,
+            data: {
+                transactions: formattedTransactions,
+                pagination: {
+                    totalItems,
+                    totalPages,
+                    currentPage: page,
+                    pageSize: limit,
+                    hasNextPage: page < totalPages,
+                    hasPrevPage: page > 1
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error in getWalletReports:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching wallet reports',
+            error: error.message
+        });
+    }
+};
+
+const getPayinReports = async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const skip = (page - 1) * limit;
+        const agentId = req.user.id;
+
+        // Get all users created by this agent from SQL database
+        const users = await User.findAll({
+            where: {
+                created_by: agentId
+            },
+            attributes: ['id']
+        });
+
+        // Extract user IDs
+        const userIds = users.map(user => user.id.toString());
+
+        // Build filter object for MongoDB
+        const filter = {
+            'user.user_id': { $in: userIds }
+        };
+
+        // Add status filter if provided
+        if (req.query.status && req.query.status !== 'all') {
+            filter.status = req.query.status;
+        }
+
+        // Add date range filter if provided
+        if (req.query.startDate || req.query.endDate) {
+            filter.createdAt = {};
+            if (req.query.startDate) {
+                filter.createdAt.$gte = new Date(req.query.startDate);
+            }
+            if (req.query.endDate) {
+                filter.createdAt.$lte = new Date(req.query.endDate);
+            }
+        }
+
+        // Add search filter if provided
+        if (req.query.search) {
+            const searchRegex = new RegExp(req.query.search, 'i');
+            filter.$or = [
+                { 'user.name': searchRegex },
+                { transaction_id: searchRegex },
+                { reference_id: searchRegex }
+            ];
+        }
+
+        // Get total count for pagination
+        const totalItems = await PayinTransaction.countDocuments(filter);
+        const totalPages = Math.ceil(totalItems / limit);
+
+        // Fetch transactions with pagination
+        const transactions = await PayinTransaction.find(filter)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .lean();
+
+        res.json({
+            success: true,
+            data: {
+                transactions,
+                pagination: {
+                    totalItems,
+                    totalPages,
+                    currentPage: page,
+                    pageSize: limit,
+                    hasNextPage: page < totalPages,
+                    hasPrevPage: page > 1
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error in getPayinReports:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching payin reports',
+            error: error.message
+        });
+    }
+};
+
+const getPayoutReports = async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const skip = (page - 1) * limit;
+        const agentId = req.user.id;
+
+        // Get all users created by this agent from SQL database
+        const users = await User.findAll({
+            where: {
+                created_by: agentId
+            },
+            attributes: ['id']
+        });
+
+        // Extract user IDs
+        const userIds = users.map(user => user.id.toString());
+
+        // Build filter object for MongoDB
+        const filter = {
+            'user.user_id': { $in: userIds }
+        };
+
+        // Add status filter if provided
+        if (req.query.status && req.query.status !== 'all') {
+            filter.status = req.query.status;
+        }
+
+        // Add date range filter if provided
+        if (req.query.startDate || req.query.endDate) {
+            filter.createdAt = {};
+            if (req.query.startDate) {
+                filter.createdAt.$gte = new Date(req.query.startDate);
+            }
+            if (req.query.endDate) {
+                filter.createdAt.$lte = new Date(req.query.endDate);
+            }
+        }
+
+        // Add search filter if provided
+        if (req.query.search) {
+            const searchRegex = new RegExp(req.query.search, 'i');
+            filter.$or = [
+                { 'user.name': searchRegex },
+                { transaction_id: searchRegex },
+                { reference_id: searchRegex }
+            ];
+        }
+
+        // Get total count for pagination
+        const totalItems = await PayoutTransaction.countDocuments(filter);
+        const totalPages = Math.ceil(totalItems / limit);
+
+        // Fetch transactions with pagination
+        const transactions = await PayoutTransaction.find(filter)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .lean();
+
+        res.json({
+            success: true,
+            data: {
+                transactions,
+                pagination: {
+                    totalItems,
+                    totalPages,
+                    currentPage: page,
+                    pageSize: limit,
+                    hasNextPage: page < totalPages,
+                    hasPrevPage: page > 1
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error in getPayoutReports:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching payout reports',
+            error: error.message
+        });
+    }
+};
+
+const getDashboardData = async (req, res) => {
+    try {
+        const agentId = req.user.id;
+
+        // Get total users created by this agent
+        const totalUsers = await User.count({ where: { created_by: agentId } });
+
+        // Get all users created by this agent
+        const users = await User.findAll({ 
+            where: { created_by: agentId },
+            attributes: ['id']
+        });
+
+        // Get total wallet and settlement balances
+        const financialDetails = await FinancialDetails.findAll({
+            where: {
+                user_id: users.map(user => user.id)
+            },
+            attributes: [
+                [sequelize.fn('SUM', sequelize.col('wallet')), 'total_wallet'],
+                [sequelize.fn('SUM', sequelize.col('settlement')), 'total_settlement']
+            ]
+        });
+
+        // Get today's date range
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        // Calculate today's and total pay-in & payout profits
+        const transactionCharges = await TransactionCharges.findAll({
+            where: {
+                user_id: users.map(user => user.id),
+                status: 'completed'
+            },
+            attributes: [
+                'transaction_type',
+                [sequelize.fn('SUM', sequelize.col('agent_charge')), 'total_charges'],
+                [sequelize.literal(`CASE 
+                    WHEN created_at >= '${today.toISOString()}' AND created_at < '${tomorrow.toISOString()}'
+                    THEN agent_charge 
+                    ELSE 0 
+                END`), 'today_charges']
+            ],
+            group: ['transaction_type']
+        });
+
+        // Get recent 10 pay-in transactions with user details
+        const recentPayins = await PayinTransaction.find({
+            'user.user_id': { $in: users.map(user => user.id) }
+        })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .populate('user', 'name email mobile')
+        .lean();
+
+        // Get recent 10 payout transactions with user details
+        const recentPayouts = await PayoutTransaction.find({
+            'user.user_id': { $in: users.map(user => user.id) }
+        })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .populate('user', 'name email mobile')
+        .lean();
+
+        // Process transaction charges data
+        const chargesData = {
+            today: {
+                payin: 0,
+                payout: 0
+            },
+            total: {
+                payin: 0,
+                payout: 0
+            }
+        };
+
+        transactionCharges.forEach(charge => {
+            const type = charge.transaction_type;
+            chargesData.total[type] = parseFloat(charge.getDataValue('total_charges')) || 0;
+            chargesData.today[type] = parseFloat(charge.getDataValue('today_charges')) || 0;
+        });
+
+        // Format the response
+        const response = {
+            success: true,
+            data: {
+                total_users: totalUsers,
+                balances: {
+                    wallet: parseFloat(financialDetails[0]?.getDataValue('total_wallet')) || 0,
+                    settlement: parseFloat(financialDetails[0]?.getDataValue('total_settlement')) || 0
+                },
+                profits: {
+                    today: {
+                        payin: chargesData.today.payin,
+                        payout: chargesData.today.payout
+                    },
+                    total: {
+                        payin: chargesData.total.payin,
+                        payout: chargesData.total.payout
+                    }
+                },
+                recent_transactions: {
+                    payin: recentPayins,
+                    payout: recentPayouts
+                }
+            }
+        };
+
+        res.json(response);
+
+    } catch (error) {
+        console.error('Error in getDashboardData:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching dashboard data',
+            error: error.message
+        });
+    }
+};
+
+
+
 module.exports = {
     getRegisteredUsers,
     getUserDetails,
@@ -311,5 +710,9 @@ module.exports = {
     getUserCharges,
     updateUserCharges,
     getUserCallbacks,
-    updateUserCallbacks
+    updateUserCallbacks,
+    getWalletReports,
+    getPayinReports,
+    getPayoutReports,
+    getDashboardData
 }; 

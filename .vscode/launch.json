@@ -28,6 +28,23 @@
             "userDataDir": false,
             "sourceMaps": true,
             "trace": true
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Debug Callback Worker",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "program": "${workspaceFolder}/src/workers/callback.worker.js",
+            "outFiles": [
+                "${workspaceFolder}/**/*.js"
+            ],
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen",
+            "env": {
+                "NODE_ENV": "production"
+            }
         }
     ]
 }

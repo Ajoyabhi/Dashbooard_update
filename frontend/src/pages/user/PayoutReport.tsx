@@ -164,27 +164,35 @@ export default function PayoutReport() {
         <span className="font-medium text-primary-600">{value}</span>
       ),
     },
+    // {
+    //   header: 'Transaction ID',
+    //   accessor: 'transaction_id',
+    //   cell: (value: string) => (
+    //     <span className="font-mono">{value}</span>
+    //   ),
+    // },
     {
-      header: 'Transaction ID',
-      accessor: 'transaction_id',
-      cell: (value: string) => (
-        <span className="font-mono">{value}</span>
+      header: 'Merchant Name',
+      accessor: 'user',
+      cell: (value: any) => (
+        <span className="font-mono">{value.name}</span>
+      ),
+    },
+    {
+      header: 'Name',
+      accessor: 'beneficiary_details',
+      cell: (value: any) => (
+        <span className="font-mono">{value.beneficiary_name}</span>
       ),
     },
     {
       header: 'UTR',
       accessor: 'gateway_response',
       cell: (value: any) => (
-        <span className="font-mono">{value.raw_response}</span>
-      ),  
-    },
-    {
-      header: 'Name',
-      accessor: 'user',
-      cell: (value: any) => (
-        <span className="font-mono">{value.name}</span>
+        <span className="font-mono">{value.utr}</span>
       ),
     },
+
     {
       header: 'A/C No',
       accessor: 'beneficiary_details',

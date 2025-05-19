@@ -29,7 +29,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, role }) => {
   // Map user_type to role for comparison with explicit empty string handling
   let userRole: UserRole;
 
-  if (!user?.user_type || user.user_type == '') {
+  if (!user?.user_type) {
     console.log('ProtectedRoute: User type is empty or undefined, defaulting to user role');
     userRole = 'user';
   } else if (user.user_type === 'admin') {
@@ -38,6 +38,9 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, role }) => {
   } else if (user.user_type === 'agent') {
     console.log('ProtectedRoute: User is agent');
     userRole = 'agent';
+  } else if (user.user_type === 'payin_payout') {
+    console.log('ProtectedRoute: User is payin_payout');
+    userRole = 'user'; // Map payin_payout to user role for routing
   } else {
     console.log(`ProtectedRoute: User type "${user.user_type}" mapped to user role`);
     userRole = 'user';
@@ -45,9 +48,19 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, role }) => {
 
   console.log('ProtectedRoute: Current user role:', userRole, 'Required role:', role);
 
+  // Special case for payin_payout users
+  if (user?.user_type === 'payin_payout') {
+    // Allow access to user routes
+    if (role === 'user') {
+      return <>{children}</>;
+    }
+    // For other routes, redirect to user dashboard
+    return <Navigate to="/user" replace />;
+  }
+
+  // For other user types, check if roles match
   if (userRole !== role) {
     console.log(`ProtectedRoute: Redirecting from ${role} to ${userRole}`);
-    // Redirect to appropriate dashboard
     return <Navigate to={`/${userRole}`} replace />;
   }
 

@@ -24,7 +24,7 @@ const Sidebar: React.FC<SidebarProps> = ({ items = [], isOpen, onClose }) => {
       case 'user':
         return 'User Portal';
       default:
-        return 'PayGate';
+        return 'ZintexPay';
     }
   };
 

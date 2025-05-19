@@ -30,10 +30,9 @@ const payinTransactionSchema = new mongoose.Schema({
     total_charges: Number
   },
   beneficiary_details: {
-    account_number: String,
-    account_ifsc: String,
-    bank_name: String,
-    beneficiary_name: String
+    beneficiary_name: String,
+    beneficiary_email: String,
+    beneficiary_phone: String
   },
   reference_id: {
     type: String,
