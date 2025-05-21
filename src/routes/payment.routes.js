@@ -3,7 +3,7 @@ const router = express.Router();
 const { auth } = require('../middleware/auth.middleware');
 const { checkRole } = require('../middleware/role.middleware');
 const { initiatePayment, getTransactionStatus, handleUnpayCallback } = require('../controllers/payment.controller');
-const { initiatePayout } = require('../controllers/payment.payout');
+const { initiatePayout , getPayoutTransactionStatus} = require('../controllers/payment.payout');
 
 // Initiate payout - Only admin and agent can initiate payouts
 router.post('/payout', 
@@ -20,10 +20,18 @@ router.post('/payin',
 );
 
 // Get transaction status - Users can only view their own transactions
-router.get('/transaction/:transaction_id', 
+router.get('/payin/transaction', 
   auth,
   checkRole(['admin', 'agent', 'user', 'payin_payout', 'payout_only', 'payin_only']), 
   getTransactionStatus
+);
+
+
+// Get transaction status - payout
+router.get('/payout/transaction/:transaction_id', 
+  auth,
+  checkRole(['admin', 'agent', 'user', 'payin_payout', 'payout_only', 'payin_only']), 
+  getPayoutTransactionStatus
 );
 
 // Unpay callback route - no authentication needed as it's called by Unpay

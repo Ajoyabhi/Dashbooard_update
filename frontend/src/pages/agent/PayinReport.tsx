@@ -4,6 +4,7 @@ import DashboardLayout from '../../components/layout/DashboardLayout';
 import Table from '../../components/dashboard/Table';
 import { agentMenuItems } from '../../data/mockData';
 import { formatDate, formatCurrency, getStatusColor } from '../../utils/formatUtils';
+import { downloadTableAsCSV } from '../../utils/downloadUtils';
 import api from '../../utils/axios';
 import { toast } from 'react-hot-toast';
 
@@ -36,6 +37,8 @@ interface PayinRecord {
   status: string;
   createdAt: string;
   remark: string;
+  gst_amount?: number;
+  platform_fee?: number;
 }
 
 const PayinReport = () => {
@@ -67,7 +70,7 @@ const PayinReport = () => {
       setLoading(true);
       const params = new URLSearchParams({
         page: page.toString(),
-        limit: '10',
+        limit: pagination.pageSize.toString(),
         status: selectedStatus !== 'all' ? selectedStatus : '',
         search: searchTerm,
       });
@@ -99,41 +102,31 @@ const PayinReport = () => {
 
   useEffect(() => {
     fetchTransactions();
-  }, [selectedStatus, dateRange, searchTerm]);
+  }, [selectedStatus, dateRange, searchTerm, pagination.pageSize]);
 
   const handlePageChange = (page: number) => {
     fetchTransactions(page);
   };
 
-  const handleDownload = async () => {
-    try {
-      const params = new URLSearchParams({
-        status: selectedStatus !== 'all' ? selectedStatus : '',
-        search: searchTerm,
-      });
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPagination(prev => ({
+      ...prev,
+      pageSize: newPageSize,
+      currentPage: 1 // Reset to first page when changing page size
+    }));
+  };
 
-      if (dateRange.startDate) {
-        params.append('startDate', dateRange.startDate.toISOString());
-      }
-      if (dateRange.endDate) {
-        params.append('endDate', dateRange.endDate.toISOString());
-      }
+  const handleDownload = () => {
+    // Get current date for filename
+    const date = new Date().toISOString().split('T')[0];
+    const filename = `agent-payin-report-${date}.xlsx`;
 
-      const response = await api.get(`/agent/payin-reports/download?${params.toString()}`, {
-        responseType: 'blob'
-      });
-
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', 'payin-report.csv');
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch (error) {
-      console.error('Error downloading report:', error);
-      toast.error('Failed to download report');
-    }
+    // Download the current filtered data
+    downloadTableAsCSV(transactions, columns, {
+      filename,
+      includeHeaders: true,
+      reportType: 'payin'
+    });
   };
 
   const resetFilters = () => {
@@ -159,8 +152,8 @@ const PayinReport = () => {
       accessor: 'beneficiary_details.beneficiary_name',
     },
     {
-      header:"UTR",
-      accessor:"gateway_response.utr"
+      header: "UTR",
+      accessor: "gateway_response.utr"
     },
     {
       header: 'Amount',
@@ -177,11 +170,30 @@ const PayinReport = () => {
       ),
     },
     {
+      header: 'GST',
+      accessor: 'gst_amount',
+      cell: (value: number) => (
+        <span className="text-gray-600">{formatCurrency(value)}</span>
+      ),
+    },
+    {
+      header: 'Platform Fee',
+      accessor: 'platform_fee',
+      cell: (value: number) => (
+        <span className="text-gray-600">{formatCurrency(value)}</span>
+      ),
+    },
+    {
       header: 'Net Amount',
       accessor: 'amount',
-      cell: (value: number, row: PayinRecord) => (
-        <span className="font-medium">{formatCurrency(value - row.charges.admin_charge)}</span>
-      ),
+      cell: (value: number, row: PayinRecord) => {
+        const adminCharge = row.charges?.admin_charge || 0;
+        const gstAmount = row.gst_amount || 0;
+        const platformFee = row.platform_fee || 0;
+        return (
+          <span className="font-medium">{formatCurrency(value - adminCharge - gstAmount - platformFee)}</span>
+        );
+      },
     },
     {
       header: 'Status',
@@ -305,7 +317,7 @@ const PayinReport = () => {
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search by transaction ID, reference ID, or user name..."
+                  placeholder="Search by Reference ID or UTR..."
                   className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
                 />
               </div>
@@ -324,6 +336,7 @@ const PayinReport = () => {
               totalItems={pagination.totalItems}
               pageSize={pagination.pageSize}
               onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
             />
           </div>
         </div>

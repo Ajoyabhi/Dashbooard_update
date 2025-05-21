@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Save, ArrowLeft } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { adminMenuItems } from '../../data/mockData';
-import axios from 'axios';
 import { toast } from 'react-hot-toast';
+import api from '../../utils/axios';
 
 interface FormData {
   name: string;
@@ -55,7 +55,7 @@ export default function AddUser() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await axios.post('http://localhost:3000/api/admin/users/register', formData, {
+      const response = await api.post('/admin/users/register', formData, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `${localStorage.getItem('token')}`

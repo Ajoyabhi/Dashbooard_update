@@ -13,18 +13,18 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ items = [], isOpen, onClose }) => {
   const { user } = useAuth();
   const location = useLocation();
-  
+
   // Get role-specific logo text
   const getRoleTitle = () => {
     switch (user?.user_type) {
       case 'admin':
-        return 'Admin Portal';
+        return 'ZentexPay';
       case 'agent':
-        return 'Agent Portal';
+        return 'ZentexPay';
       case 'user':
-        return 'User Portal';
+        return 'ZentexPay';
       default:
-        return 'ZintexPay';
+        return 'ZentexPay';
     }
   };
 
@@ -43,22 +43,23 @@ const Sidebar: React.FC<SidebarProps> = ({ items = [], isOpen, onClose }) => {
       {/* Logo */}
       <div className="p-6 border-b border-primary-800">
         <div className="flex items-center space-x-3">
-          <div className="h-8 w-8 bg-white rounded-md flex items-center justify-center">
-            <div className="h-6 w-6 text-primary-900">
-              {React.createElement(getIconByName('Wallet'), { size: 20 })}
+          <div className="h-12 w-12 bg-white rounded-md flex items-center justify-center">
+            <div className="h-11 w-11 text-primary-900">
+              {/* {React.createElement(getIconByName('Wallet'), { size: 20 })} */}
+              <img src="/images/zentexpay_logo.jpg" alt="ZentexPay Logo" className="w-full h-full" />
             </div>
           </div>
           <span className="text-xl font-medium">{getRoleTitle()}</span>
         </div>
       </div>
-      
+
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-4">
+      <nav className="flex-1 overflow-y-auto py-4 scrollbar-hide">
         <ul className="space-y-1">
           {(items || []).map((item) => {
             const Icon = getIconByName(item.icon);
             const active = isPathActive(item.path);
-            
+
             return (
               <li key={item.path}>
                 <NavLink
@@ -85,11 +86,11 @@ const Sidebar: React.FC<SidebarProps> = ({ items = [], isOpen, onClose }) => {
           })}
         </ul>
       </nav>
-      
+
       {/* Footer */}
       <div className="p-4 border-t border-primary-800 text-xs text-primary-300">
         <p className="text-center">
-          ZintexPay &copy; {new Date().getFullYear()}
+          ZentexPay &copy; {new Date().getFullYear()}
         </p>
       </div>
     </div>

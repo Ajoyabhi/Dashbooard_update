@@ -362,8 +362,10 @@ export const userMenuItems: MenuItem[] = [
   { title: 'Dashboard', path: '/user', icon: 'BarChart3' },
   { title: 'Fund Request', path: '/user/fund-request', icon: 'DollarSign' },
   { title: 'Wallet Report', path: '/user/wallet-report', icon: 'Wallet' },
-  { title: 'Payin Report', path: '/user/payin-report', icon: 'PayinIcon' },
   { title: 'Payout Report', path: '/user/payout-report', icon: 'FileText' },
+  { title: 'Payin Report', path: '/user/payin-report', icon: 'FileText' },
+
+  { title: 'Settlement Report', path: '/user/settlement-report', icon: 'FileText' },
   { title: 'Developer Settings', path: '/user/developer-settings', icon: 'Settings' },
   { title: 'Development Docs', path: '/user/development-docs', icon: 'FileCode' },
 ];
@@ -373,10 +375,11 @@ export const agentMenuItems: MenuItem[] = [
   { title: 'Add Users', path: '/agent/add-users', icon: 'UserPlus' },
   // { title: 'Fund Request', path: '/agent/fund-request', icon: 'DollarSign' },
   { title: 'Wallet Report', path: '/agent/wallet-report', icon: 'Wallet' },
-  { title: 'Payin Report', path: '/agent/payin-report', icon: 'PayinIcon' },
   { title: 'Payout Report', path: '/agent/payout-report', icon: 'FileText' },
-  { title: 'Developer Settings', path: '/agent/developer-settings', icon: 'Settings' },
-  { title: 'Development Docs', path: '/agent/development-docs', icon: 'FileCode' },
+  { title: 'Payin Report', path: '/agent/payin-report', icon: 'FileText' },
+
+  // { title: 'Developer Settings', path: '/agent/developer-settings', icon: 'Settings' },
+  // { title: 'Development Docs', path: '/agent/development-docs', icon: 'FileCode' },
 ];
 
 // Function to get icon component by name

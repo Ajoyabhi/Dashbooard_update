@@ -151,7 +151,7 @@ const AddUsers: React.FC = () => {
                             loading={loading}
                             title="Users List"
                             searchable={true}
-                            filterable={true}
+                            filterable={false}
                         />
                     )}
                 </div>

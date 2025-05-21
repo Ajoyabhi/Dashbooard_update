@@ -205,7 +205,8 @@ const AgentDashboard: React.FC = () => {
       percentage: 0,
       trend: "up" as const,
       icon: "users",
-      color: "blue"
+      color: "blue",
+      isCurrency: false
     },
     {
       title: "Total WalletBalance",
@@ -224,7 +225,7 @@ const AgentDashboard: React.FC = () => {
       color: "green"
     },
     {
-      title: "Total Payin Profit",
+      title: "Today Payin Profit",
       value: dashboardData?.profits.today.payin || 0,
       percentage: 0,
       trend: "up" as const,
@@ -232,7 +233,7 @@ const AgentDashboard: React.FC = () => {
       color: "purple"
     },
     {
-      title: "Total Payout Profit",
+      title: "Today Payout Profit",
       value: dashboardData?.profits.today.payout || 0,
       percentage: 0,
       trend: "up" as const,
@@ -353,6 +354,7 @@ const AgentDashboard: React.FC = () => {
               trend={card.trend}
               icon={card.icon}
               color={card.color}
+              isCurrency={card.isCurrency}
             />
           ))}
         </div>

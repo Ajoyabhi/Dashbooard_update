@@ -1,5 +1,5 @@
 const { logger } = require('../utils/logger');
-const { User, UserStatus, MerchantDetails, MerchantCharges, MerchantModeCharges, FinancialDetails, UserIPs, TransactionCharges } = require('../models');
+const { User, UserStatus, MerchantDetails, MerchantCharges, MerchantModeCharges, FinancialDetails, UserIPs, TransactionCharges, PlatformCharges } = require('../models');
 const PayinTransaction = require('../models/payinTransaction.model');
 const UserTransaction = require('../models/userTransaction.model');
 const mongoose = require('mongoose');
@@ -113,6 +113,8 @@ const processPayin = async (data) => {
     // Calculate charges
     let adminCharge = 0;
     let agentCharge = 0;
+    let gstAmount = 0;
+    let platformFee = 0;
 
     if (applicableBracket.admin_payin_charge_type === 'percentage') {
       adminCharge = (order_amount * parseFloat(applicableBracket.admin_payin_charge)) / 100;
@@ -127,6 +129,19 @@ const processPayin = async (data) => {
     }
 
     const totalCharges = parseFloat(adminCharge);
+
+    // Fetch platform charges from database
+    const platformCharges = await PlatformCharges.findOne({
+      where: { is_active: true }
+    });
+
+    if(platformCharges?.charge){
+      platformFee = (totalCharges * parseFloat(platformCharges.charge)) / 100;
+    }
+
+    if(platformCharges?.gst){
+      gstAmount = (totalCharges * parseFloat(platformCharges.gst)) / 100;
+    }
     
     // Initialize wallet if it's null
     if (!user.FinancialDetail || user.FinancialDetail.wallet === null) {
@@ -161,6 +176,8 @@ const processPayin = async (data) => {
         agent_charge: agentCharge,
         total_charges: totalCharges
       },
+      gst_amount: gstAmount,
+      platform_fee: platformFee,
       gateway_response: {
         utr: null,
         status: 'pending',
@@ -201,6 +218,8 @@ const processPayin = async (data) => {
         agent_charge: agentCharge,
         total_charges: totalCharges
       },
+      gst_amount: gstAmount,
+      platform_fee: platformFee,
       beneficiary_details: {
         beneficiary_name: name || '',
         beneficiary_email: email || '',
@@ -230,6 +249,8 @@ const processPayin = async (data) => {
       merchant_charge: parseFloat(adminCharge),
       agent_charge: parseFloat(agentCharge),
       total_charges: parseFloat(totalCharges),
+      gst_amount: parseFloat(gstAmount),
+      platform_fee: parseFloat(platformFee),
       user_id: parseInt(user_id),
       status: 'pending',
       metadata: {
@@ -252,15 +273,15 @@ const processPayin = async (data) => {
       clientIp
     };
 
-    // const result = await unpayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp);
-    const result = {
-      statuscode: "TXN",
-      data: {
-        status: 'completed',
-       "apitxnid": "123454789191",
-        "qrString": "upi://pay?mc=4900&pa=yespay.unps11809@yesbankltd&pn=Techturet technologies private limited&am=100&tr=123454789191&cu=INR"
-      }
-    };
+    const result = await unpayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee);
+    // const result = {
+    //   statuscode: "TXN",
+    //   data: {
+    //     status: 'completed',
+    //    "apitxnid": "123454789191",
+    //     "qrString": "upi://pay?mc=4900&pa=yespay.unps11809@yesbankltd&pn=Techturet technologies private limited&am=100&tr=123454789191&cu=INR"
+    //   }
+    // };
 
     logger.debug('DEBUG: Payment processing completed', {
       reference_id,

@@ -41,6 +41,9 @@ const Profile: React.FC = () => {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Get menu items based on user type
+  const menuItems = getMenuItems(user?.user_type || '');
+
   useEffect(() => {
     const fetchProfile = async () => {
       if (!user?.id) {
@@ -52,7 +55,7 @@ const Profile: React.FC = () => {
 
       try {
         console.log('Fetching profile for user ID:', user.id);
-        const response = await api.get('/auth/profile');
+        const response = await api.get('auth/profile');
         console.log('Profile API Response:', response.data);
 
         if (response.data) {
@@ -84,7 +87,7 @@ const Profile: React.FC = () => {
 
   if (loading) {
     return (
-      <DashboardLayout menuItems={getMenuItems(user?.user_type || '')} title="Profile">
+      <DashboardLayout menuItems={menuItems} title="Profile Details">
         <div className="flex items-center justify-center h-full">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
         </div>
@@ -94,7 +97,7 @@ const Profile: React.FC = () => {
 
   if (!profile) {
     return (
-      <DashboardLayout menuItems={getMenuItems(user?.user_type || '')} title="Profile">
+      <DashboardLayout menuItems={menuItems} title="Profile Details">
         <div className="flex items-center justify-center h-full">
           <div className="text-center">
             <p className="text-gray-500">No profile data available</p>
@@ -111,7 +114,7 @@ const Profile: React.FC = () => {
   }
 
   return (
-    <DashboardLayout menuItems={getMenuItems(user?.user_type || '')} title="Profile">
+    <DashboardLayout menuItems={menuItems} title="Profile Details">
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">

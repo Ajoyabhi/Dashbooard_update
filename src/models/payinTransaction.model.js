@@ -44,6 +44,14 @@ const payinTransactionSchema = new mongoose.Schema({
     enum: ['pending', 'completed', 'failed', 'payin_qr_generated'],
     default: 'pending'
   },
+  gst_amount: {
+    type: Number,
+    default: 0
+  },
+  platform_fee: {
+    type: Number,
+    default: 0
+  },
   gateway_response: {
     utr: String,
     status: String,

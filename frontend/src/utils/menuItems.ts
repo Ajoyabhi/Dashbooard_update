@@ -50,7 +50,12 @@ export const getMenuItems = (userType: string): MenuItem[] => {
       {
         title: 'Payin Report',
         path: '/user/payin-report',
-        icon: 'ArrowDownToLine'
+        icon: 'FileText'
+      },
+      {
+        title: 'Settlement Report',
+        path: '/user/settlement-report',
+        icon: 'FileText'
       },
       {
         title: 'Developer Settings',
@@ -143,11 +148,6 @@ export const getMenuItems = (userType: string): MenuItem[] => {
           icon: 'UserPlus'
         },
         {
-          title: 'Fund Request',
-          path: '/agent/fund-request',
-          icon: 'DollarSign'
-        },
-        {
           title: 'Wallet Report',
           path: '/agent/wallet-report',
           icon: 'Wallet'
@@ -160,17 +160,7 @@ export const getMenuItems = (userType: string): MenuItem[] => {
         {
           title: 'Payin Report',
           path: '/agent/payin-report',
-          icon: 'ArrowDownToLine'
-        },
-        {
-          title: 'Developer Settings',
-          path: '/agent/developer-settings',
-          icon: 'Settings'
-        },
-        {
-          title: 'Development Docs',
-          path: '/agent/development-docs',
-          icon: 'BookOpen'
+          icon: 'FileText'
         }
       ];
 

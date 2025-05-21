@@ -454,9 +454,8 @@ const getPayinReports = async (req, res) => {
         if (req.query.search) {
             const searchRegex = new RegExp(req.query.search, 'i');
             filter.$or = [
-                { 'user.name': searchRegex },
-                { transaction_id: searchRegex },
-                { reference_id: searchRegex }
+                { reference_id: searchRegex },
+                { 'gateway_response.utr': searchRegex }
             ];
         }
 
@@ -538,9 +537,8 @@ const getPayoutReports = async (req, res) => {
         if (req.query.search) {
             const searchRegex = new RegExp(req.query.search, 'i');
             filter.$or = [
-                { 'user.name': searchRegex },
-                { transaction_id: searchRegex },
-                { reference_id: searchRegex }
+                { reference_id: searchRegex },
+                { 'gateway_response.utr': searchRegex }
             ];
         }
 

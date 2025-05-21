@@ -8,7 +8,8 @@ const {
   getUserPayoutReports,
   getUserFundRequests,
   createFundRequest,
-  getUserDashboard
+  getUserDashboard,
+  getUserSettlementReport
 } = require('../controllers/user.controller');
 const { auth, authorize } = require('../middleware/auth.middleware');
 
@@ -30,5 +31,8 @@ router.get('/payout_reports', getUserPayoutReports);
 // User fund request routes
 router.get('/fund-requests', getUserFundRequests);
 router.post('/fund-request', createFundRequest);
+
+// User settlement report routes
+router.get('/settlement-report', getUserSettlementReport);
 
 module.exports = router; 

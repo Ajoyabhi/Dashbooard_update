@@ -12,7 +12,7 @@ export default defineConfig({
     // Log all requests
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'https://api.zentexpay.in',
         changeOrigin: true,
         secure: false
       }

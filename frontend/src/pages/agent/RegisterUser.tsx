@@ -60,10 +60,11 @@ const RegisterUser: React.FC = () => {
                 draggable
                 pauseOnHover
             />
-            <div className="space-y-6">
-                <div className="max-w-4xl">
-                    <div className="flex justify-between items-center mb-6">
-                        <h1 className="text-2xl font-semibold">Register New User</h1>
+            <div className="min-h-screen bg-gray-50">
+                <div className="w-full px-4 sm:px-6 lg:px-8 py-8">
+                    {/* Header */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                        <h1 className="text-2xl font-semibold text-gray-900">Register New User</h1>
                         <button
                             onClick={() => navigate('/agent/add-users')}
                             className="text-gray-600 hover:text-gray-800"
@@ -71,215 +72,108 @@ const RegisterUser: React.FC = () => {
                             Back to Users
                         </button>
                     </div>
-
-                    <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                                <input
-                                    type="text"
-                                    name="name"
-                                    value={formData.name}
-                                    onChange={handleChange}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    placeholder="Enter Name"
-                                    required
-                                />
+    
+                    {/* Form Card */}
+                    <div className="bg-white rounded-lg shadow-lg overflow-hidden w-full">
+                        <form onSubmit={handleSubmit} className="p-4 sm:p-6 lg:p-8">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {/* Form Fields */}
+                                {[
+                                    ['Name', 'name', 'text'],
+                                    ['User Name', 'user_name', 'text'],
+                                    ['Company Name', 'company_name', 'text'],
+                                    ['Mobile', 'mobile', 'tel'],
+                                    ['GST Number', 'gst_number', 'text'],
+                                    ['Email', 'email', 'email'],
+                                    ['Business Type', 'business_type', 'text'],
+                                    ['Password', 'password', 'password'],
+                                    ['Pan Card', 'pan', 'text'],
+                                    ['Aadhar Card', 'aadhaar', 'text']
+                                ].map(([label, name, type]) => (
+                                    <div key={name}>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+                                        <input
+                                            type={type}
+                                            name={name}
+                                            value={formData[name]}
+                                            onChange={handleChange}
+                                            placeholder={`Enter ${label}`}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                            required
+                                        />
+                                    </div>
+                                ))}
+    
+                                {/* User Type Select */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">User Type</label>
+                                    <select
+                                        name="user_type"
+                                        value={formData.user_type}
+                                        onChange={handleChange}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                        required
+                                    >
+                                        <option value="payin_payout">Payin & Payout</option>
+                                        <option value="payout_only">Payout Only</option>
+                                    </select>
+                                </div>
+    
+                                {/* Address */}
+                                <div className="md:col-span-2">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                                    <input
+                                        type="text"
+                                        name="address"
+                                        value={formData.address}
+                                        onChange={handleChange}
+                                        placeholder="Enter Address"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                        required
+                                    />
+                                </div>
+    
+                                {/* City / State / Pincode */}
+                                <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {[
+                                        ['City', 'city'],
+                                        ['State', 'state'],
+                                        ['Pincode', 'pincode']
+                                    ].map(([label, name]) => (
+                                        <div key={name}>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+                                            <input
+                                                type="text"
+                                                name={name}
+                                                value={formData[name]}
+                                                onChange={handleChange}
+                                                placeholder={`Enter ${label}`}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                                required
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">User Name</label>
-                                <input
-                                    type="text"
-                                    name="user_name"
-                                    value={formData.user_name}
-                                    onChange={handleChange}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    placeholder="Enter User Name"
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Mobile</label>
-                                <input
-                                    type="tel"
-                                    name="mobile"
-                                    value={formData.mobile}
-                                    onChange={handleChange}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                                <input
-                                    type="email"
-                                    name="email"
-                                    value={formData.email}
-                                    onChange={handleChange}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                                <input
-                                    type="password"
-                                    name="password"
-                                    value={formData.password}
-                                    onChange={handleChange}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Pan Card</label>
-                                <input
-                                    type="text"
-                                    name="pan"
-                                    value={formData.pan}
-                                    onChange={handleChange}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    placeholder="Enter Pan Card"
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Aadhar Card</label>
-                                <input
-                                    type="text"
-                                    name="aadhaar"
-                                    value={formData.aadhaar}
-                                    onChange={handleChange}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    placeholder="Enter Aadhar Card"
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">User Type</label>
-                                <select
-                                    name="user_type"
-                                    value={formData.user_type}
-                                    onChange={handleChange}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    required
+    
+                            {/* Action Buttons */}
+                            <div className="mt-8 flex flex-col sm:flex-row justify-end space-y-3 sm:space-y-0 sm:space-x-4">
+                                <button
+                                    type="button"
+                                    onClick={() => navigate('/agent/add-users')}
+                                    className="w-full sm:w-auto px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                                 >
-                                    <option value="payin_payout">Payin & Payout</option>
-                                    <option value="payout_only">Payout Only</option>
-                                </select>
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="w-full sm:w-auto px-6 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                                >
+                                    Register User
+                                </button>
                             </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
-                                <input
-                                    type="text"
-                                    name="company_name"
-                                    value={formData.company_name}
-                                    onChange={handleChange}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    placeholder="Enter Company Name"
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">GST Number</label>
-                                <input
-                                    type="text"
-                                    name="gst_number"
-                                    value={formData.gst_number}
-                                    onChange={handleChange}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    placeholder="Enter GST Number"
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Business Type</label>
-                                <input
-                                    type="text"
-                                    name="business_type"
-                                    value={formData.business_type}
-                                    onChange={handleChange}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    placeholder="Enter Business Type"
-                                    required
-                                />
-                            </div>
-
-                            <div className="md:col-span-2">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                                <input
-                                    type="text"
-                                    name="address"
-                                    value={formData.address}
-                                    onChange={handleChange}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-                                <input
-                                    type="text"
-                                    name="city"
-                                    value={formData.city}
-                                    onChange={handleChange}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-                                <input
-                                    type="text"
-                                    name="state"
-                                    value={formData.state}
-                                    onChange={handleChange}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Pincode</label>
-                                <input
-                                    type="text"
-                                    name="pincode"
-                                    value={formData.pincode}
-                                    onChange={handleChange}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    required
-                                />
-                            </div>
-                        </div>
-
-                        <div className="mt-6 flex justify-end space-x-4">
-                            <button
-                                type="button"
-                                onClick={() => navigate('/agent/add-users')}
-                                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700"
-                            >
-                                Register User
-                            </button>
-                        </div>
-                    </form>
+                        </form>
+                    </div>
                 </div>
             </div>
         </DashboardLayout>

@@ -30,6 +30,7 @@ import UserFundRequest from './pages/user/FundRequest';
 import UserWalletReport from './pages/user/WalletReport';
 import UserPayoutReport from './pages/user/PayoutReport';
 import UserPayinReport from './pages/user/PayinReport';
+import UserSettlementReport from './pages/user/UserSettlementReport';
 import UserDeveloperSettings from './pages/user/DeveloperSettings';
 import UserDevelopmentDocs from './pages/user/DevelopmentDocs';
 import AgentWalletReport from './pages/agent/WalletReport';
@@ -79,6 +80,7 @@ function AppRoutes() {
 
         {/* User Routes */}
         <Route path="/user/payin-report" element={<ProtectedRoute role="user"><UserPayinReport /></ProtectedRoute>} />
+        <Route path="/user/settlement-report" element={<ProtectedRoute role="user"><UserSettlementReport /></ProtectedRoute>} />
         <Route path="/user" element={<ProtectedRoute role="user"><UserDashboard /></ProtectedRoute>} />
         <Route path="/user/fund-request" element={<ProtectedRoute role="user"><UserFundRequest /></ProtectedRoute>} />
         <Route path="/user/wallet-report" element={<ProtectedRoute role="user"><UserWalletReport /></ProtectedRoute>} />
@@ -97,8 +99,8 @@ function AppRoutes() {
         <Route path="/agent/fund-request" element={<ProtectedRoute role="agent"><UserFundRequest /></ProtectedRoute>} />
         <Route path="/agent/wallet-report" element={<ProtectedRoute role="agent"><AgentWalletReport /></ProtectedRoute>} />
         <Route path="/agent/payout-report" element={<ProtectedRoute role="agent"><AgentPayoutReport /></ProtectedRoute>} />
-        <Route path="/agent/developer-settings" element={<ProtectedRoute role="agent"><AgentDeveloperSettings /></ProtectedRoute>} />
-        <Route path="/agent/development-docs" element={<ProtectedRoute role="agent"><AgentDevelopmentDocs /></ProtectedRoute>} />
+        {/* <Route path="/agent/developer-settings" element={<ProtectedRoute role="agent"><AgentDeveloperSettings /></ProtectedRoute>} /> */}
+        {/* <Route path="/agent/development-docs" element={<ProtectedRoute role="agent"><AgentDevelopmentDocs /></ProtectedRoute>} /> */}
 
         {/* Profile and Change Password routes */}
         <Route path="/profile" element={

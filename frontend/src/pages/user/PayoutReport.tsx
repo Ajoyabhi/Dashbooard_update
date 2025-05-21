@@ -4,6 +4,7 @@ import DashboardLayout from '../../components/layout/DashboardLayout';
 import Table from '../../components/dashboard/Table';
 import { userMenuItems } from '../../data/mockData';
 import { formatCurrency, formatDate, getStatusColor } from '../../utils/formatUtils';
+import { downloadTableAsCSV } from '../../utils/downloadUtils';
 import api from '../../utils/axios';
 
 interface PayoutRecord {
@@ -149,10 +150,14 @@ export default function PayoutReport() {
   }, [currentPage, pageSize, selectedStatus, dateRange, searchTerm]);
 
   const handleDownload = () => {
-    console.log('Downloading report with filters:', {
-      status: selectedStatus,
-      dateRange,
-      searchTerm,
+    // Get current date for filename
+    const date = new Date().toISOString().split('T')[0];
+    const filename = `payout-report-${date}.xlsx`;
+
+    // Download the current filtered data
+    downloadTableAsCSV(transactions, columns, {
+      filename,
+      includeHeaders: true
     });
   };
 
@@ -223,9 +228,16 @@ export default function PayoutReport() {
     },
     {
       header: 'GST',
-      accessor: 'charges',
+      accessor: 'gst_amount',
       cell: (value: any) => (
-        <span className="text-gray-600">{formatCurrency(value.gst)}</span>
+        <span className="text-gray-600">{formatCurrency(value)}</span>
+      ),
+    },
+    {
+      header: 'Platform Fee',
+      accessor: 'platform_fee',
+      cell: (value: any) => (
+        <span className="text-gray-600">{formatCurrency(value)}</span>
       ),
     },
     {
@@ -353,7 +365,7 @@ export default function PayoutReport() {
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search by Order ID, Transaction ID, UTR, Name, Account No, or IFSC..."
+                  placeholder="Search by Order ID or UTR..."
                   className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
                 />
               </div>
@@ -365,6 +377,8 @@ export default function PayoutReport() {
                 columns={columns}
                 data={transactions}
                 pagination={true}
+                searchable={false}
+                filterable={false}
                 currentPage={pagination.currentPage}
                 totalPages={pagination.totalPages}
                 onPageChange={handlePageChange}

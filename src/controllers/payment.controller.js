@@ -4,6 +4,8 @@ const { processPayin } = require('../services/payment.service');
 const { callbackQueue } = require('../config/queue.config');
 const { PayinTransaction } = require('../models/payinTransaction.model');
 const { UserTransaction } = require('../models/userTransaction.model');
+const { MerchantDetails } = require('../models');
+const { encryptText } = require('../merchant_payin_payout/utils_payout');
 
 /**
  * Get client IP address
@@ -184,12 +186,19 @@ const handleUnpayCallback = async (req, res) => {
  */
 const getTransactionStatus = async (req, res) => {
   try {
-    const { transaction_id } = req.params;
+    const { transaction_id } = req.query;
     const user_id = req.user.id;
+
+    if (!transaction_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'Transaction ID is required'
+      });
+    }
 
     // Find transaction
     const transaction = await PayinTransaction.findOne({
-      transaction_id,
+      reference_id: transaction_id,
       'user.id': user_id
     });
 
@@ -200,16 +209,72 @@ const getTransactionStatus = async (req, res) => {
       });
     }
 
+    // Get merchant details
+    const merchantDetails = await MerchantDetails.findOne({ where: { user_id } });
+    if (!merchantDetails) {
+      return res.status(404).json({
+        success: false,
+        message: 'Merchant details not found'
+      });
+    }
+
+    // Prepare request body for Unpay API
+    const requestBody = {
+      partner_id: "1809", // Get this from merchant details or config
+      apitxnid: transaction_id
+    };
+
+    // Encrypt request body
+    const aesKey = "brTaJLaVgWvshn3zHM4qt0lI1DqjFeUz";
+    const aesIV = "uBiWATDOnfTvhfJO";
+    const apiKey = "Tn3ybTJGKaDMhhj9jl89aULGf9OI0S8ZPkq0GD42";
+    const encryptedRequestBody = await encryptText(JSON.stringify(requestBody), aesKey, aesIV);
+
+    // Make API request to Unpay
+    const response = await fetch('https://unpay.in/tech/api/next/upi/request/qrstatus', {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'api-key': apiKey, // Get from config
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        body: encryptedRequestBody
+      })
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(`Unpay API error: ${result.message || 'Unknown error'}`);
+    }
+
+    // Update transaction status if needed
+    // if (result.statuscode === 'TXN') {
+    //   const newStatus = result.data.txnStatus.toLowerCase();
+    //   if (transaction.status !== newStatus) {
+    //     await PayinTransaction.updateOne(
+    //       { transaction_id },
+    //       { 
+    //         $set: { 
+    //           status: newStatus,
+    //           gateway_response: result
+    //         }
+    //       }
+    //     );
+    //   }
+    // }
+
     res.status(200).json({
       success: true,
       transaction: {
         transaction_id: transaction.transaction_id,
         amount: transaction.amount,
-        status: transaction.status,
+        status: result.data?.txnStatus || transaction.status,
         reference_id: transaction.reference_id,
         created_at: transaction.created_at,
         updated_at: transaction.updated_at,
-        gateway_response: transaction.gateway_response
+        gateway_response: result
       }
     });
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import './LoginPage.css'; // We'll create this file next
 
@@ -10,6 +10,7 @@ const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Add focus effects for input fields
   useEffect(() => {
@@ -55,10 +56,14 @@ const LoginPage: React.FC = () => {
       const success = await login(user_name, password);
       if (!success) {
         setError('Invalid username or password');
+        // Clear password field on failed login
+        setPassword('');
       }
     } catch (err) {
       setError('An error occurred during login');
       console.error('Login error:', err);
+      // Clear password field on error
+      setPassword('');
     } finally {
       setLoading(false);
     }
@@ -66,15 +71,15 @@ const LoginPage: React.FC = () => {
 
   return (
     <div className="login-container">
-      <img className="wave" src="/images/wave.png" alt="wave" />
+      {/* <img className="wave" src="/images/wave.png" alt="wave" /> */}
       <div className="container">
         <div className="img">
           <img src="/images/log.svg" alt="background" />
         </div>
         <div className="login-content">
           <form onSubmit={handleSubmit}>
-            <img src="/images/avatar.svg" alt="avatar" />
-            <h2 className="title">Welcome</h2>
+            <img src="/images/zentexpay_logo.jpg" alt="avatar" className="mx-auto rounded-md" />
+            <h2 className="title !text-[#22367d]">Welcome</h2>
 
             {error && (
               <div className="error-message">
@@ -118,6 +123,7 @@ const LoginPage: React.FC = () => {
             <button
               type="submit"
               className={`btn ${loading ? 'loading' : ''}`}
+              style={{ background: '#22367d' }}
               disabled={loading}
             >
               {loading ? 'Signing in...' : 'Login'}

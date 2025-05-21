@@ -23,6 +23,12 @@ const ChangePassword: React.FC = () => {
     passwordsMatch: false
   });
 
+
+
+  // Get menu items based on user type
+  const menuItems = getMenuItems(user?.user_type || '');
+
+
   useEffect(() => {
     // Password validation checks
     setValidation(prev => ({
@@ -83,7 +89,7 @@ const ChangePassword: React.FC = () => {
   );
 
   return (
-    <DashboardLayout menuItems={getMenuItems(user?.user_type || '')} title="Change Password">
+    <DashboardLayout menuItems={menuItems} title="Change Password">
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">

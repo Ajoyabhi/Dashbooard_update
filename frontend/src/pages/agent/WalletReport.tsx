@@ -69,7 +69,7 @@ const AgentWalletReport = () => {
       setLoading(true);
       const params = new URLSearchParams({
         page: page.toString(),
-        limit: '10',
+        limit: pagination.pageSize.toString(),
         type: selectedType !== 'all' ? selectedType : '',
         status: selectedStatus !== 'all' ? selectedStatus : '',
         search: searchTerm,
@@ -102,10 +102,18 @@ const AgentWalletReport = () => {
 
   useEffect(() => {
     fetchTransactions();
-  }, [selectedType, selectedStatus, dateRange, searchTerm]);
+  }, [selectedType, selectedStatus, dateRange, searchTerm, pagination.pageSize]);
 
   const handlePageChange = (page: number) => {
     fetchTransactions(page);
+  };
+
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPagination(prev => ({
+      ...prev,
+      pageSize: newPageSize,
+      currentPage: 1 // Reset to first page when changing page size
+    }));
   };
 
   const handleDownload = async () => {
@@ -365,6 +373,7 @@ const AgentWalletReport = () => {
               totalItems={pagination.totalItems}
               pageSize={pagination.pageSize}
               onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
             />
           </div>
         </div>

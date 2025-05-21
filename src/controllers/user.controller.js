@@ -1,5 +1,5 @@
 const { logger } = require('../utils/logger');
-const { User, FinancialDetails, ManageFundRequest, TransactionCharges } = require('../models');
+const { User, FinancialDetails, ManageFundRequest, TransactionCharges, SettlementTransaction } = require('../models');
 const { sequelize } = require('../models');
 const UserTransaction = require('../models/userTransaction.model');
 const PayinTransaction = require('../models/payinTransaction.model');
@@ -178,9 +178,8 @@ const getUserPayinReports = async (req, res) => {
     if (req.query.search) {
       const searchRegex = new RegExp(req.query.search, 'i');
       filter.$or = [
-        { 'user.name': searchRegex },
-        { transaction_id: searchRegex },
-        { reference_id: searchRegex }
+        { reference_id: searchRegex },
+        { 'gateway_response.utr': searchRegex }
       ];
     }
 
@@ -250,9 +249,8 @@ const getUserPayoutReports = async (req, res) => {
     if (req.query.search) {
       const searchRegex = new RegExp(req.query.search, 'i');
       filter.$or = [
-        { 'user.name': searchRegex },
-        { transaction_id: searchRegex },
-        { reference_id: searchRegex }
+        { reference_id: searchRegex },
+        { 'gateway_response.utr': searchRegex }
       ];
     }
 
@@ -515,6 +513,113 @@ const getUserDashboard = async (req, res) => {
     res.status(500).json({ success: false, message: 'Error fetching user dashboard' });
   }
 };
+
+const getUserSettlementReport = async (req, res) => {
+  try {
+    const { page = 1, pageSize = 10, status, search, startDate, endDate } = req.query;
+    const offset = (page - 1) * pageSize;
+    const limit = parseInt(pageSize);
+    const userId = req.user.id;
+
+    logger.info('Fetching settlement report', { userId, page, pageSize, status, search, startDate, endDate });
+
+    // Build where clause
+    const whereClause = { user_id: userId };
+
+    // Add status filter if provided
+    if (status && status !== 'all') {
+      whereClause.status = status;
+    }
+
+    // Add date range filter if provided
+    if (startDate || endDate) {
+      whereClause.created_at = {};
+      if (startDate) {
+        whereClause.created_at[Op.gte] = new Date(startDate);
+      }
+      if (endDate) {
+        whereClause.created_at[Op.lte] = new Date(endDate);
+      }
+    }
+
+    // Add search filter if provided
+    if (search) {
+      whereClause[Op.or] = [
+        { amount: { [Op.like]: `%${search}%` } },
+        { status: { [Op.like]: `%${search}%` } },
+        { remark: { [Op.like]: `%${search}%` } }
+      ];
+    }
+
+    // Get total count
+    const totalCount = await SettlementTransaction.count({
+      where: whereClause
+    });
+
+    // Get paginated settlement transactions
+    const transactions = await SettlementTransaction.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: User,
+          as: 'creator',
+          attributes: ['name', 'user_name']
+        },
+        {
+          model: User,
+          as: 'updater',
+          attributes: ['name', 'user_name']
+        }
+      ],
+      order: [['created_at', 'DESC']],
+      offset,
+      limit
+    });
+
+    // Format the response
+    const formattedTransactions = transactions.map(transaction => ({
+      _id: transaction.id,
+      date: transaction.created_at,
+      amount: parseFloat(transaction.amount),
+      wallet_balance: parseFloat(transaction.wallet_balance_after),
+      settlement_balance: parseFloat(transaction.settlement_balance_after),
+      status: transaction.status,
+      processed_by: transaction.creator ? transaction.creator.name : transaction.updater ? transaction.updater.name : 'System',
+      remark: transaction.remark,
+      created_at: transaction.created_at,
+      updated_at: transaction.updated_at
+    }));
+
+    logger.info('Settlement report fetched successfully', { 
+      userId, 
+      totalCount, 
+      pageCount: formattedTransactions.length 
+    });
+
+    res.json({
+      success: true,
+      data: {
+        transactions: formattedTransactions,
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages: Math.ceil(totalCount / pageSize),
+          totalItems: totalCount,
+          pageSize: limit,
+          hasNextPage: offset + limit < totalCount,
+          hasPrevPage: offset > 0
+        }
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching settlement report:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching settlement report',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   getUserProfile,
   updateUserProfile,
@@ -523,5 +628,6 @@ module.exports = {
   getUserPayoutReports,
   getUserFundRequests,
   createFundRequest,
-  getUserDashboard
+  getUserDashboard,
+  getUserSettlementReport
 }; 

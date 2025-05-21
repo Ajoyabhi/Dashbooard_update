@@ -2,9 +2,10 @@ const { callbackQueue } = require('../config/queue.config');
 const { logger } = require('../utils/logger');
 const PayinTransaction = require('../models/payinTransaction.model');
 const UserTransaction = require('../models/userTransaction.model');
-const { TransactionCharges, FinancialDetails } = require('../models');
+const { TransactionCharges, FinancialDetails, MerchantDetails } = require('../models');
 const mongoose = require('mongoose');
 const config = require('../config/index');
+const axios = require('axios');
 
 // Configure queue with retry and timeout settings
 callbackQueue.setMaxListeners(0); // Prevent memory leaks
@@ -54,60 +55,15 @@ callbackQueue.process(async function(job) {
     // Map Unpay status to our status format
     const mappedStatus = statuscode === 'TXN' ? 'completed' : 'failed';
 
-    if(mappedStatus == 'completed'){
-      // Find the payin transaction to get user_id
-      const payinTransaction = await PayinTransaction.findOne({ reference_id: apitxnid });
-      const userTransaction = await UserTransaction.findOne({ reference_id: apitxnid });
+    // Find transactions once
+    const payinTransaction = await PayinTransaction.findOne({ reference_id: apitxnid });
+    const userTransaction = await UserTransaction.findOne({ reference_id: apitxnid });
 
-      if(userTransaction){
-        await UserTransaction.updateOne(
-          { reference_id: apitxnid },
-          { 
-            $set: {
-              'balance.after': userTransaction.balance.before + parseFloat(amount) - parseFloat(userTransaction.charges.admin_charge)
-            }
-          }
-        );
-      }
-      
-      if (payinTransaction) {
-        const userId = payinTransaction.user.user_id;
-        
-        // Check if user exists in FinancialDetails
-        const financialDetails = await FinancialDetails.findOne({
-          where: { user_id: userId }
-        });
-        const amountToAdd = parseFloat(amount) - parseFloat(userTransaction.charges.admin_charge);
-        if (financialDetails) {
-          // Update existing record
-          await financialDetails.increment('wallet', {
-            by: amountToAdd
-          });
-        } else {
-          // Create new record with initial wallet balance
-          await FinancialDetails.create({
-            user_id: userId,
-            wallet: amount,
-            settlement: 0,
-            lien: 0,
-            rolling_reserve: 0
-          });
-        }
-
-        logger.info('Updated wallet balance in FinancialDetails', {
-          user_id: userId,
-          amount: amount,
-          reference_id: apitxnid,
-          action: financialDetails ? 'incremented' : 'created'
-        });
-      } else {
-        logger.warn('Payin transaction not found for updating wallet balance', {
-          reference_id: apitxnid
-        });
-      }
+    if (!payinTransaction || !userTransaction) {
+      throw new Error('Transaction records not found');
     }
 
-    // Update transaction status
+    const userId = payinTransaction.user.user_id;
     const updateData = {
       status: mappedStatus,
       gateway_response: {
@@ -118,7 +74,58 @@ callbackQueue.process(async function(job) {
       }
     };
 
-    // Update all related records with transaction
+    // Handle completed transaction
+    if (mappedStatus === 'completed') {
+      // Ensure all values are numbers with defaults
+      const beforeBalance = parseFloat(userTransaction.balance?.before || 0);
+      const transactionAmount = parseFloat(amount || 0);
+      const adminCharge = parseFloat(userTransaction.charges?.admin_charge || 0);
+      const platformFee = parseFloat(userTransaction.platform_fee || 0);
+      const gstAmount = parseFloat(userTransaction.gst_amount || 0);
+
+      // Calculate new balance
+      const newBalance = beforeBalance + transactionAmount - adminCharge - platformFee - gstAmount;
+
+      // Update user transaction balance
+      await UserTransaction.updateOne(
+        { reference_id: apitxnid },
+        { 
+          $set: {
+            'balance.after': newBalance
+          }
+        }
+      );
+
+      // Update financial details
+      const financialDetails = await FinancialDetails.findOne({
+        where: { user_id: userId }
+      });
+
+      const amountToAdd = transactionAmount - adminCharge - platformFee - gstAmount;
+      
+      if (financialDetails) {
+        await financialDetails.increment('wallet', {
+          by: amountToAdd
+        });
+      } else {
+        await FinancialDetails.create({
+          user_id: userId,
+          wallet: amountToAdd,
+          settlement: 0,
+          lien: 0,
+          rolling_reserve: 0
+        });
+      }
+
+      logger.info('Updated wallet balance in FinancialDetails', {
+        user_id: userId,
+        amount: amount,
+        reference_id: apitxnid,
+        action: financialDetails ? 'incremented' : 'created'
+      });
+    }
+
+    // Update all transaction records in a single session
     const session = await mongoose.startSession();
     try {
       await session.withTransaction(async () => {
@@ -147,6 +154,51 @@ callbackQueue.process(async function(job) {
       await session.endSession();
     }
 
+    // Send callback to merchant
+    const merchantDetails = await MerchantDetails.findOne({
+      where: { 
+        user_id: parseInt(userId, 10)
+      }
+    });
+
+    if (merchantDetails?.payin_callback) {
+      try {
+        const callbackData = {
+          reference_id: apitxnid,
+          transaction_id: txnid,
+          amount: amount,
+          status: mappedStatus,
+          utr: utr,
+          message: message || 'Transaction processed',
+          timestamp: new Date().toISOString()
+        };
+
+        const response = await axios.post(merchantDetails.payin_callback, callbackData, {
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          timeout: 10000
+        });
+
+        logger.info('Callback sent successfully to merchant', {
+          reference_id: apitxnid,
+          callback_url: merchantDetails.payin_callback,
+          response_status: response.status
+        });
+      } catch (error) {
+        logger.error('Failed to send callback to merchant', {
+          reference_id: apitxnid,
+          callback_url: merchantDetails.payin_callback,
+          error: error.message
+        });
+      }
+    } else {
+      logger.warn('No callback URL found for merchant', {
+        reference_id: apitxnid,
+        user_id: userId
+      });
+    }
+
     clearTimeout(timeout);
 
     logger.info('Callback processed successfully', {
@@ -169,7 +221,6 @@ callbackQueue.process(async function(job) {
       attempts: job.attemptsMade
     });
 
-    // If job has failed too many times, mark it as failed permanently
     if (job.attemptsMade >= 3) {
       logger.error('Job failed permanently after max retries', {
         jobId: job.id,
@@ -178,7 +229,6 @@ callbackQueue.process(async function(job) {
       return { success: false, error: 'Max retries exceeded' };
     }
 
-    // Throw error to trigger retry
     throw error;
   }
 });

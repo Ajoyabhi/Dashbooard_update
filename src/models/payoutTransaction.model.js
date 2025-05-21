@@ -69,6 +69,16 @@ const payoutTransactionSchema = new mongoose.Schema({
     enum: ['pending', 'processing', 'completed', 'failed'],
     default: 'pending'
   },
+  gst_amount: {
+    type: Number,
+    default: 0,
+    allowNull: true
+  },
+  platform_fee: {
+    type: Number,
+    default: 0,
+    allowNull: true
+  },
   gateway_response: {
     utr: String,
     status: String,

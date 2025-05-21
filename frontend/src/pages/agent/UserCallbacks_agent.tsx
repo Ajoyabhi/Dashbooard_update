@@ -14,6 +14,11 @@ interface CallbackData {
     payout_callback: string;
     created_at: string;
     updated_at: string;
+    MerchantDetail?: {
+        payin_callback: string;
+        payout_callback: string;
+        updated_at: string;
+    };
 }
 
 export default function UserCallbacks_agent() {
@@ -56,7 +61,19 @@ export default function UserCallbacks_agent() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            await api.put(`/agent/users/${userId}/callbacks`, formData);
+            // Only send fields that have values
+            const dataToSubmit = {
+                ...(formData.payin_callback && { payin_callback: formData.payin_callback }),
+                ...(formData.payout_callback && { payout_callback: formData.payout_callback })
+            };
+
+            // Only proceed if at least one callback is provided
+            if (Object.keys(dataToSubmit).length === 0) {
+                toast.error('Please provide at least one callback URL');
+                return;
+            }
+
+            await api.put(`/agent/users/${userId}/callbacks`, dataToSubmit);
             toast.success('Callbacks updated successfully');
             fetchCallbacks();
             setFormData({
@@ -79,7 +96,7 @@ export default function UserCallbacks_agent() {
     }
 
     return (
-        <DashboardLayout menuItems={agentMenuItems} title="User Callbacks"> 
+        <DashboardLayout menuItems={agentMenuItems} title="User Callbacks">
             <ToastContainer
                 position="top-right"
                 autoClose={3000}
@@ -123,16 +140,28 @@ export default function UserCallbacks_agent() {
                             <tbody className="bg-white divide-y divide-gray-200">
                                 <tr>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Payin Callback</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{callbacks?.MerchantDetail?.payin_callback || 'Not set'}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {callbacks?.updated_at ? new Date(callbacks.MerchantDetail.updated_at).toLocaleString() : 'Never'}
+                                        {callbacks?.MerchantDetail?.payin_callback || callbacks?.payin_callback || 'Not set'}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        {callbacks?.MerchantDetail?.updated_at
+                                            ? new Date(callbacks.MerchantDetail.updated_at).toLocaleString()
+                                            : callbacks?.updated_at
+                                                ? new Date(callbacks.updated_at).toLocaleString()
+                                                : 'Never'}
                                     </td>
                                 </tr>
                                 <tr>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Payout Callback</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{callbacks?.MerchantDetail?.payout_callback || 'Not set'}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {callbacks?.updated_at ? new Date(callbacks.MerchantDetail.updated_at).toLocaleString() : 'Never'}
+                                        {callbacks?.MerchantDetail?.payout_callback || callbacks?.payout_callback || 'Not set'}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        {callbacks?.MerchantDetail?.updated_at
+                                            ? new Date(callbacks.MerchantDetail.updated_at).toLocaleString()
+                                            : callbacks?.updated_at
+                                                ? new Date(callbacks.updated_at).toLocaleString()
+                                                : 'Never'}
                                     </td>
                                 </tr>
                             </tbody>
@@ -158,7 +187,6 @@ export default function UserCallbacks_agent() {
                                     onChange={handleChange}
                                     placeholder="https://example.com/payin-callback"
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    required
                                 />
                                 <p className="mt-1 text-sm text-gray-500">
                                     URL where payin transaction notifications will be sent
@@ -176,7 +204,6 @@ export default function UserCallbacks_agent() {
                                     onChange={handleChange}
                                     placeholder="https://example.com/payout-callback"
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                    required
                                 />
                                 <p className="mt-1 text-sm text-gray-500">
                                     URL where payout transaction notifications will be sent

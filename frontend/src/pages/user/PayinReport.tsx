@@ -4,6 +4,7 @@ import DashboardLayout from '../../components/layout/DashboardLayout';
 import Table from '../../components/dashboard/Table';
 import { userMenuItems } from '../../data/mockData';
 import { formatCurrency, formatDate, getStatusColor } from '../../utils/formatUtils';
+import { downloadTableAsCSV } from '../../utils/downloadUtils';
 import api from '../../utils/axios';
 
 interface PayinRecord {
@@ -23,6 +24,8 @@ interface PayinRecord {
     agent_charge: number;
     total_charges: number;
   };
+  gst_amount: number;
+  platform_fee: number;
   beneficiary_details: {
     account_number: string;
     account_ifsc: string;
@@ -150,10 +153,14 @@ export default function PayinReport() {
   }, [currentPage, pageSize, selectedStatus, dateRange, searchTerm]);
 
   const handleDownload = () => {
-    console.log('Downloading report with filters:', {
-      status: selectedStatus,
-      dateRange,
-      searchTerm,
+    // Get current date for filename
+    const date = new Date().toISOString().split('T')[0];
+    const filename = `payin-report-${date}.csv`;
+
+    // Download the current filtered data
+    downloadTableAsCSV(transactions, columns, {
+      filename,
+      includeHeaders: true
     });
   };
 
@@ -207,19 +214,31 @@ export default function PayinReport() {
         <span className="text-gray-600">{formatCurrency(value.admin_charge)}</span>
       ),
     },
-    // {
-    //   header: 'GST',
-    //   accessor: 'charges',
-    //   cell: (value: any) => (
-    //     <span className="text-gray-600">{formatCurrency(value.gst)}</span>
-    //   ),
-    // },
+    {
+      header: 'GST',
+      accessor: 'gst_amount',
+      cell: (value: any) => (
+        <span className="text-gray-600">{formatCurrency(Number(value))}</span>
+      ),
+    },
+    {
+      header: 'Platform Fee',
+      accessor: 'platform_fee',
+      cell: (value: any) => (
+        <span className="text-gray-600">{formatCurrency(Number(value))}</span>
+      ),
+    },
     {
       header: 'Net Amount',
       accessor: 'amount',
-      cell: (value: number, row: PayinRecord) => (
-        <span className="font-medium">{formatCurrency(value - row.charges.admin_charge)}</span>
-      ),
+      cell: (value: number, row: PayinRecord) => {
+        const adminCharge = row.charges?.admin_charge || 0;
+        const gstAmount = row.gst_amount || 0;
+        const platformFee = row.platform_fee || 0;
+        return (
+          <span className="font-medium">{formatCurrency(value - adminCharge - gstAmount - platformFee)}</span>
+        );
+      },
     },
     {
       header: 'Status',
@@ -339,7 +358,7 @@ export default function PayinReport() {
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search by Order ID, Transaction ID, UTR, Name, Account No, IFSC, or UPI ID..."
+                  placeholder="Search by Order ID or UTR..."
                   className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
                 />
               </div>
@@ -351,6 +370,8 @@ export default function PayinReport() {
                 columns={columns}
                 data={transactions}
                 pagination={true}
+                searchable={false}
+                filterable={false}
                 currentPage={pagination.currentPage}
                 totalPages={pagination.totalPages}
                 onPageChange={handlePageChange}

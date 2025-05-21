@@ -318,6 +318,8 @@ const UserWalletReport = () => {
                 columns={columns}
                 data={transactions}
                 pagination={true}
+                searchable={false}
+                filterable={false}
                 currentPage={pagination.currentPage}
                 totalPages={pagination.totalPages}
                 onPageChange={handlePageChange}
