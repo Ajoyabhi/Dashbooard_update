@@ -1,7 +1,8 @@
 import axios from 'axios';
 
 const api = axios.create({
-    baseURL: 'http://localhost:3000/api',
+    // baseURL: 'http://localhost:3000/api',
+    baseURL: 'https://api.zentexpay.in/api',
     headers: {
         'Content-Type': 'application/json',
     },
@@ -49,13 +50,13 @@ api.interceptors.response.use(
     },
     (error) => {
         // Log the error
-        console.error('❌ [Response Error] ===========================================');
-        console.error('Status:', error.response?.status);
-        console.error('Method:', error.config?.method?.toUpperCase());
-        console.error('URL:', error.config?.url);
-        console.error('Error Data:', error.response?.data);
-        console.error('Error Message:', error.message);
-        console.error('===================================================');
+        // console.error('❌ [Response Error] ===========================================');
+        // console.error('Status:', error.response?.status);
+        // console.error('Method:', error.config?.method?.toUpperCase());
+        // console.error('URL:', error.config?.url);
+        // console.error('Error Data:', error.response?.data);
+        // console.error('Error Message:', error.message);
+        // console.error('===================================================');
 
         // Handle 401 Unauthorized errors
         if (error.response?.status === 401) {

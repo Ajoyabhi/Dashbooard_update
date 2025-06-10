@@ -4,6 +4,7 @@ const PayinTransaction = require('../models/payinTransaction.model');
 const UserTransaction = require('../models/userTransaction.model');
 const mongoose = require('mongoose');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
+const axios = require('axios');
 
 /**
  * Process a payin request
@@ -273,16 +274,15 @@ const processPayin = async (data) => {
       clientIp
     };
 
-    const result = await unpayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee);
-    // const result = {
-    //   statuscode: "TXN",
-    //   data: {
-    //     status: 'completed',
-    //    "apitxnid": "123454789191",
-    //     "qrString": "upi://pay?mc=4900&pa=yespay.unps11809@yesbankltd&pn=Techturet technologies private limited&am=100&tr=123454789191&cu=INR"
-    //   }
-    // };
-
+    let result;
+    if(user.MerchantDetail.payin_merchant_name == "Unpay"){
+      result = await unpayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee);
+    } else if(user.MerchantDetail.payin_merchant_name == "Spay"){
+      result = await spayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee);
+    } else {
+      throw new Error('Invalid merchant name');
+    }
+    console.log("result", result);
     logger.debug('DEBUG: Payment processing completed', {
       reference_id,
       success: result?.success,
@@ -290,7 +290,7 @@ const processPayin = async (data) => {
     });
 
     // Update transaction status
-    if (result?.statuscode == "TXN") {
+    if (result?.statuscode == "TXN" || result?.data?.statuscode == "TXNS") {
       logger.debug('DEBUG: Updating transaction status to completed', {
         reference_id,
         timestamp: new Date().toISOString()
@@ -416,7 +416,7 @@ const unpayPayin = async (payinData, adminCharge, agentCharge, totalCharges, use
     const result = await response.json();
 
     if (!response.ok) {
-      throw new Error(`Unpay API error: ${result.message || 'Unknown error'}`);
+      throw new Error(`API error: ${result.message || 'Unknown error'}`);
     }
     console.log(result);
     if(result.statuscode == "TXN"){
@@ -445,6 +445,83 @@ const unpayPayin = async (payinData, adminCharge, agentCharge, totalCharges, use
   }
 };
 
+const spayPayin = async (payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee) => {
+    try {
+        // Validate required fields
+        if (!payinData.name || !payinData.email || !payinData.phone || !payinData.order_amount) {
+            throw new Error('Missing required fields: name, email, mobile, or amount');
+        }
+
+        // Generate unique transaction ID
+
+        const requestBody = {
+            token: "ZFraZiEhWVoGLKhOA0eiiy8tqz8ikb", // Make sure to set this in your environment variables
+            apitxnid: payinData.reference_id,
+            name: payinData.name,
+            email: payinData.email,
+            mobile: payinData.phone,
+            amount: payinData.order_amount.toString(),
+            return_url: "https://api.zentexpay.in/api/payments/spay/callback" // Make sure to set this in your environment variables
+        };
+
+        const response = await axios.post('https://dashboard.spay.live/api/upiintent/vp2/create', requestBody, {
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (response.data.statuscode === 'TXNS') {
+            // Store transaction details in your database
+            const transactionData = {
+                user_id,
+                transaction_id: payinData.reference_id,
+                amount: payinData.order_amount,
+                admin_charge: adminCharge,
+                agent_charge: agentCharge,
+                total_charges: totalCharges,
+                gst_amount: gstAmount,
+                platform_fee: platformFee,
+                client_ip: clientIp,
+                payment_link: response.data.payment_link,
+                status: 'PENDING',
+                payment_provider: 'SPAY',
+                created_at: new Date()
+            };
+
+            // Save transaction to database (implement your database save logic here)
+            // await Transaction.create(transactionData);
+
+            return {
+                success: true,
+                data: {
+                    statuscode: response.data.statuscode,
+                    qrString: response.data.payment_link,
+                    message: response.data.message,
+                    apitxnid: payinData.reference_id
+                }
+            };
+        } else {
+            throw new Error(response.data.message || 'Payment initiation failed');
+        }
+    } catch (error) {
+        // Handle specific error cases
+        if (error.response) {
+            switch (error.response.status) {
+                case 400:
+                    throw new Error('Missing required fields');
+                case 401:
+                    throw new Error('Invalid amount format');
+                case 409:
+                    throw new Error('Transaction ID already exists');
+                case 500:
+                    throw new Error('Internal server error');
+                default:
+                    throw new Error(error.response.data.message || 'Payment initiation failed');
+            }
+        }
+        throw error;
+    }
+};
 
 module.exports = {
   processPayin

@@ -232,6 +232,8 @@ const Table: React.FC<TableProps> = ({
                 <option value={500}>500 per page</option>
                 <option value={1000}>1000 per page</option>
                 <option value={2000}>2000 per page</option>
+                <option value={5000}>5000 per page</option>
+                <option value={10000}>10000 per page</option>
               </select>
               <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
                 <button
@@ -241,18 +243,74 @@ const Table: React.FC<TableProps> = ({
                 >
                   <ChevronLeft className="h-5 w-5" />
                 </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                  <button
-                    key={page}
-                    onClick={() => handlePageChange(page)}
-                    className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${page === currentPage
-                        ? 'z-10 bg-primary-50 border-primary-500 text-primary-600'
-                        : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                      }`}
-                  >
-                    {page}
-                  </button>
-                ))}
+                {(() => {
+                  const pages = [];
+                  const maxVisiblePages = 5;
+
+                  if (totalPages <= maxVisiblePages) {
+                    // Show all pages if total pages are less than maxVisiblePages
+                    for (let i = 1; i <= totalPages; i++) {
+                      pages.push(i);
+                    }
+                  } else {
+                    // Always show first page
+                    pages.push(1);
+
+                    // Calculate start and end of visible pages
+                    let startPage = Math.max(2, currentPage - 1);
+                    let endPage = Math.min(totalPages - 1, currentPage + 1);
+
+                    // Adjust if we're near the start
+                    if (currentPage <= 3) {
+                      endPage = 4;
+                    }
+
+                    // Adjust if we're near the end
+                    if (currentPage >= totalPages - 2) {
+                      startPage = totalPages - 3;
+                    }
+
+                    // Add ellipsis after first page if needed
+                    if (startPage > 2) {
+                      pages.push('...');
+                    }
+
+                    // Add middle pages
+                    for (let i = startPage; i <= endPage; i++) {
+                      pages.push(i);
+                    }
+
+                    // Add ellipsis before last page if needed
+                    if (endPage < totalPages - 1) {
+                      pages.push('...');
+                    }
+
+                    // Always show last page
+                    pages.push(totalPages);
+                  }
+
+                  return pages.map((page, index) => (
+                    page === '...' ? (
+                      <span
+                        key={`ellipsis-${index}`}
+                        className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700"
+                      >
+                        ...
+                      </span>
+                    ) : (
+                      <button
+                        key={page}
+                        onClick={() => handlePageChange(page)}
+                        className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${page === currentPage
+                          ? 'z-10 bg-primary-50 border-primary-500 text-primary-600'
+                          : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                          }`}
+                      >
+                        {page}
+                      </button>
+                    )
+                  ));
+                })()}
                 <button
                   onClick={() => handlePageChange(currentPage + 1)}
                   disabled={currentPage === totalPages}

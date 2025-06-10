@@ -60,7 +60,7 @@ const DeveloperSettings = () => {
         <div className="bg-white p-6 rounded-lg shadow-card border border-gray-200">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Webhook Configuration</h2>
           <div className="bg-gray-50 p-4 rounded-md">
-            <p className="text-sm text-gray-600 mb-2">Configure your webhook endpoints here</p>
+            <p className="text-sm text-gray-600 mb-2">At the time of Onboarding, you have to provide your webhook url, which will be used to send the webhook events to your server.</p>
           </div>
         </div>
       </div>

@@ -356,7 +356,7 @@ const initiatePayout = async (req, res) => {
       
       await TransactionCharges.create(cleanTransactionData);
 
-      if (user.MerchantDetail.payout_merchant_name === 'unpay') {
+      if (user.MerchantDetail.payout_merchant_name === 'Unpay') {
         const payoutData = {
           reference_id,
           amount,
@@ -375,15 +375,17 @@ const initiatePayout = async (req, res) => {
         res.status(200).json({
           success: true,
           message: 'Payout processed successfully',
-          transaction_id: result.data.txn_id,
-          result: result.data.message
+          result: result.data.message,
+          utr: result.data.utr,
+          reference_id: result.data.apitxnid
         });
       } else {
         res.status(400).json({
           success: false,
           message: 'Payout processing failed',
-          transaction_id: result.data.txn_id,
-          error: result?.data?.message || 'Unknown error'
+          error: result?.data?.message || 'Unknown error',
+          utr: result.data.utr,
+          reference_id: result.data.apitxnid
         });
       }
     } catch (error) {
@@ -408,8 +410,7 @@ const getPayoutTransactionStatus = async (req, res) => {
 
     // Find transaction
     const transaction = await PayoutTransaction.findOne({
-      transaction_id,
-      'user.id': user_id
+      reference_id:transaction_id
     });
 
     if (!transaction) {

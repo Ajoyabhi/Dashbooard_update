@@ -425,6 +425,17 @@ const getUserDashboard = async (req, res) => {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
+    const walletBalance = await TransactionCharges.findOne({
+      attributes: [
+        [sequelize.literal('SUM(CASE WHEN status = "completed" THEN transaction_amount - merchant_charge - gst_amount - platform_fee ELSE 0 END)'), 'total_balance']
+      ],
+      where: {
+        user_id: req.user.id,
+        transaction_type: 'payin'
+      },
+      raw: true
+    });
+
     // Get today's transactions
     const todayTransactions = await TransactionCharges.findAll({
       where: {

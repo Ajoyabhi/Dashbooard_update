@@ -121,8 +121,8 @@ export default function WalletReport() {
 
   const columns = [
     {
-      header: 'Transaction ID',
-      accessor: 'transaction_id',
+      header: 'Reference ID',
+      accessor: 'reference_id',
       cell: (value: string) => (
         <span className="font-medium text-primary-600">{value}</span>
       ),
@@ -143,16 +143,6 @@ export default function WalletReport() {
       header: 'Date',
       accessor: 'createdAt',
       cell: (value: string) => formatDate(value),
-    },
-    {
-      header: 'User',
-      accessor: 'user',
-      cell: (value: WalletRecord['user']) => (
-        <div>
-          <div className="font-medium">{value.name}</div>
-          <div className="text-sm text-gray-500">{value.email}</div>
-        </div>
-      ),
     },
     {
       header: 'Merchant',

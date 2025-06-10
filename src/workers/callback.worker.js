@@ -53,7 +53,7 @@ callbackQueue.process(async function(job) {
     } = job.data;
 
     // Map Unpay status to our status format
-    const mappedStatus = statuscode === 'TXN' ? 'completed' : 'failed';
+    const mappedStatus = (statuscode === 'TXN' || statuscode === 'TXNS') ? 'completed' : 'failed';
 
     // Find transactions once
     const payinTransaction = await PayinTransaction.findOne({ reference_id: apitxnid });

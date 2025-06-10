@@ -17,7 +17,7 @@ module.exports = {
     },
     jwt: {
         secret: process.env.JWT_SECRET || 'your-super-secret-key-change-this-in-production',
-        expiresIn: process.env.JWT_EXPIRES_IN || '24h'
+        expiresIn: process.env.JWT_EXPIRES_IN || '365d'
     },
     logging: {
         level: process.env.LOG_LEVEL || 'info'

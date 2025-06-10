@@ -38,7 +38,7 @@ const getAllUsers = async (req, res) => {
     const transformedUsers = users.map(user => {
       
       const financialDetails = user.FinancialDetail || {};
-      
+      const status = user.UserStatus?.status == true ? 'active' : 'inactive';
       const transformed = {
         id: user.id,
         name: user.name,
@@ -51,7 +51,7 @@ const getAllUsers = async (req, res) => {
         mobile: user.mobile,
         payin: user.UserStatus?.payin_status || false,
         payout: user.UserStatus?.payout_status || false,
-        status: user.UserStatus?.status || 'inactive'
+        status: status
       };
       return transformed;
     });
@@ -1220,7 +1220,7 @@ const getWalletTransactions = async (req, res) => {
     try {
         const {
             page = 1,
-            pageSize = 10,
+            limit = 10, // Set default page size
             type,
             status,
             startDate,
@@ -1228,9 +1228,9 @@ const getWalletTransactions = async (req, res) => {
             search
         } = req.query;
 
-        // Convert page and pageSize to numbers
-        const pageNumber = parseInt(page);
-        const limit = parseInt(pageSize);
+        // Validate pagination parameters
+        const pageNumber = Math.max(1, parseInt(page) || 1);
+        const limit_ = Math.min(100, Math.max(1, parseInt(limit) || 10)); // Limit max page size to 100
         const skip = (pageNumber - 1) * limit;
 
         // Build filter object
@@ -1270,17 +1270,18 @@ const getWalletTransactions = async (req, res) => {
         const transactions = await UserTransaction.find(filter)
             .sort({ createdAt: -1 }) // Sort by date in descending order
             .skip(skip)
-            .limit(limit);
+            .limit(limit_)
+            .populate('user', 'name email mobile'); // Ensure user details are populated
 
         // Calculate pagination info
-        const totalPages = Math.ceil(totalCount / limit);
+        const totalPages = Math.ceil(totalCount / limit_);
         const hasNextPage = pageNumber < totalPages;
         const hasPrevPage = pageNumber > 1;
 
         res.json({
             success: true,
             data: {
-                transactions,
+                transactions: transactions,
                 pagination: {
                     currentPage: pageNumber,
                     totalPages,

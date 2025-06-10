@@ -97,6 +97,17 @@ export default function DevelopmentDocs() {
 }`}
                 </pre>
               </div>
+              <div className="mt-4">
+                <h4 className="text-md font-medium text-gray-800 mb-2">Response Body:</h4>
+                <pre className="bg-gray-50 p-4 rounded-md text-sm text-gray-800">
+                  {`{
+    "success": true,
+    "message": "Payout processed successfully",
+    "transaction_id": "PAY20250521115348165",
+    "result": "Transaction Successful"
+}`}
+                </pre>
+              </div>
             </div>
 
             {/* Transaction Status Check Documentation */}
@@ -195,7 +206,6 @@ export default function DevelopmentDocs() {
           <div className="prose max-w-none">
             <ul className="list-disc pl-6 text-gray-600 space-y-2">
               <li>The reference_id can be any combination of 12 characters (numbers or alphabets)</li>
-              <li>JWT authentication token expires after 24 hours</li>
               <li>All amounts should be provided as strings</li>
               <li>Phone numbers must be exactly 10 digits</li>
               <li>Make sure to include the Content-Type: application/json header in your requests</li>

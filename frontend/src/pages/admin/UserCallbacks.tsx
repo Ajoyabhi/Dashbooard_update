@@ -171,18 +171,26 @@ export default function UserCallbacks() {
         </div>
 
         {/* Display current callback details */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Current Callback Settings</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <h3 className="font-medium text-gray-700">Payin Callback</h3>
-              <p className="text-gray-600">{settings.currentPayinUrl || 'Not set'}</p>
-              <p className="text-sm text-gray-500">Merchant: {settings.currentPayinMerchantName || 'Not set'}</p>
+        <div className="bg-white rounded-lg shadow-md p-10 mb-10">
+          <h2 className="text-2xl font-semibold mb-8">Current Callback Settings</h2>
+          <div className="grid grid-cols-2 gap-16">
+            <div className="overflow-hidden p-6 border border-gray-200 rounded-lg shadow-sm">
+              <h3 className="font-medium text-gray-700 text-lg mb-4">Payin Callback</h3>
+              <p className="text-gray-600 break-all mb-3 text-base" title={settings.currentPayinUrl || 'Not set'}>
+                {settings.currentPayinUrl || 'Not set'}
+              </p>
+              <p className="text-sm text-gray-500 break-all" title={settings.currentPayinMerchantName || 'Not set'}>
+                Merchant: {settings.currentPayinMerchantName || 'Not set'}
+              </p>
             </div>
-            <div>
-              <h3 className="font-medium text-gray-700">Payout Callback</h3>
-              <p className="text-gray-600">{settings.currentPayoutUrl || 'Not set'}</p>
-              <p className="text-sm text-gray-500">Merchant: {settings.currentPayoutMerchantName || 'Not set'}</p>
+            <div className="overflow-hidden p-6 border border-gray-200 rounded-lg shadow-sm">
+              <h3 className="font-medium text-gray-700 text-lg mb-4">Payout Callback</h3>
+              <p className="text-gray-600 break-all mb-3 text-base" title={settings.currentPayoutUrl || 'Not set'}>
+                {settings.currentPayoutUrl || 'Not set'}
+              </p>
+              <p className="text-sm text-gray-500 break-all" title={settings.currentPayoutMerchantName || 'Not set'}>
+                Merchant: {settings.currentPayoutMerchantName || 'Not set'}
+              </p>
             </div>
           </div>
         </div>

@@ -14,6 +14,8 @@ interface ChargeRange {
   endAmount: number;
   payinCharge: number;
   payoutCharge: number;
+  payinchargeType: 'percentage' | 'fixed';
+  payoutchargeType: 'percentage' | 'fixed';
   chargeType: 'percentage' | 'fixed';
 }
 
@@ -68,7 +70,9 @@ export default function UserCharges() {
           endAmount: parseFloat(charge.end_amount),
           payinCharge: parseFloat(charge.admin_payin_charge),
           payoutCharge: parseFloat(charge.admin_payout_charge),
-          chargeType: charge.admin_payin_charge_type
+          payinchargeType: charge.admin_payin_charge_type || 'percentage',
+          payoutchargeType: charge.admin_payout_charge_type || 'percentage',
+          chargeType: charge.charge_type || 'percentage'
         }));
         setChargeRanges(charges);
         setError(null);
@@ -166,16 +170,6 @@ export default function UserCharges() {
         return;
       }
 
-      // Validate that the new range doesn't overlap with existing ranges
-      // const hasOverlap = chargeRanges.some(range =>
-      //   (newChargeRange.startAmount! <= range.endAmount && newChargeRange.endAmount! >= range.startAmount)
-      // );
-
-      // if (hasOverlap) {
-      //   setError('This range overlaps with an existing range');
-      //   return;
-      // }
-
       try {
         setLoading(true);
         const response = await api.post(`/admin/users/${userId}/merchant-charges`, {
@@ -183,8 +177,9 @@ export default function UserCharges() {
           end_amount: newChargeRange.endAmount,
           admin_payin_charge: newChargeRange.payinCharge || 0,
           admin_payout_charge: newChargeRange.payoutCharge || 0,
-          admin_payin_charge_type: newChargeRange.chargeType || 'percentage',
-          admin_payout_charge_type: newChargeRange.chargeType || 'percentage',
+          admin_payin_charge_type: newChargeRange.payinchargeType || 'percentage',
+          admin_payout_charge_type: newChargeRange.payoutchargeType || 'percentage',
+          charge_type: newChargeRange.chargeType || 'percentage',
         });
 
         if (response.data.success) {
@@ -195,9 +190,11 @@ export default function UserCharges() {
             endAmount: newChargeRange.endAmount,
             payinCharge: newChargeRange.payinCharge || 0,
             payoutCharge: newChargeRange.payoutCharge || 0,
+            payinchargeType: newChargeRange.payinchargeType || 'percentage',
+            payoutchargeType: newChargeRange.payoutchargeType || 'percentage',
             chargeType: newChargeRange.chargeType || 'percentage'
           }]);
-          setNewChargeRange({ chargeType: 'percentage' });
+          setNewChargeRange({ chargeType: 'percentage', payinchargeType: 'percentage', payoutchargeType: 'percentage' });
           toast.success('Charge range added successfully');
           fetchCharges();
           setError(null);
@@ -365,7 +362,7 @@ export default function UserCharges() {
 
             {/* Add new charge range form */}
             <div className="mb-6 grid grid-cols-1 gap-6 bg-gray-50 p-4 rounded-lg">
-              <div className="grid grid-cols-5 gap-4">
+              <div className="grid grid-cols-7 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Start Amount</label>
                   <input
@@ -403,6 +400,20 @@ export default function UserCharges() {
                   />
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-gray-700">Payin Type</label>
+                  <select
+                    value={newChargeRange.payinchargeType || 'percentage'}
+                    onChange={(e) => setNewChargeRange({
+                      ...newChargeRange,
+                      payinchargeType: e.target.value as 'percentage' | 'fixed'
+                    })}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                  >
+                    <option value="percentage">Percentage</option>
+                    <option value="fixed">Fixed</option>
+                  </select>
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700">Payout Charge</label>
                   <input
                     type="number"
@@ -415,12 +426,12 @@ export default function UserCharges() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Charge Type</label>
+                  <label className="block text-sm font-medium text-gray-700">Payout Type</label>
                   <select
-                    value={newChargeRange.chargeType}
+                    value={newChargeRange.payoutchargeType || 'percentage'}
                     onChange={(e) => setNewChargeRange({
                       ...newChargeRange,
-                      chargeType: e.target.value as 'percentage' | 'fixed'
+                      payoutchargeType: e.target.value as 'percentage' | 'fixed'
                     })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                   >
@@ -452,10 +463,13 @@ export default function UserCharges() {
                     Payin Charge
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Payin Type
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Payout Charge
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Type
+                    Payout Type
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Action
@@ -469,13 +483,16 @@ export default function UserCharges() {
                       {range.startAmount} - {range.endAmount}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {range.payinCharge}{range.chargeType === 'percentage' ? '%' : ''}
+                      {range.payinCharge}{range.payinchargeType === 'percentage' ? '%' : ''}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {range.payoutCharge}{range.chargeType === 'percentage' ? '%' : ''}
+                      <span className="capitalize">{range.payinchargeType}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="capitalize">{range.chargeType}</span>
+                      {range.payoutCharge}{range.payoutchargeType === 'percentage' ? '%' : ''}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="capitalize">{range.payoutchargeType}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <button

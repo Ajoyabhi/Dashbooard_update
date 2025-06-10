@@ -73,7 +73,7 @@ export default function AddUser() {
 
   return (
     <DashboardLayout menuItems={adminMenuItems} title="Add User">
-      <div className="space-y-6">
+      <div className="w-full space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center">
@@ -83,12 +83,12 @@ export default function AddUser() {
             >
               <ArrowLeft className="h-6 w-6" />
             </button>
-            <h1 className="text-2xl font-bold text-gray-900">Add New User</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Add User</h1>
           </div>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="bg-white shadow-sm rounded-lg">
+        <form onSubmit={handleSubmit} className="w-full bg-white shadow-sm rounded-lg">
           <div className="p-6 space-y-6">
             {/* Basic Information */}
             <div className="space-y-6">
@@ -176,7 +176,6 @@ export default function AddUser() {
                     required
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                   >
-
                     <option value="agent">Agent</option>
                     <option value="admin">Admin</option>
                     <option value="payin_payout">Payin_Payout</option>
@@ -223,15 +222,20 @@ export default function AddUser() {
                   <label htmlFor="business_type" className="block text-sm font-medium text-gray-700">
                     Business Type
                   </label>
-                  <input
-                    type="text"
-                    name="business_type"
+                  <select
                     id="business_type"
+                    name="business_type"
                     value={formData.business_type}
                     onChange={handleChange}
                     required
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                  />
+                  >
+                    <option value="pvtltd">Pvt. Ltd.</option>
+                    <option value="partnership">Partnership</option>
+                    <option value="proprietorship">Proprietorship</option>
+                    <option value="llp">LLP</option>
+                    <option value="public">Public</option>
+                  </select>
                 </div>
                 <div>
                   <label htmlFor="pan_card" className="block text-sm font-medium text-gray-700">

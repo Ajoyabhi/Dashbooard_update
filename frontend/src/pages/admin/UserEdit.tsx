@@ -97,7 +97,7 @@ export default function UserEdit() {
 
     return (
         <DashboardLayout menuItems={adminMenuItems} title="Edit User">
-            <div className="space-y-6">
+            <div className="w-full space-y-6">
                 {/* Header */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center">
@@ -112,12 +112,12 @@ export default function UserEdit() {
                 </div>
 
                 {/* Form */}
-                <form onSubmit={handleSubmit} className="bg-white shadow-sm rounded-lg">
+                <form onSubmit={handleSubmit} className="w-full bg-white shadow-sm rounded-lg">
                     <div className="p-6 space-y-6">
                         {/* Basic Information */}
                         <div>
                             <h2 className="text-lg font-medium text-gray-900 mb-4">Basic Information</h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                 <div>
                                     <label htmlFor="name" className="block text-sm font-medium text-gray-700">
                                         Name
@@ -216,15 +216,20 @@ export default function UserEdit() {
                                     <label htmlFor="business_type" className="block text-sm font-medium text-gray-700">
                                         Business Type
                                     </label>
-                                    <input
-                                        type="text"
-                                        name="business_type"
+                                    <select
                                         id="business_type"
+                                        name="business_type"
                                         value={formData.business_type}
                                         onChange={handleChange}
                                         required
                                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                                    />
+                                    >
+                                        <option value="pvtltd">Pvt. Ltd.</option>
+                                        <option value="partnership">Partnership</option>
+                                        <option value="proprietorship">Proprietorship</option>
+                                        <option value="llp">LLP</option>
+                                        <option value="public">Public</option>
+                                    </select>
                                 </div>
                             </div>
                         </div>

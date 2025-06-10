@@ -145,8 +145,8 @@ async function unpayPayout(payoutData) {
                 data: { 
                     status: result['statuscode'],
                     message: result['message'],
-                    txn_id: txn_id,
-                    utr: utr
+                    utr: utr,
+                    apitxnid: payoutData.reference_id
                 },
                 status: 200
             }
@@ -211,7 +211,8 @@ async function unpayPayout(payoutData) {
                     status: result['statuscode'],
                     message: result['message'],
                     error: result['error'],
-                    txn_id: result['txnid']
+                    apitxnid: payoutData.reference_id
+                    
                 },
                 status: 200
             };
