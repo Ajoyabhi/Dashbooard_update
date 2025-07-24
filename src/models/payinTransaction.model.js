@@ -30,10 +30,9 @@ const payinTransactionSchema = new mongoose.Schema({
     total_charges: Number
   },
   beneficiary_details: {
-    account_number: String,
-    account_ifsc: String,
-    bank_name: String,
-    beneficiary_name: String
+    beneficiary_name: String,
+    beneficiary_email: String,
+    beneficiary_phone: String
   },
   reference_id: {
     type: String,
@@ -44,6 +43,16 @@ const payinTransactionSchema = new mongoose.Schema({
     type: String,
     enum: ['pending', 'completed', 'failed', 'payin_qr_generated'],
     default: 'pending'
+  },
+  gst_amount: {
+    type: Number,
+    default: 0,
+    allowNull: true
+  },
+  platform_fee: {
+    type: Number,
+    default: 0,
+    allowNull: true
   },
   gateway_response: {
     utr: String,

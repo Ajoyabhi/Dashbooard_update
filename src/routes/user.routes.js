@@ -7,12 +7,17 @@ const {
   getUserPayinReports,
   getUserPayoutReports,
   getUserFundRequests,
-  createFundRequest
+  createFundRequest,
+  getUserDashboard,
+  getUserSettlementReport
 } = require('../controllers/user.controller');
 const { auth, authorize } = require('../middleware/auth.middleware');
 
 // All routes require user authentication
 router.use(auth, authorize('payin_payout', 'staff', 'agent', 'payout_only', 'payin_only'));
+
+//dashboard
+router.get('/dashboard', getUserDashboard);
 
 // User profile routes
 router.get('/profile', getUserProfile);
@@ -26,5 +31,8 @@ router.get('/payout_reports', getUserPayoutReports);
 // User fund request routes
 router.get('/fund-requests', getUserFundRequests);
 router.post('/fund-request', createFundRequest);
+
+router.get('/settlement-report', getUserSettlementReport);
+
 
 module.exports = router; 

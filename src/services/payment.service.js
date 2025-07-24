@@ -1,9 +1,10 @@
 const { logger } = require('../utils/logger');
-const { User, UserStatus, MerchantDetails, MerchantCharges, MerchantModeCharges, FinancialDetails, UserIPs, TransactionCharges } = require('../models');
+const { User, UserStatus, MerchantDetails, MerchantCharges, MerchantModeCharges, FinancialDetails, UserIPs, TransactionCharges, PlatformCharges } = require('../models');
 const PayinTransaction = require('../models/payinTransaction.model');
 const UserTransaction = require('../models/userTransaction.model');
 const mongoose = require('mongoose');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
+const axios = require('axios');
 
 /**
  * Process a payin request
@@ -113,6 +114,8 @@ const processPayin = async (data) => {
     // Calculate charges
     let adminCharge = 0;
     let agentCharge = 0;
+    let gstAmount = 0;
+    let platformFee = 0;
 
     if (applicableBracket.admin_payin_charge_type === 'percentage') {
       adminCharge = (order_amount * parseFloat(applicableBracket.admin_payin_charge)) / 100;
@@ -127,24 +130,42 @@ const processPayin = async (data) => {
     }
 
     const totalCharges = parseFloat(adminCharge);
-    const amountToDeduct = parseFloat(order_amount) + totalCharges;
-    const user_balance_left = parseFloat(user.FinancialDetail.settlement) - amountToDeduct;
+    
+    // Fetch platform charges from database
+    const platformCharges = await PlatformCharges.findOne({
+      where: { is_active: true }
+    });
 
-    // Update settlement
-    await FinancialDetails.update(
-      { settlement: user_balance_left },
-      { where: { user_id } }
-    );
+    if(platformCharges?.charge){
+      platformFee = (totalCharges * parseFloat(platformCharges.charge)) / 100;
+    }
+
+    if(platformCharges?.gst){
+      gstAmount = (totalCharges * parseFloat(platformCharges.gst)) / 100;
+    }
+    
+    // Initialize wallet if it's null
+    if (!user.FinancialDetail || user.FinancialDetail.wallet === null) {
+      await FinancialDetails.create({
+        user_id: user_id,
+        wallet: 0,
+        settlement: 0,
+        lien: 0,
+        rolling_reserve: 0
+      });
+    }
+    
 
     // Create user transaction
     const userTransaction = await UserTransaction.create({
       user: {
         id: new mongoose.Types.ObjectId(user_id),
         user_id: user_id,
+      },
+      beneficiary_details:{
         name: name || '',
         email: email || '',
-        mobile: phone || '',
-        userType: user.user_type || ''
+        mobile: phone || ''
       },
       transaction_id: data.transaction_id,
       amount: order_amount,
@@ -156,6 +177,8 @@ const processPayin = async (data) => {
         agent_charge: agentCharge,
         total_charges: totalCharges
       },
+      gst_amount: parseFloat(gstAmount),
+      platform_fee: parseFloat(platformFee),
       gateway_response: {
         utr: null,
         status: 'pending',
@@ -163,8 +186,8 @@ const processPayin = async (data) => {
         merchant_response: null
       },
       balance: {
-        before: user.FinancialDetail.settlement,
-        after: user_balance_left
+        before: user.FinancialDetail.wallet,
+        after: user.FinancialDetail.wallet
       },
       merchant_details: {
         merchant_name: user.MerchantDetail.payin_merchant_name,
@@ -191,15 +214,17 @@ const processPayin = async (data) => {
         userType: user.user_type || ''
       },
       amount: order_amount,
+      gst_amount: parseFloat(gstAmount),
+      platform_fee: parseFloat(platformFee),
       charges: {
         admin_charge: adminCharge,
         agent_charge: agentCharge,
         total_charges: totalCharges
       },
       beneficiary_details: {
-        name,
-        email,
-        phone
+        beneficiary_name: name || '',
+        beneficiary_email: email || '',
+        beneficiary_phone: phone || ''
       },
       reference_id: reference_id,
       status: 'pending',
@@ -225,6 +250,8 @@ const processPayin = async (data) => {
       merchant_charge: parseFloat(adminCharge),
       agent_charge: parseFloat(agentCharge),
       total_charges: parseFloat(totalCharges),
+      gst_amount: parseFloat(gstAmount),
+      platform_fee: parseFloat(platformFee),
       user_id: parseInt(user_id),
       status: 'pending',
       metadata: {
@@ -247,17 +274,22 @@ const processPayin = async (data) => {
       clientIp
     };
 
-    const result = await unpayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp);
-    // const result = {
-    //   success: true,
-    //   gateway_response: {
-    //     utr: '1234567890',
-    //     status: 'completed',
-    //     message: 'Payin request completed', 
-    //     raw_response: null
-    //   }
-    // };
+    let result;
+    if(user.MerchantDetail.payin_merchant_name == "Unpay"){
+      result = await unpayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee);
+    } else if(user.MerchantDetail.payin_merchant_name == "Spay"){
+      result = await spayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee);
+    } else {
+      throw new Error('Invalid merchant name');
+    }
+    console.log("result", result);
+    logger.debug('DEBUG: Payment processing completed', {
+      reference_id,
+      success: result?.success,
+      timestamp: new Date().toISOString()
+    });
 
+    console.log("this is the returned result", result)
     logger.debug('DEBUG: Payment processing completed', {
       reference_id,
       success: result?.success,
@@ -265,7 +297,7 @@ const processPayin = async (data) => {
     });
 
     // Update transaction status
-    if (result?.statuscode == "TXN") {
+    if (result?.statuscode == "TXN" || result?.data?.statuscode == "TXNS") {
       logger.debug('DEBUG: Updating transaction status to completed', {
         reference_id,
         timestamp: new Date().toISOString()
@@ -396,7 +428,7 @@ const unpayPayin = async (payinData, adminCharge, agentCharge, totalCharges, use
     console.log(result);
     if(result.statuscode == "TXN"){
       return {
-        status: result.status,
+        statuscode: result.statuscode,
         message: result.message,
         data: {
         apitxnid: result.data?.apitxnid,
@@ -418,6 +450,84 @@ const unpayPayin = async (payinData, adminCharge, agentCharge, totalCharges, use
     });
     throw error;
   }
+};
+
+const spayPayin = async (payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee) => {
+    try {
+        // Validate required fields
+        if (!payinData.name || !payinData.email || !payinData.phone || !payinData.order_amount) {
+            throw new Error('Missing required fields: name, email, mobile, or amount');
+        }
+
+        // Generate unique transaction ID
+
+        const requestBody = {
+            token: "JPi2bq7JPPaiEaFDBp0WtGcVTEjTMG", // Make sure to set this in your environment variables
+            apitxnid: payinData.reference_id,
+            name: payinData.name,
+            email: payinData.email,
+            mobile: payinData.phone,
+            amount: payinData.order_amount.toString(),
+            return_url: "https://api.zentexpay.in/api/payments/spay/callback" // Make sure to set this in your environment variables
+        };
+
+        const response = await axios.post('https://dashboard.spay.live/api/upiintent/vp2/create', requestBody, {
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (response.data.statuscode === 'TXNS') {
+            // Store transaction details in your database
+            const transactionData = {
+                user_id,
+                transaction_id: payinData.reference_id,
+                amount: payinData.order_amount,
+                admin_charge: adminCharge,
+                agent_charge: agentCharge,
+                total_charges: totalCharges,
+                gst_amount: gstAmount,
+                platform_fee: platformFee,
+                client_ip: clientIp,
+                payment_link: response.data.payment_link,
+                status: 'PENDING',
+                payment_provider: 'SPAY',
+                created_at: new Date()
+            };
+
+            // Save transaction to database (implement your database save logic here)
+            // await Transaction.create(transactionData);
+
+            return {
+                success: true,
+                data: {
+                    statuscode: response.data.statuscode,
+                    qrString: response.data.payment_link,
+                    message: response.data.message,
+                    apitxnid: payinData.reference_id
+                }
+            };
+        } else {
+            throw new Error(response.data.message || 'Payment initiation failed');
+        }
+    } catch (error) {
+        // Handle specific error cases
+        if (error.response) {
+            switch (error.response.status) {
+                case 400:
+                    throw new Error('Missing required fields');
+                case 401:
+                    throw new Error('Invalid amount format');
+                case 409:
+                    throw new Error('Transaction ID already exists');
+                case 500:
+                    throw new Error('Internal server error');
+                default:
+                    throw new Error(error.response.data.message || 'Payment initiation failed');
+            }
+        }
+        throw error;
+    }
 };
 
 

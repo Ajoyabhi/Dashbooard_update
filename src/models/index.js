@@ -2,13 +2,13 @@ const { Sequelize } = require('sequelize');
 const config = require('../config');
 
 const sequelize = new Sequelize(
-    config.database.name,
-    config.database.username,
-    config.database.password,
+    'techturect',  // database name
+    'root',        // username
+    '',            // password (empty by default in XAMPP)
     {
-        host: config.database.host,
-        dialect: 'mysql',
-        logging: false
+        host: 'localhost',
+        port: 3306,
+        dialect: 'mysql'
     }
 );
 

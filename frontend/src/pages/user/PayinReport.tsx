@@ -36,6 +36,7 @@ interface PayinRecord {
     status: string;
     message: string;
     raw_response: any;
+    utr?: string;
   };
   metadata: {
     requested_ip: string;
@@ -164,39 +165,32 @@ export default function PayinReport() {
         <span className="font-medium text-primary-600">{value}</span>
       ),
     },
-    {
-      header: 'Transaction ID',
-      accessor: 'transaction_id',
-      cell: (value: string) => (
-        <span className="font-mono">{value}</span>
-      ),
-    },
+    // {
+    //   header: 'Transaction ID',
+    //   accessor: 'transaction_id',
+    //   cell: (value: string) => (
+    //     <span className="font-mono">{value}</span>
+    //   ),
+    // },
     {
       header: 'UTR',
       accessor: 'gateway_response',
       cell: (value: any) => (
-        <span className="font-mono">{value.raw_response}</span>
+        <span className="font-mono">{value.utr || '-'}</span>
       ),
     },
     {
-      header: 'Name',
+      header: 'Merchant Name',
       accessor: 'user',
       cell: (value: any) => (
         <span className="font-mono">{value.name}</span>
       ),
     },
     {
-      header: 'A/C No',
+      header: 'Name',
       accessor: 'beneficiary_details',
       cell: (value: any) => (
-        <span className="font-mono">{value.account_number}</span>
-      ),
-    },
-    {
-      header: 'IFSC',
-      accessor: 'beneficiary_details',
-      cell: (value: any) => (
-        <span className="font-mono">{value.account_ifsc}</span>
+        <span className="font-mono">{value.beneficiary_name}</span>
       ),
     },
     {
@@ -210,21 +204,21 @@ export default function PayinReport() {
       header: 'Charge',
       accessor: 'charges',
       cell: (value: any) => (
-        <span className="text-gray-600">{formatCurrency(value.total_charges)}</span>
+        <span className="text-gray-600">{formatCurrency(value.admin_charge)}</span>
       ),
     },
-    {
-      header: 'GST',
-      accessor: 'charges',
-      cell: (value: any) => (
-        <span className="text-gray-600">{formatCurrency(value.gst)}</span>
-      ),
-    },
+    // {
+    //   header: 'GST',
+    //   accessor: 'charges',
+    //   cell: (value: any) => (
+    //     <span className="text-gray-600">{formatCurrency(value.gst)}</span>
+    //   ),
+    // },
     {
       header: 'Net Amount',
       accessor: 'amount',
       cell: (value: number, row: PayinRecord) => (
-        <span className="font-medium">{formatCurrency(value + row.charges.total_charges)}</span>
+        <span className="font-medium">{formatCurrency(value - row.charges.admin_charge)}</span>
       ),
     },
     {

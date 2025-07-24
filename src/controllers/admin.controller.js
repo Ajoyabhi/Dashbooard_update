@@ -38,7 +38,7 @@ const getAllUsers = async (req, res) => {
     const transformedUsers = users.map(user => {
       
       const financialDetails = user.FinancialDetail || {};
-      
+      const status = user.UserStatus?.status == true ? 'active' : 'inactive';
       const transformed = {
         id: user.id,
         name: user.name,
@@ -51,7 +51,7 @@ const getAllUsers = async (req, res) => {
         mobile: user.mobile,
         payin: user.UserStatus?.payin_status || false,
         payout: user.UserStatus?.payout_status || false,
-        status: user.UserStatus?.status || 'inactive'
+        status: status
       };
       return transformed;
     });

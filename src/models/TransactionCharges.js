@@ -36,6 +36,16 @@ module.exports = (sequelize) => {
             type: DataTypes.DECIMAL(10, 2),
             allowNull: false
         },
+        gst_amount: {
+            type: DataTypes.DECIMAL(10, 2),
+            allowNull: true,
+            defaultValue: 0
+        },
+        platform_fee: {
+            type: DataTypes.DECIMAL(10, 2),
+            allowNull: true,
+            defaultValue: 0
+        },
         user_id: {
             type: DataTypes.INTEGER,
             allowNull: false,

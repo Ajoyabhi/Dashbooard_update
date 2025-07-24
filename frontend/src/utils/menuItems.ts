@@ -24,6 +24,47 @@ import {
 } from 'lucide-react';
 
 export const getMenuItems = (userType: string): MenuItem[] => {
+  // Map payin_payout to user menu items
+  if (userType === 'payin_payout') {
+    return [
+      {
+        title: 'Dashboard',
+        path: '/user',
+        icon: 'LayoutDashboard'
+      },
+      {
+        title: 'Fund Request',
+        path: '/user/fund-request',
+        icon: 'DollarSign'
+      },
+      {
+        title: 'Wallet Report',
+        path: '/user/wallet-report',
+        icon: 'Wallet'
+      },
+      {
+        title: 'Payout Report',
+        path: '/user/payout-report',
+        icon: 'FileText'
+      },
+      {
+        title: 'Payin Report',
+        path: '/user/payin-report',
+        icon: 'ArrowDownToLine'
+      },
+      {
+        title: 'Developer Settings',
+        path: '/user/developer-settings',
+        icon: 'Settings'
+      },
+      {
+        title: 'Development Docs',
+        path: '/user/development-docs',
+        icon: 'BookOpen'
+      }
+    ];
+  }
+
   switch (userType) {
     case 'admin':
       return [

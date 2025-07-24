@@ -17,7 +17,9 @@ const userTransactionSchema = new mongoose.Schema({
       type: String,
       required: true,
       comment: 'Reference to SQL database user table'
-    },
+    }
+  },
+  beneficiary_details:{
     name: String,
     email: String,
     mobile: String

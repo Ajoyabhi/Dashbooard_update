@@ -1,10 +1,12 @@
 const ApiLogs = require('../models/apiLogs.model');
 const PayoutTransaction = require('../models/payoutTransaction.model');
 const UserTransaction = require('../models/userTransaction.model');
-const { TransactionCharges } = require('../models');
+const { TransactionCharges, FinancialDetails } = require('../models');
 const winston = require('winston');
 const { encryptText } = require('./utils_payout');
+const axios = require('axios');
 require('dotenv').config();
+
 
 // Configure logger
 const logger = winston.createLogger({
@@ -63,8 +65,10 @@ async function unpayPayout(payoutData) {
             },
             body: JSON.stringify({ body: aesData })
         }).then(response => response.json());
-
-        console.log("result", result);
+        console.log("=======================================================")
+        console.log("This is part of result", result);
+        console.log("=======================================================")
+        
 
         logger.info('Received response from Unpay API', { status: result['statuscode'] });
 
@@ -145,8 +149,8 @@ async function unpayPayout(payoutData) {
                 data: { 
                     status: result['statuscode'],
                     message: result['message'],
-                    txn_id: txn_id,
-                    utr: utr
+                    utr: utr,
+                    apitxnid: payoutData.reference_id
                 },
                 status: 200
             }
@@ -160,8 +164,7 @@ async function unpayPayout(payoutData) {
             await TransactionCharges.update(
                 {
                     status: 'failed',
-                    merchant_response: result,
-                    utr: null
+                    transaction_utr: null
                 },
                 {
                     where: {
@@ -169,6 +172,18 @@ async function unpayPayout(payoutData) {
                     }
                 }
             );
+            // Update settlement in FinancialDetails using Sequelize
+            const userFinancial = await FinancialDetails.findOne({
+                where: { user_id: payoutData.user_id }
+              });
+            if (userFinancial) {
+                const newSettlement = parseFloat(userFinancial.settlement) + parseFloat(payoutData.amountToDeduct);
+                await FinancialDetails.update(
+                  { settlement: newSettlement },
+                  { where: { user_id: payoutData.user_id } }
+                );
+            }
+
 
             logger.info('Failed transaction charges stored', { reference: payoutData.reference_id });
 
@@ -180,7 +195,7 @@ async function unpayPayout(payoutData) {
                     $set: {
                         status: 'failed',
                         gateway_response: {
-                            merchant_response: result,
+                            merchant_response: JSON.stringify(result),
                             status: 'failed',
                             message: result.message
                         }
@@ -190,14 +205,14 @@ async function unpayPayout(payoutData) {
             logger.info('User transaction updated to failed', { reference: payoutData.reference });
 
             let payoutTransaction = await PayoutTransaction.updateOne(
-                {
+                {   
                     reference_id: payoutData.reference_id
                 },
                 {
                     $set: {
                         status: 'failed',
                         gateway_response: {
-                            merchant_response: result,
+                            merchant_response: JSON.stringify(result),
                             status: 'failed',
                             message: result.message
                         }
@@ -211,7 +226,8 @@ async function unpayPayout(payoutData) {
                     status: result['statuscode'],
                     message: result['message'],
                     error: result['error'],
-                    txn_id: result['txnid']
+                    apitxnid: payoutData.reference_id
+                    
                 },
                 status: 200
             };
@@ -233,6 +249,185 @@ async function unpayPayout(payoutData) {
     }
 }
 
+async function spayPayout(payoutData) {
+    const startTime = Date.now();
+    logger.info('Starting spayPayout process', { reference: payoutData.reference_id });
+    try {
+        const token = process.env.SPAY_TOKEN;
+        const payout_id = process.env.SPAY_PAYOUT_ID || '3'; // fallback to 3 if not set
+        const pay_load = {
+            token: token,
+            merchant_order_id: payoutData.reference_id,
+            name: payoutData.beneficiary_details.beneficiary_name,
+            email: payoutData.beneficiary_details.email,
+            mobile: payoutData.beneficiary_details.mobile,
+            amount: payoutData.amount,
+            account: payoutData.beneficiary_details.account_number,
+            ifsc: payoutData.beneficiary_details.account_ifsc,
+            payout_id: payout_id,
+            address: payoutData.beneficiary_details.address,
+            payment_type: payoutData.payment_type || 'IMPS',
+            upi_on: payoutData.beneficiary_details.upi_on || ''
+        };
+        logger.info('Preparing payout request for SPay', { payload: pay_load });
+        const response = await axios.post('https://dashboard.spay.live/api/payout/request', pay_load, {
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        const result = response.data;
+        console.log("=======================================================")
+        console.log("This is part of result", result);
+        console.log("=======================================================")
+        logger.info('Received response from SPay API', { status: result.status, message: result.message });
+        // Create API log
+        const apiLog = await ApiLogs.create({
+            request: JSON.stringify(pay_load),
+            response: JSON.stringify(result),
+            service: 'PAYOUT',
+            service_api: 'SPAY',
+            status: result.status === 'success' ? 'success' : 'error',
+            error_message: result.message || null,
+            execution_time: Date.now() - startTime
+        });
+        await apiLog.save();
+        logger.info('API log created', { logId: apiLog._id });
+        if (result.status === 'success') {
+            // Update transaction charges
+            await TransactionCharges.update(
+                {
+                    status: 'completed',
+                    transaction_utr: result.utr || null
+                },
+                {
+                    where: {
+                        reference_id: payoutData.reference_id
+                    }
+                }
+            );
+            logger.info('Transaction charges stored', { reference: payoutData.reference_id });
+            // Update user transaction
+            await UserTransaction.updateOne(
+                { reference_id: payoutData.reference_id },
+                {
+                    $set: {
+                        status: 'success',
+                        gateway_response: {
+                            merchant_response: result.merchant_order_id,
+                            status: 'success',
+                            message: result.message,
+                            utr: result.utr || null
+                        }
+                    }
+                }
+            );
+            logger.info('User transaction updated', { reference: payoutData.reference_id });
+            // Update payout transaction
+            await PayoutTransaction.updateOne(
+                { reference_id: payoutData.reference_id },
+                {
+                    $set: {
+                        status: 'success',
+                        gateway_response: {
+                            merchant_response: result.merchant_order_id,
+                            status: 'success',
+                            message: result.message,
+                            utr: result.utr || null
+                        }
+                    }
+                }
+            );
+            logger.info('Payout transaction updated', { reference: payoutData.reference_id });
+            return {
+                data: {
+                    status: result.status,
+                    message: result.message,
+                    merchant_order_id: result.merchant_order_id,
+                    utr: result.utr || null
+                },
+                status: 200
+            };
+        } else {
+            // Update transaction charges as failed
+            await TransactionCharges.update(
+                {
+                    status: 'failed',
+                    transaction_utr: null
+                },
+                {
+                    where: {
+                        reference_id: payoutData.reference_id
+                    }
+                }
+            );
+            // Optionally update FinancialDetails if needed (see unpayPayout)
+            const userFinancial = await FinancialDetails.findOne({
+                where: { user_id: payoutData.user_id }
+            });
+            if (userFinancial) {
+                const newSettlement = parseFloat(userFinancial.settlement) + parseFloat(payoutData.amountToDeduct || 0);
+                await FinancialDetails.update(
+                    { settlement: newSettlement },
+                    { where: { user_id: payoutData.user_id } }
+                );
+            }
+            // Update user transaction as failed
+            await UserTransaction.updateOne(
+                { reference_id: payoutData.reference_id },
+                {
+                    $set: {
+                        status: 'failed',
+                        gateway_response: {
+                            merchant_response: JSON.stringify(result),
+                            status: 'failed',
+                            message: result.message
+                        }
+                    }
+                }
+            );
+            logger.info('User transaction updated to failed', { reference: payoutData.reference_id });
+            // Update payout transaction as failed
+            await PayoutTransaction.updateOne(
+                { reference_id: payoutData.reference_id },
+                {
+                    $set: {
+                        status: 'failed',
+                        gateway_response: {
+                            merchant_response: JSON.stringify(result),
+                            status: 'failed',
+                            message: result.message
+                        }
+                    }
+                }
+            );
+            logger.info('Payout transaction updated to failed', { reference: payoutData.reference_id });
+            return {
+                data: {
+                    status: result.status,
+                    message: result.message,
+                    error: result.error || null,
+                    merchant_order_id: payoutData.reference_id
+                },
+                status: 200
+            };
+        }
+    } catch (error) {
+        logger.error('Error in spayPayout', {
+            error: error.message,
+            stack: error.stack,
+            reference: payoutData.reference_id
+        });
+        return {
+            data: {
+                status: 'error',
+                message: error.message
+            },
+            status: 500
+        };
+    }
+}
+
 module.exports = {
-    unpayPayout
+    unpayPayout,
+    spayPayout
 }   

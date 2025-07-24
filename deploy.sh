@@ -8,7 +8,7 @@ ensure_logs_directory() {
     if [ ! -d "src/logs" ]; then
         echo "Creating logs directory..."
         mkdir -p src/logs
-    fi
+    fi 
 }
 
 # Function to check if .env file exists and is valid

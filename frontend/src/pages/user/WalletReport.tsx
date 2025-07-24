@@ -132,8 +132,8 @@ const UserWalletReport = () => {
       cell: (value: string) => formatDate(value),
     },
     {
-      header: 'Order ID',
-      accessor: 'orderId',
+      header: 'Reference ID',
+      accessor: 'referenceId',
       cell: (value: string) => (
         <span className="font-medium text-primary-600">{value}</span>
       ),
@@ -181,18 +181,10 @@ const UserWalletReport = () => {
       cell: (value: { admin_charge: number; agent_charge: number; total_charges: number }) => (
         <div className="text-sm">
           <div>Admin: {formatCurrency(value.admin_charge)}</div>
-          <div>Agent: {formatCurrency(value.agent_charge)}</div>
-          <div className="font-medium">Total: {formatCurrency(value.total_charges)}</div>
+          
         </div>
       ),
-    },
-    {
-      header: 'Reference ID',
-      accessor: 'referenceId',
-      cell: (value: string) => (
-        <span className="font-mono text-sm">{value}</span>
-      ),
-    },
+    }
   ];
 
   return (

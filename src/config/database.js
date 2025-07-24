@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const config = require('./index');
 const { logger } = require('../utils/logger');
 
+console.log(config)
 // MySQL Configuration for XAMPP
 const sequelize = new Sequelize(
     'techturect',  // database name
@@ -26,6 +27,7 @@ const sequelize = new Sequelize(
     }
 );
 
+// Test the connection
 // Test the connection
 sequelize.authenticate()
     .then(() => {

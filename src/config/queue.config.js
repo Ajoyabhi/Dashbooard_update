@@ -3,28 +3,23 @@ const Redis = require('ioredis');
 const { logger } = require('../utils/logger');
 require('dotenv').config();
 
+
+console.log("this is redis port ______________________________________________________________________________________", parseInt(process.env.REDIS_PORT))
 // Create Redis clients for different purposes
 const createRedisClient = (type) => {
   logger.info(`Creating Redis client for ${type}`);
-  console.log("REDIS_HOST",process.env.REDIS_HOST);
-  // Default Redis configuration
-  const defaultPort = 6379;
-  const port = parseInt(process.env.REDIS_PORT || defaultPort);
   
+  // Ensure port is a valid number
+  const port = parseInt(process.env.REDIS_PORT);
   if (isNaN(port) || port < 0 || port > 65535) {
-    throw new Error(`Invalid Redis port: ${process.env.REDIS_PORT}. Using default port ${defaultPort}`);
-  }
-
-  // Validate required environment variables
-  if (!process.env.REDIS_HOST) {
-    throw new Error('REDIS_HOST environment variable is required');
+    throw new Error(`Invalid Redis port: ${process.env.REDIS_PORT}`);
   }
 
   // Base configuration for all clients
   const baseConfig = {
     host: process.env.REDIS_HOST,
     port: port,
-    password: process.env.REDIS_PASSWORD || undefined, // Make password optional
+    password: process.env.REDIS_PASSWORD,
     retryStrategy: (times) => {
       if (times > 10) {
         logger.error(`Redis ${type} client max retries reached`);

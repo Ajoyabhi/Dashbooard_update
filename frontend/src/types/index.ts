@@ -1,6 +1,6 @@
 import { DivideIcon as LucideIcon } from 'lucide-react';
 
-export type UserRole = 'admin' | 'agent' | 'user';
+export type UserRole = 'admin' | 'agent' | 'user' | 'payin_payout';
 
 export interface User {
   id: number;

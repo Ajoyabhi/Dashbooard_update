@@ -1,6 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const Transaction = require('../models/transaction.model');
-const { User, UserStatus, MerchantDetails, MerchantCharges, MerchantModeCharges, FinancialDetails, UserIPs, TransactionCharges } = require('../models');
+const { User, UserStatus, MerchantDetails, MerchantCharges, MerchantModeCharges, FinancialDetails, UserIPs, TransactionCharges, PlatformCharges } = require('../models');
 // const Agent = require('../models/agent.model');
 const { logger } = require('../utils/logger');
 const { setValidationResult, setThirdPartyApiInfo } = require('../middleware/apiLogger.middleware');
@@ -8,9 +8,11 @@ const { validatePaymentRequest } = require('../controllers/payment.controller');
 const PayoutTransaction = require('../models/payoutTransaction.model');
 const UserTransaction = require('../models/userTransaction.model');
 const { Op } = require('sequelize');
-const { unpayPayout } = require('../merchant_payin_payout/merchant_payout_request');
+const { unpayPayout, spayPayout, philpayPayout } = require('../merchant_payin_payout/merchant_payout_request');
 const getClientIp = require('../utils/getClientIp');
 const mongoose = require('mongoose');
+const { encryptText } = require('../merchant_payin_payout/utils_payout');
+const axios = require('axios');
 
 /**
  * Initiate a payout
@@ -60,6 +62,37 @@ const initiatePayout = async (req, res) => {
         return res.status(400).json({ 
           success: false, 
           message: 'Minimum payout amount is 100' 
+        });
+      }
+      // Get financial details for the user
+      const financialDetails = await FinancialDetails.findOne({
+        where: { user_id: user_id }
+      });
+
+      if (!financialDetails) {
+        return res.status(400).json({
+          success: false,
+          message: 'Financial details not found for user'
+        });
+      }
+      const settlementAmount = parseFloat(financialDetails.settlement);
+      const requestedAmount = parseFloat(amount);
+
+      if (isNaN(settlementAmount) || isNaN(requestedAmount)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid amount values'
+        });
+      }
+
+      if (settlementAmount < requestedAmount) {
+        return res.status(400).json({
+          success: false,
+          message: 'Insufficient balance',
+          details: {
+            available: settlementAmount,
+            requested: requestedAmount
+          }
         });
       }
 
@@ -158,6 +191,8 @@ const initiatePayout = async (req, res) => {
       // Calculate charges based on charge type
       let adminCharge = 0;
       let agentCharge = 0;
+      let gstAmount = 0;
+      let platformFee = 0;
 
       // Calculate admin charge
       if (applicableBracket.admin_payout_charge_type === 'percentage') {
@@ -173,11 +208,27 @@ const initiatePayout = async (req, res) => {
         agentCharge = parseFloat(applicableBracket.agent_payout_charge);
       }
 
-      // Calculate total charges
+      // Calculate total charges first
       const totalCharges = parseFloat(adminCharge);
+
+      // Fetch platform charges from database
+      const platformCharges = await PlatformCharges.findOne({
+        where: { is_active: true }
+      });
+
+      if(platformCharges?.charge){
+        platformFee = (totalCharges * parseFloat(platformCharges.charge)) / 100;
+      }
+
+      if(platformCharges?.gst){
+        gstAmount = (totalCharges * parseFloat(platformCharges.gst)) / 100;
+      }
+
+      // Update total charges to include platform fee and GST
+      const finalTotalCharges = totalCharges + parseFloat(gstAmount) + parseFloat(platformFee);
       
       // Calculate final amount to deduct (amount + charges)
-      const amountToDeduct = parseFloat(amount) + totalCharges;
+      const amountToDeduct = parseFloat(amount) + finalTotalCharges;
       
       // Calculate remaining balance
       const user_balance_left = parseFloat(user.FinancialDetail.settlement) - amountToDeduct;
@@ -206,6 +257,8 @@ const initiatePayout = async (req, res) => {
           agent_charge: agentCharge,
           total_charges: totalCharges
         },
+        gst_amount: gstAmount,
+        platform_fee: platformFee,
         balance: {
           before: user.FinancialDetail.settlement,
           after: user_balance_left
@@ -239,6 +292,8 @@ const initiatePayout = async (req, res) => {
           agent_charge: agentCharge,
           total_charges: totalCharges
         },
+        gst_amount: gstAmount,
+        platform_fee: platformFee,
         beneficiary_details: {
           account_number: account_number,
           account_ifsc: account_ifsc,
@@ -270,6 +325,8 @@ const initiatePayout = async (req, res) => {
         merchant_charge: adminCharge,
         agent_charge: agentCharge,
         total_charges: totalCharges,
+        gst_amount: gstAmount,
+        platform_fee: platformFee,
         user_id: user_id,
         status: 'pending',
         metadata: {
@@ -277,11 +334,13 @@ const initiatePayout = async (req, res) => {
           requested_ip: clientIp
         }
       });
-
-      if (user.MerchantDetail.payout_merchant_name === 'unpay') {
+      let result;
+      if (user.MerchantDetail.payout_merchant_name === 'Unpay') {
         const payoutData = {
           reference_id,
+          user_id,
           amount,
+          amountToDeduct,
           beneficiary_details: {
             account_number,
             account_ifsc,
@@ -291,58 +350,96 @@ const initiatePayout = async (req, res) => {
           }
         };
         result = await unpayPayout(payoutData);
+        if (result?.status == 200) {
+          await payoutTransaction.updateOne(
+            { reference_id: reference_id },
+            { $set: { status: "completed", gateway_response: { reference_id, status: "completed", message: result.data.message, merchant_response: result.data.txn_id } } }
+          );
+          await userTransaction.updateOne(
+            { reference_id: reference_id },
+            { $set: { status: "completed", gateway_response: { reference_id, status: "completed", message: result.data.message, merchant_response: result.data.txn_id } } }
+          );
+          await TransactionCharges.update(
+            {
+              status: 'completed',
+              merchant_response: result.data.txn_id
+            },
+            { where: { reference_id: reference_id } }
+          );
+          res.status(200).json({
+            // result od chnages
+            success: true,
+            result: result.data.message,
+            utr: result.data.utr,
+            reference_id: result.data.apitxnid
+          });
+        } else {
+          await payoutTransaction.updateOne(
+            { reference_id: reference_id },
+            { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result?.data?.message || 'Unknown error' } } }
+          );
+          await userTransaction.updateOne(
+            { reference_id: reference_id },
+            { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result?.data?.message || 'Unknown error' } } }
+          );
+          await TransactionCharges.update(
+            {
+              status: 'failed',
+              merchant_response: result.data.txn_id
+            },
+            { where: { reference_id: reference_id } }
+          );
+          res.status(400).json({
+            success: false,
+            message: 'Payout processing failed',
+            error: result?.data?.message || 'Unknown error',
+            utr: result.data.utr,
+            reference_id: result.data.apitxnid
+          });
+        }
       }
-      
-      // Store transaction charges
-      console.log(result);
+      else if (user.MerchantDetail.payout_merchant_name === 'SPay') {
+        const payoutData = {
+          reference_id,
+          user_id,
+          amount,
+          amountToDeduct,
+          request_type,
+          beneficiary_details: {
+            account_number,
+            account_ifsc,
+            bank_name,
+            beneficiary_name,
+            mobile: user.mobile,
+            email: user.email,
+            address: user.address,
+            upi_on: user.upi_on || ''
+          }
+        };
+        result = await spayPayout(payoutData);
+        console.log("this is result of spay payout", result)
+      }
+      else if (user.MerchantDetail.payout_merchant_name === 'Philpay') {
+        const payoutData = {
+          reference_id,
+          user_id,
+          amount,
+          amountToDeduct,
+          request_type,
+          beneficiary_details: {
+            account_number,
+            account_ifsc,
+            bank_name,
+            beneficiary_name,
+            mobile: user.mobile,
+            email: user.email,
+            address: user.address
+          }
+        };
+        result = await philpayPayout(payoutData);
+        console.log("this is result of philpay payout", result)
+      }
 
-      
-      // Send response based on result
-      if (result?.status == 200) {
-        await payoutTransaction.updateOne(
-          { reference_id: reference_id },
-          { $set: { status: "completed", gateway_response: { reference_id, status: "completed", message: result.data.message, merchant_response: result.data.txn_id } } }
-        );
-        await userTransaction.updateOne(
-          { reference_id: reference_id },
-          { $set: { status: "completed", gateway_response: { reference_id, status: "completed", message: result.data.message, merchant_response: result.data.txn_id } } }
-        );
-        await TransactionCharges.update(
-          {
-            status: 'completed',
-            merchant_response: result.data.txn_id
-          },
-          { where: { reference_id: reference_id } }
-        );
-        res.status(200).json({
-          success: true,
-          message: 'Payout processed successfully',
-          transaction_id: result.data.txn_id,
-          result: result.data.message
-        });
-      } else {
-        await payoutTransaction.updateOne(
-          { reference_id: reference_id },
-          { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result?.data?.message || 'Unknown error' } } }
-        );
-        await userTransaction.updateOne(
-          { reference_id: reference_id },
-          { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result?.data?.message || 'Unknown error' } } }
-        );
-        await TransactionCharges.update(
-          {
-            status: 'failed',
-            merchant_response: result.data.txn_id
-          },
-          { where: { reference_id: reference_id } }
-        );
-        res.status(400).json({
-          success: false,
-          message: 'Payout processing failed',
-          transaction_id: result.data.txn_id,
-          error: result?.data?.message || 'Unknown error'
-        });
-      }
     } catch (error) {
       logger.error('Error processing payout', { error: error.message });
       res.status(500).json({ 
@@ -352,6 +449,105 @@ const initiatePayout = async (req, res) => {
     }
 };
 
+const getPayoutTransactionStatus = async (req, res) => {
+  try {
+    const { transaction_id } = req.params;
+    const user_id = req.user.id;
+
+    // Find transaction
+    const transaction = await PayoutTransaction.findOne({
+      reference_id:transaction_id
+    });
+
+    if (!transaction) {
+      return res.status(404).json({
+        success: false,
+        message: 'Transaction not found'
+      });
+    }
+
+    // Prepare request body for Unpay API
+    const requestBody = {
+      partner_id: "1809", // Get this from merchant details or config
+      apitxnid: transaction_id
+    };
+
+    // Encrypt request body
+    const aesKey = "brTaJLaVgWvshn3zHM4qt0lI1DqjFeUz"; // Get from config
+    const aesIV = "uBiWATDOnfTvhfJO"; // Get from config
+    const apiKey = "Tn3ybTJGKaDMhhj9jl89aULGf9OI0S8ZPkq0GD42"; // Get from config
+    const encryptedRequestBody = await encryptText(JSON.stringify(requestBody), aesKey, aesIV);
+
+    // Make API request to Unpay using axios
+    const response = await axios.post('https://unpay.in/tech/api/payout/order/status', 
+      { body: encryptedRequestBody },
+      {
+        headers: {
+          'accept': 'application/json',
+          'api-key': apiKey,
+          'content-type': 'application/json'
+        }
+      }
+    );
+
+    const result = response.data;
+
+    // Handle different response status codes
+    console.log("*".repeat(50));
+    console.log(result)
+    if (result.statuscode === 'TXN') {
+      // Success case
+      res.status(200).json({
+        success: true,
+        response: result
+      });
+    } else if (result.statuscode === 'TXF') {
+      // Failed case - No record found
+      res.status(200).json({
+        success: false,
+        response: result
+      });
+    } else {
+      // Unknown status code
+      res.status(200).json({
+        success: false,
+        response: result
+      });
+    }
+  } catch (error) {
+    logger.error('Error retrieving transaction status', {
+      error: error.message,
+      stack: error.stack,
+      transaction_id: req.params.transaction_id
+    });
+
+    // Handle axios specific errors
+    if (error.response) {
+      // The request was made and the server responded with a status code
+      // that falls out of the range of 2xx
+      return res.status(error.response.status).json({
+        success: false,
+        message: 'Error retrieving transaction status',
+        error: error.response.data.message || error.message
+      });
+    } else if (error.request) {
+      // The request was made but no response was received
+      return res.status(500).json({
+        success: false,
+        message: 'No response received from payment gateway',
+        error: error.message
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Error retrieving transaction status',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
-    initiatePayout
+    initiatePayout,
+    getPayoutTransactionStatus
 };
