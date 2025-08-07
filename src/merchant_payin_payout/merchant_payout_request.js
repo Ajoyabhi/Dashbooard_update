@@ -253,6 +253,9 @@ async function spayPayout(payoutData) {
     const startTime = Date.now();
     logger.info('Starting spayPayout process', { reference: payoutData.reference_id });
     try {
+        console.log("=======================================================")
+        console.log("This is part of payoutData", payoutData);
+        console.log("=======================================================")
         const token = process.env.SPAY_TOKEN;
         const payout_id = process.env.SPAY_PAYOUT_ID || '3'; // fallback to 3 if not set
         const pay_load = {

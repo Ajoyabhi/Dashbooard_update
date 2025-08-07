@@ -4,7 +4,6 @@ const { logger } = require('../utils/logger');
 require('dotenv').config();
 
 
-console.log("this is redis port ______________________________________________________________________________________", parseInt(process.env.REDIS_PORT))
 // Create Redis clients for different purposes
 const createRedisClient = (type) => {
   logger.info(`Creating Redis client for ${type}`);
@@ -167,6 +166,55 @@ const handleRedisEvents = (client, type) => {
   });
 };
 
+const philpayPayoutQueue = new Bull('philpayPayout', queueOptions);
+logger.info("Philpay payout queue created with proper Redis configuration");
+
+philpayPayoutQueue.on('error', (error) => {
+  logger.error('Philpay payout queue error:', error);
+  // Attempt to recover from connection errors
+  if (error.message.includes('Connection is closed')) {
+    logger.info('Attempting to recover from connection error...');
+    philpayPayoutQueue.resume();
+  }
+});
+
+philpayPayoutQueue.on('error', (error) => {
+  logger.error('Philpay payout queue error:', error);
+  // Attempt to recover from connection errors
+  if (error.message.includes('Connection is closed')) {
+    logger.info('Attempting to recover from connection error...');
+    philpayPayoutQueue.resume();
+  }
+});
+
+philpayPayoutQueue.on('ready', () => {
+  logger.info('Philpay payout queue is ready and connected to Redis');
+});
+
+philpayPayoutQueue.on('active', (job) => {
+  logger.info('Philpay payout job started processing', { 
+    jobId: job.id,
+    timestamp: new Date().toISOString()
+  });
+});
+
+philpayPayoutQueue.on('completed', (job) => {
+  logger.info('Philpay payout job completed', { 
+    jobId: job.id,
+    timestamp: new Date().toISOString()
+  });
+});
+
+philpayPayoutQueue.on('failed', (job, error) => {
+  logger.error('Philpay payout job failed', { 
+    jobId: job.id, 
+    error: error.message,
+    timestamp: new Date().toISOString()
+  });
+});
+
+
+
 // Apply event handlers to all clients
 handleRedisEvents(createRedisClient('client'), 'client');
 handleRedisEvents(createRedisClient('subscriber'), 'subscriber');
@@ -180,5 +228,6 @@ process.on('SIGTERM', async () => {
 });
 
 module.exports = {
-  callbackQueue
+  callbackQueue,
+  philpayPayoutQueue
 }; 

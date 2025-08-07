@@ -1,7 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const { logger } = require('../utils/logger');
 const { processPayin } = require('../services/payment.service');
-const { callbackQueue } = require('../config/queue.config');
+const { callbackQueue, philpayPayoutQueue } = require('../config/queue.config');
 const PayinTransaction = require('../models/payinTransaction.model');
 const { UserTransaction } = require('../models/userTransaction.model');
 const { MerchantDetails } = require('../models');
@@ -339,6 +339,31 @@ const handleSpayPayoutCallback = async (req, res) => {
   }
 };
 
+const handlePhilpayPayoutCallback = async (req, res) => {
+  try {
+    const callbackData = req.method === 'GET' ? req.query : req.body;
+    logger.info('Received Philpay payout callback', { 
+      method: req.method,
+      data: callbackData 
+    });
+    console.log("this is callback data of philpay payout", callbackData);
+    const job = await philpayPayoutQueue.add(callbackData, {
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 5000
+      }
+    });
+    res.status(200).json({ success: true, 
+      message: 'Callback processed successfully',
+      job_id: job.id
+    });
+  } catch (error) {
+    logger.error('Error processing Philpay payout callback', { error: error.message });
+    res.status(500).json({ success: false, message: 'Error processing callback' });
+  }
+};
+
 module.exports = {
   initiatePayment,
   handleUnpayCallback,
@@ -347,5 +372,8 @@ module.exports = {
   setValidationResult,
   validatePaymentRequestpayin,
   handleSpayCallback,
-  handleSpayPayoutCallback
+  handleSpayPayoutCallback,
+  handlePhilpayPayoutCallback
 }; 
+
+

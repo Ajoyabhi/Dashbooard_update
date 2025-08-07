@@ -56,8 +56,8 @@ const processPayin = async (data) => {
     }
 
     // Validate reference ID
-    if (reference_id.length !== 12) {
-      throw new Error('Reference number must be 12 digits');
+    if (reference_id.length < 12 || reference_id.length > 25) {
+      throw new Error('Reference number must be between 12 and 25 digits');
     }
 
     // Validate user status
@@ -279,7 +279,10 @@ const processPayin = async (data) => {
       result = await unpayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee);
     } else if(user.MerchantDetail.payin_merchant_name == "Spay"){
       result = await spayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee);
-    } else {
+    } else if(user.MerchantDetail.payin_merchant_name == "SpayIcici"){
+      result =  await spayPayinIcici(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee);
+    }
+    else {
       throw new Error('Invalid merchant name');
     }
     console.log("result", result);
@@ -528,6 +531,22 @@ const spayPayin = async (payinData, adminCharge, agentCharge, totalCharges, user
         }
         throw error;
     }
+};
+
+const spayPayinIcici = async (payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee) => {
+  try {
+    // Validate required fields
+    if (!payinData.name || !payinData.email || !payinData.phone || !payinData.order_amount) {
+      throw new Error('Missing required fields: name, email, mobile, or amount');
+    }
+
+  } catch (error) {
+    logger.error('Error processing payin request', {
+      error: error.message,
+      stack: error.stack
+    });
+    throw error;
+  }
 };
 
 
