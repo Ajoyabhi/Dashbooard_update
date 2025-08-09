@@ -4,7 +4,7 @@ module.exports = {
   development: {
     username: 'root',
     password: '',
-    database: 'techturect',
+    database: 'zintexpay_app',
     host: 'localhost',
     port: 3306,
     dialect: 'mysql',

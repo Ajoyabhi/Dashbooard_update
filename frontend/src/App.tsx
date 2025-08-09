@@ -44,6 +44,8 @@ import UserCallbacks_agent from './pages/agent/UserCallbacks_agent';
 import NotFoundPage from './pages/NotFoundPage';
 import Profile from './pages/Profile';
 import ChangePassword from './pages/ChangePassword';
+import MakePayoutFailed from './pages/admin/MakePayoutfalied';
+import TrashPayinPayoutReport from './pages/admin/TrashPayinPayoutReport';
 import { UserRole } from './types';
 
 function AppRoutes() {
@@ -76,6 +78,8 @@ function AppRoutes() {
         <Route path="/admin/chargeback-report" element={<ProtectedRoute role="admin"><ChargeBackReport /></ProtectedRoute>} />
         <Route path="/admin/manage-fund-request" element={<ProtectedRoute role="admin"><ManageFundRequest /></ProtectedRoute>} />
         <Route path="/admin/settlement" element={<ProtectedRoute role="admin"><Settlement /></ProtectedRoute>} />
+        <Route path="/admin/make-payout-failed" element={<ProtectedRoute role="admin"><MakePayoutFailed /></ProtectedRoute>} />
+        <Route path="/admin/trash-payin-payout-report" element={<ProtectedRoute role="admin"><TrashPayinPayoutReport /></ProtectedRoute>} />
 
         {/* User Routes */}
         <Route path="/user/payin-report" element={<ProtectedRoute role="user"><UserPayinReport /></ProtectedRoute>} />

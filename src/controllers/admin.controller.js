@@ -2,6 +2,7 @@ const { User, UserStatus, MerchantDetails, MerchantCharges, MerchantModeCharges,
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 const PayoutTransaction = require('../models/payoutTransaction.model');
+const PayinTransaction = require('../models/payinTransaction.model');
 // const Wallet = require('../models/wallet.model');
 const Transaction = require('../models/transaction.model');
 const UserTransaction = require('../models/userTransaction.model');
@@ -1225,7 +1226,8 @@ const getWalletTransactions = async (req, res) => {
             status,
             startDate,
             endDate,
-            search
+            search,
+            user
         } = req.query;
 
         // Convert page and pageSize to numbers
@@ -1254,13 +1256,28 @@ const getWalletTransactions = async (req, res) => {
             }
         }
 
+        // Add user filter (from dropdown selection)
+        if (user && user !== '') {
+            filter['user.user_id'] = user.toString();
+        }
+
         // Add search condition if search term is provided
-        if (search) {
-            filter.$or = [
-                { 'user.name': { $regex: search, $options: 'i' } },
+        if (search && search.trim() !== '') {
+            const searchConditions = [
                 { transaction_id: { $regex: search, $options: 'i' } },
                 { reference_id: { $regex: search, $options: 'i' } }
             ];
+
+            // If no specific user is selected from dropdown, also search by user name/email
+            if (!user || user === '') {
+                searchConditions.push(
+                    { 'user.name': { $regex: search, $options: 'i' } },
+                    { 'user.email': { $regex: search, $options: 'i' } },
+                    { 'user.mobile': { $regex: search, $options: 'i' } }
+                );
+            }
+
+            filter.$or = searchConditions;
         }
 
         // Get total count for pagination
@@ -1300,6 +1317,554 @@ const getWalletTransactions = async (req, res) => {
         });
     }
 };
+
+const getPayoutTransactions = async (req, res) => {
+    try {
+        const {
+            page = 1,
+            pageSize = 10,
+            status,
+            startDate,
+            endDate,
+            search,
+            user
+        } = req.query;
+
+        // Convert page and pageSize to numbers
+        const pageNumber = parseInt(page);
+        const limit = parseInt(pageSize);
+        const skip = (pageNumber - 1) * limit;
+
+        // Build filter object
+        const filter = {};
+
+        if (status && status !== 'all') {
+            filter.status = status;
+        }
+
+        if (startDate || endDate) {
+            filter.createdAt = {};
+            if (startDate) {
+                filter.createdAt.$gte = new Date(startDate);
+            }
+            if (endDate) {
+                filter.createdAt.$lte = new Date(endDate);
+            }
+        }
+
+        // Add user filter (from dropdown selection)
+        if (user && user !== '') {
+            filter['user.user_id'] = user.toString();
+        }
+
+        // Add search condition if search term is provided
+        if (search && search.trim() !== '') {
+            const searchConditions = [
+                { transaction_id: { $regex: search, $options: 'i' } },
+                { reference_id: { $regex: search, $options: 'i' } },
+                { 'beneficiary_details.beneficiary_name': { $regex: search, $options: 'i' } },
+                { 'beneficiary_details.account_number': { $regex: search, $options: 'i' } },
+                { 'gateway_response.utr': { $regex: search, $options: 'i' } }
+            ];
+
+            // If no specific user is selected from dropdown, also search by user name/email
+            if (!user || user === '') {
+                searchConditions.push(
+                    { 'user.name': { $regex: search, $options: 'i' } },
+                    { 'user.email': { $regex: search, $options: 'i' } },
+                    { 'user.mobile': { $regex: search, $options: 'i' } }
+                );
+            }
+
+            filter.$or = searchConditions;
+        }
+
+        // Get total count for pagination
+        const totalCount = await PayoutTransaction.countDocuments(filter);
+
+        // Get paginated transactions
+        const transactions = await PayoutTransaction.find(filter)
+            .sort({ createdAt: -1 }) // Sort by date in descending order
+            .skip(skip)
+            .limit(limit);
+
+        // Calculate pagination info
+        const totalPages = Math.ceil(totalCount / limit);
+        const hasNextPage = pageNumber < totalPages;
+        const hasPrevPage = pageNumber > 1;
+
+        res.json({
+            success: true,
+            data: {
+                transactions,
+                pagination: {
+                    currentPage: pageNumber,
+                    totalPages,
+                    totalItems: totalCount,
+                    pageSize: limit,
+                    hasNextPage,
+                    hasPrevPage
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching payout transactions:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching payout transactions',
+            error: error.message
+        });
+    }
+};
+
+const getPayinTransactions = async (req, res) => {
+    try {
+        const {
+            page = 1,
+            pageSize = 10,
+            status,
+            startDate,
+            endDate,
+            search,
+            user
+        } = req.query;
+
+        // Convert page and pageSize to numbers
+        const pageNumber = parseInt(page);
+        const limit = parseInt(pageSize);
+        const skip = (pageNumber - 1) * limit;
+
+        // Build filter object
+        const filter = {};
+
+        if (status && status !== 'all') {
+            filter.status = status;
+        }
+
+        if (startDate || endDate) {
+            filter.createdAt = {};
+            if (startDate) {
+                filter.createdAt.$gte = new Date(startDate);
+            }
+            if (endDate) {
+                filter.createdAt.$lte = new Date(endDate);
+            }
+        }
+
+        // Add user filter (from dropdown selection)
+        if (user && user !== '') {
+            filter['user.user_id'] = user.toString();
+        }
+
+        // Add search condition if search term is provided
+        if (search && search.trim() !== '') {
+            const searchConditions = [
+                { transaction_id: { $regex: search, $options: 'i' } },
+                { reference_id: { $regex: search, $options: 'i' } },
+                { 'beneficiary_details.beneficiary_name': { $regex: search, $options: 'i' } },
+                { 'beneficiary_details.beneficiary_email': { $regex: search, $options: 'i' } },
+                { 'gateway_response.utr': { $regex: search, $options: 'i' } }
+            ];
+
+            // If no specific user is selected from dropdown, also search by user name/email
+            if (!user || user === '') {
+                searchConditions.push(
+                    { 'user.name': { $regex: search, $options: 'i' } },
+                    { 'user.email': { $regex: search, $options: 'i' } },
+                    { 'user.mobile': { $regex: search, $options: 'i' } }
+                );
+            }
+
+            filter.$or = searchConditions;
+        }
+
+        // Get total count for pagination
+        const totalCount = await PayinTransaction.countDocuments(filter);
+
+        // Get paginated transactions
+        const transactions = await PayinTransaction.find(filter)
+            .sort({ createdAt: -1 }) // Sort by date in descending order
+            .skip(skip)
+            .limit(limit);
+
+        // Calculate pagination info
+        const totalPages = Math.ceil(totalCount / limit);
+        const hasNextPage = pageNumber < totalPages;
+        const hasPrevPage = pageNumber > 1;
+
+        res.json({
+            success: true,
+            data: {
+                transactions,
+                pagination: {
+                    currentPage: pageNumber,
+                    totalPages,
+                    totalItems: totalCount,
+                    pageSize: limit,
+                    hasNextPage,
+                    hasPrevPage
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching payin transactions:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching payin transactions',
+            error: error.message
+        });
+    }
+};
+
+
+const getPayinTransactionsDownload = async (req, res) => {
+    try {
+        const { startDate, endDate, status, user } = req.query;
+
+        // Build filter object
+        const filter = {};
+
+        if (status && status !== 'all') {
+            filter.status = status;
+        }
+
+        if (startDate || endDate) {
+            filter.createdAt = {};
+            if (startDate) {
+                filter.createdAt.$gte = new Date(startDate);
+            }
+            if (endDate) {
+                filter.createdAt.$lte = new Date(endDate);
+            }
+        }
+
+        // Add user filter
+        if (user) {
+            filter['user.user_id'] = user.toString();
+        }
+
+        // Get all payin transactions based on filters
+        const transactions = await PayinTransaction.find(filter)
+            .sort({ createdAt: -1 });
+
+        // Import ExcelJS for Excel generation
+        const ExcelJS = require('exceljs');
+
+        // Create workbook and worksheet
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Payin Transactions');
+
+        // Define columns
+        worksheet.columns = [
+            { header: 'Transaction ID', key: 'transaction_id', width: 20 },
+            { header: 'Reference ID', key: 'reference_id', width: 20 },
+            { header: 'User Name', key: 'user_name', width: 20 },
+            { header: 'User Email', key: 'user_email', width: 25 },
+            { header: 'User Mobile', key: 'user_mobile', width: 15 },
+            { header: 'Amount', key: 'amount', width: 15 },
+            { header: 'Admin Charge', key: 'admin_charge', width: 15 },
+            { header: 'Agent Charge', key: 'agent_charge', width: 15 },
+            { header: 'Total Charges', key: 'total_charges', width: 15 },
+            { header: 'Beneficiary Name', key: 'beneficiary_name', width: 20 },
+            { header: 'Beneficiary Email', key: 'beneficiary_email', width: 25 },
+            { header: 'UTR', key: 'utr', width: 20 },
+            { header: 'Status', key: 'status', width: 15 },
+            { header: 'Created Date', key: 'created_date', width: 20 },
+            { header: 'Remark', key: 'remark', width: 30 }
+        ];
+
+        // Style the header row
+        worksheet.getRow(1).font = { bold: true };
+        worksheet.getRow(1).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE0E0E0' }
+        };
+
+        // Add data rows
+        transactions.forEach(transaction => {
+            worksheet.addRow({
+                transaction_id: transaction.transaction_id,
+                reference_id: transaction.reference_id,
+                user_name: transaction.user?.name || 'N/A',
+                user_email: transaction.user?.email || 'N/A',
+                user_mobile: transaction.user?.mobile || 'N/A',
+                amount: transaction.amount,
+                admin_charge: transaction.charges?.admin_charge || 0,
+                agent_charge: transaction.charges?.agent_charge || 0,
+                total_charges: transaction.charges?.total_charges || 0,
+                beneficiary_name: transaction.beneficiary_details?.beneficiary_name || 'N/A',
+                beneficiary_email: transaction.beneficiary_details?.beneficiary_email || 'N/A',
+                utr: transaction.gateway_response?.utr || 'N/A',
+                status: transaction.status,
+                created_date: new Date(transaction.createdAt).toLocaleString('en-IN'),
+                remark: transaction.remark || 'N/A'
+            });
+        });
+
+        // Set response headers for file download
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename=payin-transactions-${new Date().toISOString().split('T')[0]}.xlsx`);
+
+        // Write to response
+        await workbook.xlsx.write(res);
+        res.end();
+
+    } catch (error) {
+        console.error('Error generating payin transactions download:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error generating payin transactions download',
+            error: error.message
+        });
+    }
+}
+
+const getPayoutTransactionsDownload = async (req, res) => {
+    try {
+        const { startDate, endDate, status, user } = req.query;
+
+        // Build filter object
+        const filter = {};
+
+        if (status && status !== 'all') {
+            filter.status = status;
+        }
+
+        if (startDate || endDate) {
+            filter.createdAt = {};
+            if (startDate) {
+                filter.createdAt.$gte = new Date(startDate);
+            }
+            if (endDate) {
+                filter.createdAt.$lte = new Date(endDate);
+            }
+        }
+
+        // Add user filter
+        if (user) {
+            filter['user.user_id'] = user.toString();
+        }
+
+        // Get all payout transactions based on filters
+        const transactions = await PayoutTransaction.find(filter)
+            .sort({ createdAt: -1 });
+
+        // Import ExcelJS for Excel generation
+        const ExcelJS = require('exceljs');
+
+        // Create workbook and worksheet
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Payout Transactions');
+
+        // Define columns
+        worksheet.columns = [
+            { header: 'Transaction ID', key: 'transaction_id', width: 20 },
+            { header: 'Reference ID', key: 'reference_id', width: 20 },
+            { header: 'User Name', key: 'user_name', width: 20 },
+            { header: 'User Email', key: 'user_email', width: 25 },
+            { header: 'User Mobile', key: 'user_mobile', width: 15 },
+            { header: 'Amount', key: 'amount', width: 15 },
+            { header: 'Admin Charge', key: 'admin_charge', width: 15 },
+            { header: 'Agent Charge', key: 'agent_charge', width: 15 },
+            { header: 'Total Charges', key: 'total_charges', width: 15 },
+            { header: 'Beneficiary Name', key: 'beneficiary_name', width: 20 },
+            { header: 'Account Number', key: 'account_number', width: 20 },
+            { header: 'IFSC Code', key: 'ifsc_code', width: 15 },
+            { header: 'Bank Name', key: 'bank_name', width: 20 },
+            { header: 'UTR', key: 'utr', width: 20 },
+            { header: 'Status', key: 'status', width: 15 },
+            { header: 'Created Date', key: 'created_date', width: 20 },
+            { header: 'Remark', key: 'remark', width: 30 }
+        ];
+
+        // Style the header row
+        worksheet.getRow(1).font = { bold: true };
+        worksheet.getRow(1).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE0E0E0' }
+        };
+
+        // Add data rows
+        transactions.forEach(transaction => {
+            worksheet.addRow({
+                transaction_id: transaction.transaction_id,
+                reference_id: transaction.reference_id,
+                user_name: transaction.user?.name || 'N/A',
+                user_email: transaction.user?.email || 'N/A',
+                user_mobile: transaction.user?.mobile || 'N/A',
+                amount: transaction.amount,
+                admin_charge: transaction.charges?.admin_charge || 0,
+                agent_charge: transaction.charges?.agent_charge || 0,
+                total_charges: transaction.charges?.total_charges || 0,
+                beneficiary_name: transaction.beneficiary_details?.beneficiary_name || 'N/A',
+                account_number: transaction.beneficiary_details?.account_number || 'N/A',
+                ifsc_code: transaction.beneficiary_details?.account_ifsc || 'N/A',
+                bank_name: transaction.beneficiary_details?.bank_name || 'N/A',
+                utr: transaction.gateway_response?.utr || 'N/A',
+                status: transaction.status,
+                created_date: new Date(transaction.createdAt).toLocaleString('en-IN'),
+                remark: transaction.remark || 'N/A'
+            });
+        });
+
+        // Set response headers for file download
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename=payout-transactions-${new Date().toISOString().split('T')[0]}.xlsx`);
+
+        // Write to response
+        await workbook.xlsx.write(res);
+        res.end();
+
+    } catch (error) {
+        console.error('Error generating payout transactions download:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error generating payout transactions download',
+            error: error.message
+        });
+    }
+}
+
+// Get users for dropdown (simplified list)
+const getUsersForDropdown = async (req, res) => {
+    try {
+        const users = await User.findAll({
+            attributes: ['id', 'name', 'email', 'mobile'],
+            order: [['name', 'ASC']]
+        });
+
+        const userOptions = users.map(user => ({
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            mobile: user.mobile,
+            displayText: `${user.name} (${user.email})`
+        }));
+
+        res.json({
+            success: true,
+            data: userOptions
+        });
+    } catch (error) {
+        console.error('Error fetching users for dropdown:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching users for dropdown',
+            error: error.message
+        });
+    }
+};
+
+const getWalletTransactionsDownload = async (req, res) => {
+    try {
+        const { startDate, endDate, status, type, user } = req.query;
+
+        // Build filter object
+        const filter = {};
+
+        if (type && type !== 'all') {
+            filter.transaction_type = type;
+        }
+
+        if (status && status !== 'all') {
+            filter.status = status;
+        }
+
+        if (startDate || endDate) {
+            filter.createdAt = {};
+            if (startDate) {
+                filter.createdAt.$gte = new Date(startDate);
+            }
+            if (endDate) {
+                filter.createdAt.$lte = new Date(endDate);
+            }
+        }
+
+        // Add user filter
+        if (user) {
+            filter['user.user_id'] = user.toString();
+        }
+
+        // Get all wallet transactions based on filters
+        const transactions = await UserTransaction.find(filter)
+            .sort({ createdAt: -1 });
+
+        // Import ExcelJS for Excel generation
+        const ExcelJS = require('exceljs');
+
+        // Create workbook and worksheet
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Wallet Transactions');
+
+        // Define columns
+        worksheet.columns = [
+            { header: 'Transaction ID', key: 'transaction_id', width: 20 },
+            { header: 'Transaction Type', key: 'transaction_type', width: 15 },
+            { header: 'User Name', key: 'user_name', width: 20 },
+            { header: 'User Email', key: 'user_email', width: 25 },
+            { header: 'User Mobile', key: 'user_mobile', width: 15 },
+            { header: 'Amount', key: 'amount', width: 15 },
+            { header: 'Admin Charge', key: 'admin_charge', width: 15 },
+            { header: 'Agent Charge', key: 'agent_charge', width: 15 },
+            { header: 'Total Charges', key: 'total_charges', width: 15 },
+            { header: 'Balance Before', key: 'balance_before', width: 15 },
+            { header: 'Balance After', key: 'balance_after', width: 15 },
+            { header: 'Merchant Name', key: 'merchant_name', width: 20 },
+            { header: 'UTR', key: 'utr', width: 20 },
+            { header: 'Status', key: 'status', width: 15 },
+            { header: 'Created Date', key: 'created_date', width: 20 },
+            { header: 'Remark', key: 'remark', width: 30 }
+        ];
+
+        // Style the header row
+        worksheet.getRow(1).font = { bold: true };
+        worksheet.getRow(1).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE0E0E0' }
+        };
+
+        // Add data rows
+        transactions.forEach(transaction => {
+            worksheet.addRow({
+                transaction_id: transaction.transaction_id,
+                transaction_type: transaction.transaction_type,
+                user_name: transaction.user?.name || 'N/A',
+                user_email: transaction.user?.email || 'N/A',
+                user_mobile: transaction.user?.mobile || 'N/A',
+                amount: transaction.amount,
+                admin_charge: transaction.charges?.admin_charge || 0,
+                agent_charge: transaction.charges?.agent_charge || 0,
+                total_charges: transaction.charges?.total_charges || 0,
+                balance_before: transaction.balance?.before || 0,
+                balance_after: transaction.balance?.after || 0,
+                merchant_name: transaction.merchant_details?.merchant_name || 'N/A',
+                utr: transaction.gateway_response?.utr || 'N/A',
+                status: transaction.status,
+                created_date: new Date(transaction.createdAt).toLocaleString('en-IN'),
+                remark: transaction.remark || 'N/A'
+            });
+        });
+
+        // Set response headers for file download
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename=wallet-transactions-${new Date().toISOString().split('T')[0]}.xlsx`);
+
+        // Write to response
+        await workbook.xlsx.write(res);
+        res.end();
+
+    } catch (error) {
+        console.error('Error generating wallet transactions download:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error generating wallet transactions download',
+            error: error.message
+        });
+    }
+}
 
 // Settle amount for a user
 const settleAmount = async (req, res) => {
@@ -1707,6 +2272,382 @@ const handleChargebackAction = async (req, res) => {
     }
 };
 
+const makePayoutFailed = async (req, res) => {
+    try {
+        const { referenceNumbers } = req.body;
+        
+        // Validate input
+        if (!referenceNumbers || !Array.isArray(referenceNumbers) || referenceNumbers.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Reference numbers array is required'
+            });
+        }
+        console.log("this is here referenceNumbers", referenceNumbers);
+
+        // Import SQL models
+        const { User, ManageFundRequest, FinancialDetails, sequelize } = require('../models');
+
+        // Find and update transactions with pending status
+        // Update UserTransactions
+        const updateResult = await UserTransaction.updateMany(
+            {
+                reference_id: { $in: referenceNumbers },
+                status: 'pending'
+            },
+            {
+                $set: {
+                    status: 'failed',
+                    remark: 'Transaction marked as failed by admin',
+                    updatedAt: new Date()
+                }
+            }
+        );
+
+        // Update PayoutTransactions
+        const updatePayoutResult = await PayoutTransaction.updateMany(
+            {
+                reference_id: { $in: referenceNumbers },
+                status: 'pending'
+            },
+            { $set: { status: 'failed' } }
+        );
+
+        console.log(`Updated ${updateResult.modifiedCount} UserTransactions and ${updatePayoutResult.modifiedCount} PayoutTransactions`);
+
+        // Get the updated transactions for response
+        const updatedTransactions = await UserTransaction.find({
+            reference_id: { $in: referenceNumbers }
+        }).select('reference_id status amount user.user_id charges.total_charges createdAt updatedAt');
+
+        const updatedTransactionsPayout = await PayoutTransaction.find({
+            reference_id: { $in: referenceNumbers }
+        }).select('reference_id status amount user.user_id charges.total_charges createdAt updatedAt');
+
+        // Update wallet balance for each user
+        const walletUpdates = [];
+        const processedReferences = new Set(); // Track processed reference numbers
+        
+        // Process UserTransactions
+        for (const transaction of updatedTransactions) {
+            if (processedReferences.has(transaction.reference_id)) {
+                console.log(`Skipping duplicate reference: ${transaction.reference_id}`);
+                continue;
+            }
+            processedReferences.add(transaction.reference_id);
+            if (transaction.user && transaction.user.user_id) {
+                try {
+                    console.log("Processing UserTransaction:", {
+                        reference_id: transaction.reference_id,
+                        user_id: transaction.user.user_id,
+                        amount: transaction.amount,
+                        charges: transaction.charges
+                    });
+
+                    // Find the user in SQL database
+                    const user = await User.findByPk(transaction.user.user_id);
+                    if (user) {
+                        console.log("Found user:", user.name);
+                        
+                        // Find or create financial details for this user
+                        const [financialDetails, created] = await FinancialDetails.findOrCreate({
+                            where: { user_id: transaction.user.user_id },
+                            defaults: {
+                                wallet: 0,
+                                settlement: 0,
+                                lien: 0,
+                                rolling_reserve: 0
+                            }
+                        });
+
+                        console.log("Current wallet balance:", financialDetails.wallet);
+                        
+                        // Calculate amount to add to wallet
+                        const amount = parseFloat(transaction.amount) || 0;
+                        const charges = parseFloat(transaction.charges?.total_charges) || 0;
+                        const totalAmount = amount + charges;
+                        
+                        console.log("Amount calculation:", {
+                            amount: amount,
+                            charges: charges,
+                            totalAmount: totalAmount
+                        });
+
+                        // Update wallet balance using a more explicit approach
+                        const newBalance = parseFloat(financialDetails.wallet) + totalAmount;
+                        console.log("New wallet balance will be:", newBalance);
+                        
+                        await financialDetails.update({
+                            wallet: newBalance
+                        });
+
+                        // Verify the update
+                        const updatedFinancialDetails = await FinancialDetails.findOne({
+                            where: { user_id: transaction.user.user_id }
+                        });
+                        console.log("Updated wallet balance:", updatedFinancialDetails.wallet);
+
+                        walletUpdates.push({
+                            user_id: transaction.user.user_id,
+                            user_name: user.name,
+                            amount_added: totalAmount,
+                            transaction_type: 'UserTransaction',
+                            reference_id: transaction.reference_id,
+                            old_balance: financialDetails.wallet,
+                            new_balance: updatedFinancialDetails.wallet
+                        });
+                    } else {
+                        console.log("User not found:", transaction.user.user_id);
+                    }
+                } catch (error) {
+                    console.error(`Error updating wallet for user ${transaction.user.user_id}:`, error);
+                }
+            }
+        }
+
+        // Process PayoutTransactions
+        for (const transaction of updatedTransactionsPayout) {
+            if (processedReferences.has(transaction.reference_id)) {
+                console.log(`Skipping duplicate reference: ${transaction.reference_id}`);
+                continue;
+            }
+            processedReferences.add(transaction.reference_id);
+            if (transaction.user && transaction.user.user_id) {
+                try {
+                    console.log("Processing PayoutTransaction:", {
+                        reference_id: transaction.reference_id,
+                        user_id: transaction.user.user_id,
+                        amount: transaction.amount,
+                        charges: transaction.charges
+                    });
+
+                    // Find the user in SQL database
+                    const user = await User.findByPk(transaction.user.user_id);
+                    if (user) {
+                        console.log("Found user:", user.name);
+                        
+                        // Find or create financial details for this user
+                        const [financialDetails, created] = await FinancialDetails.findOrCreate({
+                            where: { user_id: transaction.user.user_id },
+                            defaults: {
+                                wallet: 0,
+                                settlement: 0,
+                                lien: 0,
+                                rolling_reserve: 0
+                            }
+                        });
+
+                        console.log("Current wallet balance:", financialDetails.wallet);
+                        
+                        // Calculate amount to add to wallet
+                        const amount = parseFloat(transaction.amount) || 0;
+                        const charges = parseFloat(transaction.charges?.total_charges) || 0;
+                        const totalAmount = amount + charges;
+                        
+                        console.log("Amount calculation:", {
+                            amount: amount,
+                            charges: charges,
+                            totalAmount: totalAmount
+                        });
+
+                        // Update wallet balance using a more explicit approach
+                        const newBalance = parseFloat(financialDetails.wallet) + totalAmount;
+                        console.log("New wallet balance will be:", newBalance);
+                        
+                        await financialDetails.update({
+                            wallet: newBalance
+                        });
+
+                        // Verify the update
+                        const updatedFinancialDetails = await FinancialDetails.findOne({
+                            where: { user_id: transaction.user.user_id }
+                        });
+                        console.log("Updated wallet balance:", updatedFinancialDetails.wallet);
+
+                        walletUpdates.push({
+                            user_id: transaction.user.user_id,
+                            user_name: user.name,
+                            amount_added: totalAmount,
+                            transaction_type: 'PayoutTransaction',
+                            reference_id: transaction.reference_id,
+                            old_balance: financialDetails.wallet,
+                            new_balance: updatedFinancialDetails.wallet
+                        });
+                    } else {
+                        console.log("User not found:", transaction.user.user_id);
+                    }
+                } catch (error) {
+                    console.error(`Error updating wallet for user ${transaction.user.user_id}:`, error);
+                }
+            }
+        }
+
+        res.json({
+            success: true,
+            message: `Successfully updated ${updateResult.modifiedCount + updatePayoutResult.modifiedCount} transactions to failed status and updated wallet balances`,
+            data: {
+                modifiedCount: updateResult.modifiedCount + updatePayoutResult.modifiedCount,
+                totalMatched: updateResult.matchedCount + updatePayoutResult.matchedCount,
+                userTransactionsUpdated: updateResult.modifiedCount,
+                payoutTransactionsUpdated: updatePayoutResult.modifiedCount,
+                updatedTransactions,
+                updatedTransactionsPayout,
+                walletUpdates
+            }
+        });
+
+    } catch (error) {
+        console.error('Error making payout failed:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error updating transaction status',
+            error: error.message
+        });
+    }
+};
+
+// Get trash transaction count based on filters
+const getTrashTransactionCount = async (req, res) => {
+    try {
+        const { userId, transactionType, status } = req.query;
+
+        if (!userId || !transactionType || !status) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing required parameters: userId, transactionType, status'
+            });
+        }
+
+        let count = 0;
+        const mongoose = require('mongoose');
+
+        // Build query based on status
+        const statusQuery = status === 'all' ? {} : { status: status };
+        
+        if (transactionType === 'payin') {
+            const PayinTransaction = mongoose.model('PayinTransaction');
+            const UserTransaction = mongoose.model('UserTransaction');
+            
+            // Count from both collections
+            const payinCount = await PayinTransaction.countDocuments({
+                'user.user_id': userId,
+                ...statusQuery
+            });
+            
+            const userTransactionCount = await UserTransaction.countDocuments({
+                'user.user_id': userId,
+                transaction_type: 'payin',
+                ...statusQuery
+            });
+            
+            count = payinCount;
+        } else if (transactionType === 'payout') {
+            const PayoutTransaction = mongoose.model('PayoutTransaction');
+            const UserTransaction = mongoose.model('UserTransaction');
+            
+            // Count from both collections
+            const payoutCount = await PayoutTransaction.countDocuments({
+                'user.user_id': userId,
+                ...statusQuery
+            });
+            
+            const userTransactionCount = await UserTransaction.countDocuments({
+                'user.user_id': userId,
+                transaction_type: 'payout',
+                ...statusQuery
+            });
+            
+            count = payoutCount;
+        }
+
+        const statusText = status === 'all' ? 'all statuses' : `status "${status}"`;
+        res.json({
+            success: true,
+            count: count,
+            message: `Found ${count} ${transactionType} transactions with ${statusText} for user ${userId}`
+        });
+
+    } catch (error) {
+        console.error('Error getting trash transaction count:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error getting transaction count',
+            error: error.message
+        });
+    }
+};
+
+// Delete trash transactions based on filters
+const deleteTrashTransactions = async (req, res) => {
+    try {
+        const { userId, transactionType, status } = req.body;
+
+        if (!userId || !transactionType || !status) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing required parameters: userId, transactionType, status'
+            });
+        }
+
+        let deletedCount = 0;
+        const mongoose = require('mongoose');
+
+        // Build query based on status
+        const statusQuery = status === 'all' ? {} : { status: status };
+
+        if (transactionType === 'payin') {
+            const PayinTransaction = mongoose.model('PayinTransaction');
+            const UserTransaction = mongoose.model('UserTransaction');
+            
+            // Delete from both collections
+            const payinResult = await PayinTransaction.deleteMany({
+                'user.user_id': userId,
+                ...statusQuery
+            });
+            
+            const userTransactionResult = await UserTransaction.deleteMany({
+                'user.user_id': userId,
+                transaction_type: 'payin',
+                ...statusQuery
+            });
+            
+            deletedCount = payinResult.deletedCount;
+        } else if (transactionType === 'payout') {
+            const PayoutTransaction = mongoose.model('PayoutTransaction');
+            const UserTransaction = mongoose.model('UserTransaction');
+            
+            // Delete from both collections
+            const payoutResult = await PayoutTransaction.deleteMany({
+                'user.user_id': userId,
+                ...statusQuery
+            });
+            
+            const userTransactionResult = await UserTransaction.deleteMany({
+                'user.user_id': userId,
+                transaction_type: 'payout',
+                ...statusQuery
+            });
+            
+            deletedCount = payoutResult.deletedCount;
+        }
+
+        const statusText = status === 'all' ? 'all statuses' : `status "${status}"`;
+        res.json({
+            success: true,
+            deletedCount: deletedCount,
+            message: `Successfully deleted ${deletedCount} ${transactionType} transactions with ${statusText} for user ${userId}`
+        });
+
+    } catch (error) {
+        console.error('Error deleting trash transactions:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error deleting transactions',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
   getAllUsers,
   getAllAgents,
@@ -1741,5 +2682,14 @@ module.exports = {
   getManageFundRequest,
   updateManageFundRequest,
   getChargeback,
-  handleChargebackAction
-}; 
+  handleChargebackAction,
+  getPayoutTransactions,
+  getPayinTransactions,
+  getPayinTransactionsDownload,
+  getPayoutTransactionsDownload,
+  getWalletTransactionsDownload,
+  getUsersForDropdown,
+  makePayoutFailed,
+  getTrashTransactionCount,
+  deleteTrashTransactions
+};

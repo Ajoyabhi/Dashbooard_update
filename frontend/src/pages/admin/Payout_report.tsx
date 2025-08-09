@@ -1,291 +1,253 @@
-// import React, { useState } from 'react';
-// import {
-//     Box,
-//     Paper,
-//     Table,
-//     TableBody,
-//     TableCell,
-//     TableContainer,
-//     TableHead,
-//     TableRow,
-//     TablePagination,
-//     TextField,
-//     Typography,
-//     Grid,
-//     MenuItem,
-// } from '@mui/material';
-
-// interface PayoutData {
-//     transactionId: string;
-//     type: string;
-//     date: string;
-//     user: string;
-//     merchant: string;
-//     amount: number;
-//     charges: number;
-//     balance: number;
-//     status: string;
-// }
-
-// const PayoutReport: React.FC = () => {
-//     const [page, setPage] = useState(0);
-//     const [rowsPerPage, setRowsPerPage] = useState(10);
-//     const [filters, setFilters] = useState({
-//         transactionId: '',
-//         type: '',
-//         user: '',
-//         merchant: '',
-//         status: '',
-//     });
-
-//     // Sample data - replace with actual API call
-//     const [data] = useState<PayoutData[]>([
-//         {
-//             transactionId: 'TRX001',
-//             type: 'Payout',
-//             date: '2024-03-20',
-//             user: 'John Doe',
-//             merchant: 'Merchant A',
-//             amount: 1000.00,
-//             charges: 10.00,
-//             balance: 990.00,
-//             status: 'Completed',
-//         },
-//         // Add more sample data as needed
-//     ]);
-
-//     const handleChangePage = (event: unknown, newPage: number) => {
-//         setPage(newPage);
-//     };
-
-//     const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
-//         setRowsPerPage(parseInt(event.target.value, 10));
-//         setPage(0);
-//     };
-
-//     const handleFilterChange = (field: string) => (event: React.ChangeEvent<HTMLInputElement>) => {
-//         setFilters({
-//             ...filters,
-//             [field]: event.target.value,
-//         });
-//     };
-
-//     const filteredData = data.filter((row) => {
-//         return (
-//             row.transactionId.toLowerCase().includes(filters.transactionId.toLowerCase()) &&
-//             row.type.toLowerCase().includes(filters.type.toLowerCase()) &&
-//             row.user.toLowerCase().includes(filters.user.toLowerCase()) &&
-//             row.merchant.toLowerCase().includes(filters.merchant.toLowerCase()) &&
-//             row.status.toLowerCase().includes(filters.status.toLowerCase())
-//         );
-//     });
-
-//     return (
-//         <Box sx={{ p: 3 }}>
-//             <Typography variant="h4" gutterBottom>
-//                 Payout Report
-//             </Typography>
-
-//             {/* Filters */}
-//             <Paper sx={{ p: 2, mb: 2 }}>
-//                 <Grid container spacing={2}>
-//                     <Grid item xs={12} sm={6} md={2}>
-//                         <TextField
-//                             fullWidth
-//                             label="Transaction ID"
-//                             value={filters.transactionId}
-//                             onChange={handleFilterChange('transactionId')}
-//                             size="small"
-//                         />
-//                     </Grid>
-//                     <Grid item xs={12} sm={6} md={2}>
-//                         <TextField
-//                             fullWidth
-//                             label="Type"
-//                             value={filters.type}
-//                             onChange={handleFilterChange('type')}
-//                             size="small"
-//                         />
-//                     </Grid>
-//                     <Grid item xs={12} sm={6} md={2}>
-//                         <TextField
-//                             fullWidth
-//                             label="User"
-//                             value={filters.user}
-//                             onChange={handleFilterChange('user')}
-//                             size="small"
-//                         />
-//                     </Grid>
-//                     <Grid item xs={12} sm={6} md={2}>
-//                         <TextField
-//                             fullWidth
-//                             label="Merchant"
-//                             value={filters.merchant}
-//                             onChange={handleFilterChange('merchant')}
-//                             size="small"
-//                         />
-//                     </Grid>
-//                     <Grid item xs={12} sm={6} md={2}>
-//                         <TextField
-//                             fullWidth
-//                             label="Status"
-//                             value={filters.status}
-//                             onChange={handleFilterChange('status')}
-//                             size="small"
-//                         />
-//                     </Grid>
-//                 </Grid>
-//             </Paper>
-
-//             {/* Table */}
-//             <TableContainer component={Paper}>
-//                 <Table>
-//                     <TableHead>
-//                         <TableRow>
-//                             <TableCell>Transaction ID</TableCell>
-//                             <TableCell>Type</TableCell>
-//                             <TableCell>Date</TableCell>
-//                             <TableCell>User</TableCell>
-//                             <TableCell>Merchant</TableCell>
-//                             <TableCell align="right">Amount</TableCell>
-//                             <TableCell align="right">Charges</TableCell>
-//                             <TableCell align="right">Balance</TableCell>
-//                             <TableCell>Status</TableCell>
-//                         </TableRow>
-//                     </TableHead>
-//                     <TableBody>
-//                         {filteredData
-//                             .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-//                             .map((row) => (
-//                                 <TableRow key={row.transactionId}>
-//                                     <TableCell>{row.transactionId}</TableCell>
-//                                     <TableCell>{row.type}</TableCell>
-//                                     <TableCell>{row.date}</TableCell>
-//                                     <TableCell>{row.user}</TableCell>
-//                                     <TableCell>{row.merchant}</TableCell>
-//                                     <TableCell align="right">${row.amount.toFixed(2)}</TableCell>
-//                                     <TableCell align="right">${row.charges.toFixed(2)}</TableCell>
-//                                     <TableCell align="right">${row.balance.toFixed(2)}</TableCell>
-//                                     <TableCell>{row.status}</TableCell>
-//                                 </TableRow>
-//                             ))}
-//                     </TableBody>
-//                 </Table>
-//                 <TablePagination
-//                     rowsPerPageOptions={[5, 10, 25]}
-//                     component="div"
-//                     count={filteredData.length}
-//                     rowsPerPage={rowsPerPage}
-//                     page={page}
-//                     onPageChange={handleChangePage}
-//                     onRowsPerPageChange={handleChangeRowsPerPage}
-//                 />
-//             </TableContainer>
-//         </Box>
-//     );
-// };
-
-// export default PayoutReport;
-
-import { useState } from 'react';
-import { Calendar, Download } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Download, Filter, Search, X } from 'lucide-react';
+import api from '../../utils/axios';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Table from '../../components/dashboard/Table';
+import DownloadPopup, { DownloadFilters } from '../../components/ui/DownloadPopup';
 import { adminMenuItems } from '../../data/mockData';
 import { formatCurrency, formatDate, getStatusColor } from '../../utils/formatUtils';
+import { FilterOption, DateRange } from '../../types';
 
-// Mock payout transactions
-const mockPayoutTransactions = [
-  {
-    orderId: 'ORD-2025-001',
-    transactionId: 'TXN123456',
-    utr: 'UTR789012',
-    name: 'John Smith',
-    accountNo: '1234567890',
-    ifsc: 'HDFC0001234',
-    amount: 5000.00,
-    charge: 50.00,
-    gst: 9.00,
-    netAmount: 4941.00,
-    status: 'completed',
-    date: '2025-01-15T10:30:00',
-  },
-  {
-    orderId: 'ORD-2025-002',
-    transactionId: 'TXN789012',
-    utr: 'UTR345678',
-    name: 'Sarah Wilson',
-    accountNo: '0987654321',
-    ifsc: 'ICIC0005678',
-    amount: 2500.00,
-    charge: 25.00,
-    gst: 4.50,
-    netAmount: 2470.50,
-    status: 'pending',
-    date: '2025-01-16T14:45:00',
-  },
+interface UserOption {
+  id: number;
+  name: string;
+  email: string;
+  mobile: string;
+  displayText: string;
+}
+
+// Define PayoutRecord type
+interface PayoutRecord {
+  _id: string;
+  transaction_id: string;
+  reference_id: string;
+  user: {
+    name: string;
+    email: string;
+    mobile: string;
+  };
+  amount: number;
+  charges: {
+    admin_charge: number;
+    agent_charge: number;
+    total_charges: number;
+  };
+  beneficiary_details: {
+    account_number: string;
+    account_ifsc: string;
+    bank_name: string;
+    beneficiary_name: string;
+  };
+  status: string;
+  gateway_response: {
+    utr: string;
+    status: string;
+    message: string;
+  };
+  remark: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const statusOptions: FilterOption[] = [
+  { label: 'All Status', value: 'all' },
+  { label: 'Pending', value: 'pending' },
+  // { label: 'Processing', value: 'processing' },
+  { label: 'Success', value: 'success' },
+  { label: 'Failed', value: 'failed' },
 ];
 
-const AgentPayoutReport = () => {
-  const [selectedDate, setSelectedDate] = useState<string>('');
+export default function PayoutReport() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedUser, setSelectedUser] = useState('');
+  const [dateRange, setDateRange] = useState<DateRange>({
+    startDate: null,
+    endDate: null,
+  });
+  const [showFilters, setShowFilters] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [loading, setLoading] = useState(false);
+  const [transactions, setTransactions] = useState<PayoutRecord[]>([]);
+  const [pagination, setPagination] = useState({
+    totalItems: 0,
+    totalPages: 0,
+    currentPage: 1,
+    pageSize: 10,
+    hasNextPage: false,
+    hasPrevPage: false,
+  });
+  
+  // Download popup state
+  const [showDownloadPopup, setShowDownloadPopup] = useState(false);
+  const [downloadLoading, setDownloadLoading] = useState(false);
 
-  const handleDateSubmit = async () => {
-    if (!selectedDate) {
-      window.showToast('error', 'Please select a date');
-      return;
-    }
+  // Users for dropdown
+  const [users, setUsers] = useState<UserOption[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
 
-    setLoading(true);
+  // Fetch users for dropdown
+  const fetchUsers = async () => {
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      window.showToast('success', 'Payout transactions fetched successfully');
+      setUsersLoading(true);
+      const response = await api.get('/admin/users-dropdown');
+      setUsers(response.data.data);
     } catch (error) {
-      window.showToast('error', 'Failed to fetch payout transactions');
+      console.error('Error fetching users:', error);
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  // Fetch transactions with pagination and filters
+  const fetchTransactions = async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams({
+        page: currentPage.toString(),
+        pageSize: pageSize.toString(),
+        status: selectedStatus,
+        search: searchTerm,
+      });
+
+      if (selectedUser) {
+        params.append('user', selectedUser);
+      }
+      if (dateRange.startDate) {
+        params.append('startDate', dateRange.startDate.toISOString());
+      }
+      if (dateRange.endDate) {
+        params.append('endDate', dateRange.endDate.toISOString());
+      }
+
+      const response = await api.get(`/admin/payout-transactions?${params}`);
+      const { pagination: paginationData, transactions } = response.data.data;
+
+      setTransactions(transactions);
+      setPagination({
+        totalItems: paginationData.totalItems,
+        totalPages: paginationData.totalPages,
+        currentPage: paginationData.currentPage,
+        pageSize: paginationData.pageSize,
+        hasNextPage: paginationData.hasNextPage,
+        hasPrevPage: paginationData.hasPrevPage,
+      });
+    } catch (error) {
+      console.error('Error fetching payout transactions:', error);
+      // Handle error (show toast notification, etc.)
     } finally {
       setLoading(false);
     }
   };
 
+  // Fetch transactions when filters or pagination changes
+  useEffect(() => {
+    fetchTransactions();
+  }, [currentPage, pageSize, selectedStatus, selectedUser, dateRange, searchTerm]);
+
+  // Fetch users when component mounts
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
   const handleDownload = () => {
-    // Handle report download
-    console.log('Downloading report...');
+    setShowDownloadPopup(true);
+  };
+
+  const handleDownloadSubmit = async (filters: DownloadFilters) => {
+    try {
+      setDownloadLoading(true);
+      
+      // Build query parameters for download
+      const params = new URLSearchParams();
+      if (filters.startDate) params.append('startDate', filters.startDate);
+      if (filters.endDate) params.append('endDate', filters.endDate);
+      if (filters.status && filters.status !== 'all') params.append('status', filters.status);
+      if (filters.user) params.append('user', filters.user);
+
+      // Make API call to download report
+      const response = await api.get(`/admin/payout-transactions/download?${params}`, {
+        responseType: 'blob', // Important for file downloads
+      });
+
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `payout-report-${new Date().toISOString().split('T')[0]}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      // Close popup and show success message
+      setShowDownloadPopup(false);
+      window.showToast('success', 'Report downloaded successfully!');
+    } catch (error) {
+      console.error('Error downloading report:', error);
+      window.showToast('error', 'Failed to download report');
+    } finally {
+      setDownloadLoading(false);
+    }
+  };
+
+  const resetFilters = () => {
+    setSelectedStatus('all');
+    setSelectedUser('');
+    setDateRange({ startDate: null, endDate: null });
+    setSearchTerm('');
+    setCurrentPage(1);
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize);
+    setCurrentPage(1);
+    setPagination(prev => ({
+      ...prev,
+      pageSize: newPageSize,
+      currentPage: 1
+    }));
   };
 
   const columns = [
     {
-      header: 'Order ID',
-      accessor: 'orderId',
+      header: 'Transaction ID',
+      accessor: 'transaction_id',
       cell: (value: string) => (
         <span className="font-medium text-primary-600">{value}</span>
       ),
     },
     {
-      header: 'Transaction ID',
-      accessor: 'transactionId',
-    },
-    {
-      header: 'UTR',
-      accessor: 'utr',
-    },
-    {
-      header: 'Name',
-      accessor: 'name',
-    },
-    {
-      header: 'A/C No',
-      accessor: 'accountNo',
+      header: 'Reference ID',
+      accessor: 'reference_id',
       cell: (value: string) => (
-        <span className="font-mono">{value}</span>
+        <span className="font-mono text-sm">{value}</span>
       ),
     },
     {
-      header: 'IFSC',
-      accessor: 'ifsc',
-      cell: (value: string) => (
-        <span className="font-mono">{value}</span>
+      header: 'User',
+      accessor: 'user',
+      cell: (value: PayoutRecord['user']) => (
+        <div>
+          <div className="font-medium">{value.name}</div>
+          <div className="text-sm text-gray-500">{value.email}</div>
+        </div>
+      ),
+    },
+    {
+      header: 'Beneficiary',
+      accessor: 'beneficiary_details',
+      cell: (value: PayoutRecord['beneficiary_details']) => (
+        <div>
+          <div className="font-medium">{value.beneficiary_name}</div>
+          <div className="text-sm text-gray-500">{value.account_number}</div>
+          <div className="text-xs text-gray-400">{value.bank_name}</div>
+        </div>
       ),
     },
     {
@@ -296,24 +258,21 @@ const AgentPayoutReport = () => {
       ),
     },
     {
-      header: 'Charge',
-      accessor: 'charge',
-      cell: (value: number) => (
-        <span className="text-gray-600">{formatCurrency(value)}</span>
+      header: 'Charges',
+      accessor: 'charges',
+      cell: (value: PayoutRecord['charges']) => (
+        <div>
+          <div className="text-sm">Admin: {formatCurrency(value.admin_charge)}</div>
+          <div className="text-sm">Agent: {formatCurrency(value.agent_charge)}</div>
+          <div className="font-medium">Total: {formatCurrency(value.total_charges)}</div>
+        </div>
       ),
     },
     {
-      header: 'GST',
-      accessor: 'gst',
-      cell: (value: number) => (
-        <span className="text-gray-600">{formatCurrency(value)}</span>
-      ),
-    },
-    {
-      header: 'Net Amount',
-      accessor: 'netAmount',
-      cell: (value: number) => (
-        <span className="font-medium">{formatCurrency(value)}</span>
+      header: 'UTR',
+      accessor: 'gateway_response',
+      cell: (value: PayoutRecord['gateway_response']) => (
+        <span className="font-mono text-sm">{value.utr || 'N/A'}</span>
       ),
     },
     {
@@ -327,7 +286,7 @@ const AgentPayoutReport = () => {
     },
     {
       header: 'Date',
-      accessor: 'date',
+      accessor: 'createdAt',
       cell: (value: string) => formatDate(value),
     },
   ];
@@ -335,64 +294,163 @@ const AgentPayoutReport = () => {
   return (
     <DashboardLayout menuItems={adminMenuItems} title="Payout Report">
       <div className="space-y-6">
-        {/* Date Filter */}
-        <div className="bg-white shadow-sm rounded-lg p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex-1 max-w-xs">
-              <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
-                Select Date
-              </label>
-              <div className="relative rounded-md shadow-sm">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Calendar className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  type="date"
-                  id="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                />
-              </div>
-            </div>
-            
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={handleDateSubmit}
-                disabled={loading}
-                className={`inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
-                  loading
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-primary-600 hover:bg-primary-700'
-                }`}
-              >
-                {loading ? 'Loading...' : 'Submit'}
-              </button>
-              
-              <button
-                onClick={handleDownload}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Download Report
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Table */}
         <div className="bg-white shadow-sm rounded-lg">
           <div className="p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+              <h2 className="text-lg font-medium text-gray-900">Payout Transactions</h2>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  <Filter className="h-4 w-4 mr-1" />
+                  Filters
+                </button>
+
+                <button
+                  onClick={handleDownload}
+                  className="inline-flex items-center px-3 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
+                >
+                  <Download className="h-4 w-4 mr-1" />
+                  Download Report
+                </button>
+              </div>
+            </div>
+
+            {/* Filters */}
+            {showFilters && (
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+                  <h3 className="text-sm font-medium text-gray-700">Filter Transactions</h3>
+                  <button
+                    onClick={resetFilters}
+                    className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700"
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Reset Filters
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Status
+                    </label>
+                    <select
+                      value={selectedStatus}
+                      onChange={(e) => setSelectedStatus(e.target.value)}
+                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    >
+                      {statusOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      User
+                    </label>
+                    <select
+                      value={selectedUser}
+                      onChange={(e) => setSelectedUser(e.target.value)}
+                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                      disabled={usersLoading}
+                    >
+                      <option value="">All Users</option>
+                      {users.map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {user.displayText}
+                        </option>
+                      ))}
+                    </select>
+                    {usersLoading && (
+                      <p className="mt-1 text-xs text-gray-500">Loading users...</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Start Date
+                    </label>
+                    <input
+                      type="date"
+                      value={dateRange.startDate?.toISOString().split('T')[0] || ''}
+                      onChange={(e) => setDateRange({
+                        ...dateRange,
+                        startDate: e.target.value ? new Date(e.target.value) : null,
+                      })}
+                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      End Date
+                    </label>
+                    <input
+                      type="date"
+                      value={dateRange.endDate?.toISOString().split('T')[0] || ''}
+                      onChange={(e) => setDateRange({
+                        ...dateRange,
+                        endDate: e.target.value ? new Date(e.target.value) : null,
+                      })}
+                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Search
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Search className="h-4 w-4 text-gray-400" />
+                      </div>
+                      <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Search transactions..."
+                        className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Table */}
             <Table
               columns={columns}
-              data={mockPayoutTransactions}
+              data={transactions}
               pagination={true}
+              pageSize={pagination.pageSize}
+              totalItems={pagination.totalItems}
+              totalPages={pagination.totalPages}
+              currentPage={pagination.currentPage}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+              searchable={true}
+              filterable={false}
+              loading={loading}
             />
           </div>
         </div>
       </div>
+
+      {/* Download Popup */}
+      <DownloadPopup
+        isOpen={showDownloadPopup}
+        onClose={() => setShowDownloadPopup(false)}
+        onDownload={handleDownloadSubmit}
+        title="Download Payout Report"
+        statusOptions={statusOptions}
+        loading={downloadLoading}
+      />
     </DashboardLayout>
   );
-};
-
-export default AgentPayoutReport;
+}

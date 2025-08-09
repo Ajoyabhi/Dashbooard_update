@@ -2,7 +2,7 @@ const { Sequelize } = require('sequelize');
 const config = require('../config');
 
 const sequelize = new Sequelize(
-    'techturect',  // database name
+    'zintexpay_app',  // database name
     'root',        // username
     '',            // password (empty by default in XAMPP)
     {

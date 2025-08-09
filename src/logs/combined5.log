@@ -1,0 +1,48 @@
+{"level":"info","message":"Redis bclient client retry attempt 1 with delay 1000ms","timestamp":"2025-08-09T12:12:05.613Z"}
+{"level":"warn","message":"Redis bclient client connection closed","timestamp":"2025-08-09T12:12:05.618Z"}
+{"level":"info","message":"Redis bclient client reconnecting","timestamp":"2025-08-09T12:12:05.622Z"}
+{"code":"ETIMEDOUT","errno":-60,"level":"error","message":"Redis subscriber client error: read ETIMEDOUT","stack":"Error: read ETIMEDOUT\n    at TCP.onStreamRead (node:internal/stream_base_commons:216:20)","syscall":"read","timestamp":"2025-08-09T12:12:05.623Z"}
+{"code":"ETIMEDOUT","errno":-60,"level":"error","message":"Philpay payout queue error: read ETIMEDOUT","stack":"Error: read ETIMEDOUT\n    at TCP.onStreamRead (node:internal/stream_base_commons:216:20)","syscall":"read","timestamp":"2025-08-09T12:12:05.623Z"}
+{"code":"ETIMEDOUT","errno":-60,"level":"error","message":"Philpay payout queue error: read ETIMEDOUT","stack":"Error: read ETIMEDOUT\n    at TCP.onStreamRead (node:internal/stream_base_commons:216:20)","syscall":"read","timestamp":"2025-08-09T12:12:05.624Z"}
+{"level":"info","message":"Redis client client retry attempt 1 with delay 1000ms","timestamp":"2025-08-09T12:12:05.633Z"}
+{"level":"info","message":"Redis subscriber client retry attempt 1 with delay 1000ms","timestamp":"2025-08-09T12:12:05.633Z"}
+{"level":"warn","message":"Redis subscriber client connection closed","timestamp":"2025-08-09T12:12:05.633Z"}
+{"level":"info","message":"Redis subscriber client reconnecting","timestamp":"2025-08-09T12:12:05.633Z"}
+{"level":"info","message":"Redis bclient client connected","timestamp":"2025-08-09T12:12:06.880Z"}
+{"level":"info","message":"Redis bclient client ready","timestamp":"2025-08-09T12:12:06.880Z"}
+{"level":"info","message":"Redis subscriber client connected","timestamp":"2025-08-09T12:12:06.880Z"}
+{"level":"info","message":"Redis subscriber client ready","timestamp":"2025-08-09T12:12:06.880Z"}
+{"code":"ETIMEDOUT","errno":-60,"level":"error","message":"Redis subscriber client error: read ETIMEDOUT","stack":"Error: read ETIMEDOUT\n    at TCP.onStreamRead (node:internal/stream_base_commons:216:20)","syscall":"read","timestamp":"2025-08-09T12:27:29.812Z"}
+{"level":"info","message":"Redis subscriber client retry attempt 1 with delay 1000ms","timestamp":"2025-08-09T12:27:29.816Z"}
+{"level":"warn","message":"Redis subscriber client connection closed","timestamp":"2025-08-09T12:27:29.816Z"}
+{"level":"info","message":"Redis subscriber client reconnecting","timestamp":"2025-08-09T12:27:29.816Z"}
+{"code":"ETIMEDOUT","errno":-60,"level":"error","message":"Redis bclient client error: read ETIMEDOUT","stack":"Error: read ETIMEDOUT\n    at TCP.onStreamRead (node:internal/stream_base_commons:216:20)","syscall":"read","timestamp":"2025-08-09T12:27:29.817Z"}
+{"level":"info","message":"Redis bclient client retry attempt 1 with delay 1000ms","timestamp":"2025-08-09T12:27:29.818Z"}
+{"level":"warn","message":"Redis bclient client connection closed","timestamp":"2025-08-09T12:27:29.818Z"}
+{"level":"info","message":"Redis bclient client reconnecting","timestamp":"2025-08-09T12:27:29.818Z"}
+{"code":"ETIMEDOUT","errno":-60,"level":"error","message":"Philpay payout queue error: read ETIMEDOUT","stack":"Error: read ETIMEDOUT\n    at TCP.onStreamRead (node:internal/stream_base_commons:216:20)","syscall":"read","timestamp":"2025-08-09T12:27:30.058Z"}
+{"code":"ETIMEDOUT","errno":-60,"level":"error","message":"Philpay payout queue error: read ETIMEDOUT","stack":"Error: read ETIMEDOUT\n    at TCP.onStreamRead (node:internal/stream_base_commons:216:20)","syscall":"read","timestamp":"2025-08-09T12:27:30.058Z"}
+{"level":"info","message":"Redis client client retry attempt 1 with delay 1000ms","timestamp":"2025-08-09T12:27:30.058Z"}
+{"level":"info","message":"Redis subscriber client connected","timestamp":"2025-08-09T12:27:31.074Z"}
+{"level":"info","message":"Redis subscriber client ready","timestamp":"2025-08-09T12:27:31.074Z"}
+{"level":"info","message":"Redis bclient client connected","timestamp":"2025-08-09T12:27:31.077Z"}
+{"level":"info","message":"Redis bclient client ready","timestamp":"2025-08-09T12:27:31.077Z"}
+{"code":"ETIMEDOUT","errno":-60,"level":"error","message":"Callback queue error: read ETIMEDOUT","stack":"Error: read ETIMEDOUT\n    at TCP.onStreamRead (node:internal/stream_base_commons:216:20)","syscall":"read","timestamp":"2025-08-09T12:27:35.392Z"}
+{"level":"info","message":"Redis client client retry attempt 1 with delay 1000ms","timestamp":"2025-08-09T12:27:35.393Z"}
+{"code":"ETIMEDOUT","errno":-60,"level":"error","message":"Callback queue error: read ETIMEDOUT","stack":"Error: read ETIMEDOUT\n    at TCP.onStreamRead (node:internal/stream_base_commons:216:20)","syscall":"read","timestamp":"2025-08-09T12:34:34.905Z"}
+{"level":"info","message":"Redis client client retry attempt 1 with delay 1000ms","timestamp":"2025-08-09T12:34:34.917Z"}
+{"code":"ETIMEDOUT","errno":-60,"level":"error","message":"Redis bclient client error: read ETIMEDOUT","stack":"Error: read ETIMEDOUT\n    at TCP.onStreamRead (node:internal/stream_base_commons:216:20)","syscall":"read","timestamp":"2025-08-09T12:34:39.416Z"}
+{"level":"info","message":"Redis bclient client retry attempt 1 with delay 1000ms","timestamp":"2025-08-09T12:34:39.417Z"}
+{"level":"warn","message":"Redis bclient client connection closed","timestamp":"2025-08-09T12:34:39.417Z"}
+{"level":"info","message":"Redis bclient client reconnecting","timestamp":"2025-08-09T12:34:39.417Z"}
+{"code":"ETIMEDOUT","errno":-60,"level":"error","message":"Redis subscriber client error: read ETIMEDOUT","stack":"Error: read ETIMEDOUT\n    at TCP.onStreamRead (node:internal/stream_base_commons:216:20)","syscall":"read","timestamp":"2025-08-09T12:34:39.417Z"}
+{"level":"info","message":"Redis subscriber client retry attempt 1 with delay 1000ms","timestamp":"2025-08-09T12:34:39.418Z"}
+{"level":"warn","message":"Redis subscriber client connection closed","timestamp":"2025-08-09T12:34:39.418Z"}
+{"level":"info","message":"Redis subscriber client reconnecting","timestamp":"2025-08-09T12:34:39.418Z"}
+{"code":"ETIMEDOUT","errno":-60,"level":"error","message":"Philpay payout queue error: read ETIMEDOUT","stack":"Error: read ETIMEDOUT\n    at TCP.onStreamRead (node:internal/stream_base_commons:216:20)","syscall":"read","timestamp":"2025-08-09T12:34:39.923Z"}
+{"code":"ETIMEDOUT","errno":-60,"level":"error","message":"Philpay payout queue error: read ETIMEDOUT","stack":"Error: read ETIMEDOUT\n    at TCP.onStreamRead (node:internal/stream_base_commons:216:20)","syscall":"read","timestamp":"2025-08-09T12:34:39.924Z"}
+{"level":"info","message":"Redis client client retry attempt 1 with delay 1000ms","timestamp":"2025-08-09T12:34:39.924Z"}
+{"level":"info","message":"Redis subscriber client connected","timestamp":"2025-08-09T12:34:40.682Z"}
+{"level":"info","message":"Redis subscriber client ready","timestamp":"2025-08-09T12:34:40.683Z"}
+{"level":"info","message":"Redis bclient client connected","timestamp":"2025-08-09T12:34:40.689Z"}
+{"level":"info","message":"Redis bclient client ready","timestamp":"2025-08-09T12:34:40.689Z"}

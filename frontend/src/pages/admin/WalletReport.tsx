@@ -3,9 +3,18 @@ import { Download, Filter, Search, X } from 'lucide-react';
 import api from '../../utils/axios';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Table from '../../components/dashboard/Table';
+import DownloadPopup, { DownloadFilters } from '../../components/ui/DownloadPopup';
 import { adminMenuItems } from '../../data/mockData';
 import { formatCurrency, formatDate, getStatusColor } from '../../utils/formatUtils';
 import { WalletRecord, FilterOption, DateRange } from '../../types';
+
+interface UserOption {
+  id: number;
+  name: string;
+  email: string;
+  mobile: string;
+  displayText: string;
+}
 
 const typeOptions: FilterOption[] = [
   { label: 'All Types', value: 'all' },
@@ -25,6 +34,7 @@ export default function WalletReport() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedUser, setSelectedUser] = useState('');
   const [dateRange, setDateRange] = useState<DateRange>({
     startDate: null,
     endDate: null,
@@ -42,6 +52,27 @@ export default function WalletReport() {
     hasNextPage: false,
     hasPrevPage: false,
   });
+  
+  // Download popup state
+  const [showDownloadPopup, setShowDownloadPopup] = useState(false);
+  const [downloadLoading, setDownloadLoading] = useState(false);
+
+  // Users for dropdown
+  const [users, setUsers] = useState<UserOption[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+
+  // Fetch users for dropdown
+  const fetchUsers = async () => {
+    try {
+      setUsersLoading(true);
+      const response = await api.get('/admin/users-dropdown');
+      setUsers(response.data.data);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    } finally {
+      setUsersLoading(false);
+    }
+  };
 
   // Fetch transactions with pagination and filters
   const fetchTransactions = async () => {
@@ -55,6 +86,9 @@ export default function WalletReport() {
         search: searchTerm,
       });
 
+      if (selectedUser) {
+        params.append('user', selectedUser);
+      }
       if (dateRange.startDate) {
         params.append('startDate', dateRange.startDate.toISOString());
       }
@@ -85,21 +119,59 @@ export default function WalletReport() {
   // Fetch transactions when filters or pagination changes
   useEffect(() => {
     fetchTransactions();
-  }, [currentPage, pageSize, selectedType, selectedStatus, dateRange, searchTerm]);
+  }, [currentPage, pageSize, selectedType, selectedStatus, selectedUser, dateRange, searchTerm]);
+
+  // Fetch users when component mounts
+  useEffect(() => {
+    fetchUsers();
+  }, []);
 
   const handleDownload = () => {
-    // In a real app, this would generate and download a report
-    console.log('Downloading report with filters:', {
-      type: selectedType,
-      status: selectedStatus,
-      dateRange,
-      searchTerm,
-    });
+    setShowDownloadPopup(true);
+  };
+
+  const handleDownloadSubmit = async (filters: DownloadFilters) => {
+    try {
+      setDownloadLoading(true);
+      
+      // Build query parameters for download
+      const params = new URLSearchParams();
+      if (filters.startDate) params.append('startDate', filters.startDate);
+      if (filters.endDate) params.append('endDate', filters.endDate);
+      if (filters.status && filters.status !== 'all') params.append('status', filters.status);
+      if (filters.type && filters.type !== 'all') params.append('type', filters.type);
+      if (filters.user) params.append('user', filters.user);
+
+      // Make API call to download report
+      const response = await api.get(`/admin/wallet-transactions/download?${params}`, {
+        responseType: 'blob', // Important for file downloads
+      });
+
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `wallet-report-${new Date().toISOString().split('T')[0]}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      // Close popup and show success message
+      setShowDownloadPopup(false);
+      window.showToast('success', 'Report downloaded successfully!');
+    } catch (error) {
+      console.error('Error downloading report:', error);
+      window.showToast('error', 'Failed to download report');
+    } finally {
+      setDownloadLoading(false);
+    }
   };
 
   const resetFilters = () => {
     setSelectedType('all');
     setSelectedStatus('all');
+    setSelectedUser('');
     setDateRange({ startDate: null, endDate: null });
     setSearchTerm('');
     setCurrentPage(1);
@@ -239,7 +311,7 @@ export default function WalletReport() {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Transaction Type
@@ -276,6 +348,28 @@ export default function WalletReport() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
+                      User
+                    </label>
+                    <select
+                      value={selectedUser}
+                      onChange={(e) => setSelectedUser(e.target.value)}
+                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                      disabled={usersLoading}
+                    >
+                      <option value="">All Users</option>
+                      {users.map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {user.displayText}
+                        </option>
+                      ))}
+                    </select>
+                    {usersLoading && (
+                      <p className="mt-1 text-xs text-gray-500">Loading users...</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       Start Date
                     </label>
                     <input
@@ -303,6 +397,24 @@ export default function WalletReport() {
                       className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                     />
                   </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Search
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Search className="h-4 w-4 text-gray-400" />
+                      </div>
+                      <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Search transactions..."
+                        className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -325,6 +437,17 @@ export default function WalletReport() {
           </div>
         </div>
       </div>
+
+      {/* Download Popup */}
+      <DownloadPopup
+        isOpen={showDownloadPopup}
+        onClose={() => setShowDownloadPopup(false)}
+        onDownload={handleDownloadSubmit}
+        title="Download Wallet Report"
+        statusOptions={statusOptions}
+        typeOptions={typeOptions}
+        loading={downloadLoading}
+      />
     </DashboardLayout>
   );
 }

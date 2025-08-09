@@ -6,7 +6,7 @@ const { logger } = require('../utils/logger');
 console.log(config)
 // MySQL Configuration for XAMPP
 const sequelize = new Sequelize(
-    'techturect',  // database name
+    'zintexpay_app',  // database name
     'root',        // username
     '',            // password (empty by default in XAMPP)
     {

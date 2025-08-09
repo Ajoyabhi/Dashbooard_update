@@ -31,13 +31,14 @@ const UserWalletReport = () => {
 
   const typeOptions: FilterOption[] = [
     { label: 'All Types', value: 'all' },
-    { label: 'Credit', value: 'credit' },
-    { label: 'Debit', value: 'debit' },
+    { label: 'Payin', value: 'payin' },
+    { label: 'Payout', value: 'payout' },
   ];
 
   const statusOptions: FilterOption[] = [
     { label: 'All Status', value: 'all' },
     { label: 'Completed', value: 'completed' },
+    { label: 'Success', value: 'success' },
     { label: 'Pending', value: 'pending' },
     { label: 'Failed', value: 'failed' },
   ];
@@ -153,9 +154,9 @@ const UserWalletReport = () => {
       header: 'Amount',
       accessor: 'amount',
       cell: (value: number, row: WalletRecord) => (
-        <span className={`font-medium ${row.type === 'payin' ? 'text-success-600' : 'text-error-600'
+        <span className={`font-medium ${row.transaction_type === 'credit' ? 'text-success-600' : 'text-error-600'
           }`}>
-          {row.type === 'payin' ? '+' : '-'}{formatCurrency(value)}
+          {row.transaction_type === 'credit' ? '+' : '-'}{formatCurrency(value)}
         </span>
       ),
     },

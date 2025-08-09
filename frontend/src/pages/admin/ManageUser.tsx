@@ -69,6 +69,13 @@ export default function ManageUser() {
       ),
     },
     {
+      header: 'Settlement Balance',
+      accessor: 'settlement',
+      cell: (value: any) => (
+        <span className="font-medium text-gray-900">₹{Number(value || 0).toFixed(2)}</span>
+      ),
+    },
+    {
       header: 'Mobile',
       accessor: 'mobile',
       cell: (value: any) => value || <span className="text-gray-500">-</span>

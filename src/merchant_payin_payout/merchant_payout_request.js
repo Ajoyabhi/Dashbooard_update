@@ -5,6 +5,7 @@ const { TransactionCharges, FinancialDetails } = require('../models');
 const winston = require('winston');
 const { encryptText } = require('./utils_payout');
 const axios = require('axios');
+const crypto = require('crypto');
 require('dotenv').config();
 
 
@@ -253,9 +254,6 @@ async function spayPayout(payoutData) {
     const startTime = Date.now();
     logger.info('Starting spayPayout process', { reference: payoutData.reference_id });
     try {
-        console.log("=======================================================")
-        console.log("This is part of payoutData", payoutData);
-        console.log("=======================================================")
         const token = process.env.SPAY_TOKEN;
         const payout_id = process.env.SPAY_PAYOUT_ID || '3'; // fallback to 3 if not set
         const pay_load = {
@@ -430,7 +428,177 @@ async function spayPayout(payoutData) {
     }
 }
 
+async function philpayPayout(payoutData) {
+    const startTime = Date.now();
+    logger.info('Starting philpayPayout process', { reference: payoutData.reference_id });
+    try {
+        const access_key = process.env.PHILPAY_TOKEN;
+        const secret = process.env.PHILPAY_SECRET;
+        const domain = process.env.PHILPAY_DOMAIN;
+        if (!access_key || !secret || !domain) {
+            throw new Error('Philpay credentials or domain not set in environment variables');
+        }
+        // Payment type mapper
+        const paymentTypeMap = {
+            'NEFT': 1,
+            'UPI': 2,
+            'IMPS': 3,
+            'RTGS': 4
+        };
+        const paymentTypeValue = paymentTypeMap[(payoutData.request_type || '').toUpperCase()] || 1;
+        // Prepare payload
+        const payload = {
+            address: payoutData.beneficiary_details.address || 'Noida, Uttar Pradesh, India',
+            payment_type: paymentTypeValue, // mapped value
+            amount: parseInt(payoutData.amount)*100, // Ensure integer
+            email: payoutData.beneficiary_details.email,
+            name: payoutData.beneficiary_details.beneficiary_name,
+            mobile_number: payoutData.beneficiary_details.mobile,
+            account_number: payoutData.beneficiary_details.account_number,
+            ifsc_code: payoutData.beneficiary_details.account_ifsc,
+            merchant_order_id: payoutData.reference_id
+        };  
+        const requestData = JSON.stringify(payload);
+        const timestamp = Date.now().toString();
+        const path = "/api/v1/payout/process";
+        // Generate signature
+        function generateSignature(timestamp, body, path, queryString = '', method = 'POST') {
+            const hmac = crypto.createHmac('sha512', secret);
+            hmac.update(method);
+            hmac.update('\n');
+            hmac.update(path);
+            hmac.update('\n');
+            hmac.update(queryString);
+            hmac.update('\n');
+            hmac.update(body);
+            hmac.update('\n');
+            hmac.update(timestamp);
+            hmac.update('\n');
+            return hmac.digest('hex');
+        }
+        const signature = generateSignature(timestamp, requestData, path, '', 'POST');
+        // Headers
+        const headers = {
+            "access_key": access_key,
+            "signature": signature,
+            "X-Timestamp": timestamp,
+            "Content-Type": "application/json"
+        };
+        // Make the POST request
+        const url = `https://${domain}${path}`;
+        let result;
+        try {
+            const response = await axios.post(url, payload, { headers });
+            result = response.data;
+        } catch (err) {
+            result = err.response ? err.response.data : { status: 'error', message: err.message };
+        }
+        logger.info('Received response from Philpay API', { status: result.status, message: result.message });
+        console.log("this is imidiate response of the call", result)
+        
+        const apiLog = await ApiLogs.create({
+            request: requestData,
+            response: JSON.stringify(result),
+            service: 'PAYOUT',
+            service_api: 'PHILPAY',
+            status: result.status === 'success' ? 'success' : 'error',
+            error_message: result.message
+                ? (typeof result.message === 'string' ? result.message : JSON.stringify(result.message))
+                : null,
+            execution_time: Date.now() - startTime
+        });
+        await apiLog.save();
+        // logger.info('API log created', { logId: apiLog._id });
+        if (result.success === true) {
+
+            return {
+                data: {
+                    status: result.data.status,
+                    merchant_order_id: result.data.merchant_order_id,
+                },
+                status: 200
+            };
+        } else {
+            // Update transaction charges as failed
+            await TransactionCharges.update(
+                {
+                    status: 'failed',
+                    transaction_utr: null
+                },
+                {
+                    where: {
+                        reference_id: payoutData.reference_id
+                    }
+                }
+            );
+            // Optionally update FinancialDetails if needed (see unpayPayout)
+            const userFinancial = await FinancialDetails.findOne({
+                where: { user_id: payoutData.user_id }
+            });
+            if (userFinancial) {
+                const newSettlement = parseFloat(userFinancial.settlement) + parseFloat(payoutData.amountToDeduct || 0);
+                await FinancialDetails.update(
+                    { settlement: newSettlement },
+                    { where: { user_id: payoutData.user_id } }
+                );
+            }
+            // Update user transaction as failed
+            await UserTransaction.updateOne(
+                { reference_id: payoutData.reference_id },
+                {
+                    $set: {
+                        status: 'failed',
+                        gateway_response: {
+                            merchant_response: JSON.stringify(result),
+                            status: 'failed',
+                            message: result.message
+                        }
+                    }
+                }
+            );
+            logger.info('User transaction updated to failed', { reference: payoutData.reference_id });
+            // Update payout transaction as failed
+            await PayoutTransaction.updateOne(
+                { reference_id: payoutData.reference_id },
+                {
+                    $set: {
+                        status: 'failed',
+                        gateway_response: {
+                            merchant_response: JSON.stringify(result),
+                            status: 'failed',
+                            message: result.message
+                        }
+                    }
+                }
+            );
+            logger.info('Payout transaction updated to failed', { reference: payoutData.reference_id });
+            return {
+                data: {
+                    status: 'failed',
+                    message: result.message || 'Payout processing failed',
+                    merchant_order_id: payoutData.reference_id
+                },
+                status: 200
+            };
+        }
+    } catch (error) {
+        logger.error('Error in philpayPayout', {
+            error: error.message,
+            stack: error.stack,
+            reference: payoutData.reference_id
+        });
+        return {
+            data: {
+                status: 'error',
+                message: error.message || 'Payout processing failed'
+            },
+            status: 500
+        };
+    }
+}
+
 module.exports = {
     unpayPayout,
-    spayPayout
+    spayPayout,
+    philpayPayout
 }   

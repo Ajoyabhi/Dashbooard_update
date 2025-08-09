@@ -73,7 +73,7 @@ const Dashboard = () => {
   const summaryCardsData = [
     {
       title: 'Settlement Balance',
-      value: `${dashboardData.settlement_balance.toLocaleString()}`,
+      value: `${dashboardData.settlement_balance}`,
       icon: 'CreditCard',
       color: 'primary'
     },

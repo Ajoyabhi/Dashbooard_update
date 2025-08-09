@@ -164,49 +164,82 @@ callbackQueue.process(async function(job) {
     });
 
     if (merchantDetails?.payin_callback) {
-      try {
-        let callbackData;
-        if (statuscode === 'SUCCESS'){  
-        callbackData = {
-          reference_id: apitxnid,
-          amount: amount,
-          status: mappedStatus,
-          utr: utr,
-          message: message || 'Transaction processed',
-          timestamp: new Date().toISOString()
-        };
-        }else{
-        callbackData = {
-          reference_id: apitxnid,
-          transaction_id: txnid,
-          amount: amount,
-          status: mappedStatus,
-          utr: utr,
-          message: message || 'Transaction processed',
-          timestamp: new Date().toISOString()
-        };
+      // Retry configuration
+      const maxRetries = 3;
+      const baseDelay = 2000; // 2 seconds
+      let lastError;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          let callbackData;
+          if (statuscode === 'SUCCESS'){  
+          callbackData = {
+            reference_id: apitxnid,
+            amount: amount,
+            status: mappedStatus,
+            utr: utr,
+            message: message || 'Transaction processed',
+            timestamp: new Date().toISOString()
+          };
+          }else{
+          callbackData = {
+            reference_id: apitxnid,
+            transaction_id: txnid,
+            amount: amount,
+            status: mappedStatus,
+            utr: utr,
+            message: message || 'Transaction processed',
+            timestamp: new Date().toISOString()
+          };
+          }
+          
+          console.log("this is callback data", callbackData)
+
+          const response = await axios.post(merchantDetails.payin_callback, callbackData, {
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            timeout: 10000
+          });
+
+          logger.info('Callback sent successfully to merchant', {
+            reference_id: apitxnid,
+            callback_url: merchantDetails.payin_callback,
+            response_status: response.status,
+            attempt: attempt
+          });
+          
+          // Success - break out of retry loop
+          break;
+          
+        } catch (error) {
+          lastError = error;
+          
+          logger.warn('Callback attempt failed', {
+            reference_id: apitxnid,
+            callback_url: merchantDetails.payin_callback,
+            error: error.message,
+            attempt: attempt,
+            maxRetries: maxRetries
+          });
+
+          // If this is the last attempt, log the final error
+          if (attempt === maxRetries) {
+            logger.error('Failed to send callback to merchant after all retries', {
+              reference_id: apitxnid,
+              callback_url: merchantDetails.payin_callback,
+              error: error.message,
+              totalAttempts: maxRetries
+            });
+          } else {
+            // Wait before retrying with exponential backoff
+            const delay = baseDelay * Math.pow(2, attempt - 1);
+            logger.info(`Retrying callback in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`, {
+              reference_id: apitxnid
+            });
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
         }
-        
-        console.log("this is callback data", callbackData)
-
-        const response = await axios.post(merchantDetails.payin_callback, callbackData, {
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          timeout: 10000
-        });
-
-        logger.info('Callback sent successfully to merchant', {
-          reference_id: apitxnid,
-          callback_url: merchantDetails.payin_callback,
-          response_status: response.status
-        });
-      } catch (error) {
-        logger.error('Failed to send callback to merchant', {
-          reference_id: apitxnid,
-          callback_url: merchantDetails.payin_callback,
-          error: error.message
-        });
       }
     } else {
       logger.warn('No callback URL found for merchant', {
@@ -397,49 +430,82 @@ philpayPayoutQueue.process(async function(job) {
     });
 
     if (merchantDetails?.payout_callback) {
-      try {
-        let callbackData;
-        if (job.data.data.object.status == "success" || job.data.data.object.status == "Success"){  
-        callbackData = {
-          reference_id: job.data.data.object.merchant_order_id,
-          amount: job.data.data.object.amount / 100,
-          status: job.data.data.object.status,
-          utr: job.data.data.object.bank_reference_id,
-          message: job.data.data.object.message || 'Transaction processed',
-          timestamp: new Date().toISOString()
-        };
-        }else{
-        callbackData = {
-          reference_id: job.data.data.object.merchant_order_id,
-          transaction_id: job.data.data.object.merchant_order_id,
-          amount: job.data.data.object.amount / 100,
-          status: job.data.data.object.status,
-          utr: job.data.data.object.bank_reference_id,
-          message: job.data.data.object.message || 'Transaction failed',
-          timestamp: new Date().toISOString()
-        };
+      // Retry configuration
+      const maxRetries = 3;
+      const baseDelay = 2000; // 2 seconds
+      let lastError;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          let callbackData;
+          if (job.data.data.object.status == "success" || job.data.data.object.status == "Success"){  
+          callbackData = {
+            reference_id: job.data.data.object.merchant_order_id,
+            amount: job.data.data.object.amount / 100,
+            status: job.data.data.object.status,
+            utr: job.data.data.object.bank_reference_id,
+            message: job.data.data.object.message || 'Transaction processed',
+            timestamp: new Date().toISOString()
+          };
+          }else{
+          callbackData = {
+            reference_id: job.data.data.object.merchant_order_id,
+            transaction_id: job.data.data.object.merchant_order_id,
+            amount: job.data.data.object.amount / 100,
+            status: job.data.data.object.status,
+            utr: job.data.data.object.bank_reference_id,
+            message: job.data.data.object.message || 'Transaction failed',
+            timestamp: new Date().toISOString()
+          };
+          }
+          
+          console.log("this is callback data of philpay payout", callbackData)
+
+          const response = await axios.post(merchantDetails.payout_callback, callbackData, {
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            timeout: 10000
+          });
+
+          logger.info('Callback sent successfully to merchant', {
+            reference_id: job.data.data.object.merchant_order_id,
+            callback_url: merchantDetails.payout_callback,
+            response_status: response.status,
+            attempt: attempt
+          });
+          
+          // Success - break out of retry loop
+          break;
+          
+        } catch (error) {
+          lastError = error;
+          
+          logger.warn('Callback attempt failed', {
+            reference_id: job.data.data.object.merchant_order_id,
+            callback_url: merchantDetails.payout_callback,
+            error: error.message,
+            attempt: attempt,
+            maxRetries: maxRetries
+          });
+
+          // If this is the last attempt, log the final error
+          if (attempt === maxRetries) {
+            logger.error('Failed to send callback to merchant after all retries', {
+              reference_id: job.data.data.object.merchant_order_id,
+              callback_url: merchantDetails.payout_callback,
+              error: error.message,
+              totalAttempts: maxRetries
+            });
+          } else {
+            // Wait before retrying with exponential backoff
+            const delay = baseDelay * Math.pow(2, attempt - 1);
+            logger.info(`Retrying callback in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`, {
+              reference_id: job.data.data.object.merchant_order_id
+            });
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
         }
-        
-        console.log("this is callback data of philpay payout", callbackData)
-
-        const response = await axios.post(merchantDetails.payout_callback, callbackData, {
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          timeout: 10000
-        });
-
-        logger.info('Callback sent successfully to merchant', {
-          reference_id: job.data.data.object.merchant_order_id,
-          callback_url: merchantDetails.payout_callback,
-          response_status: response.status
-        });
-      } catch (error) {
-        logger.error('Failed to send callback to merchant', {
-          reference_id: job.data.data.object.merchant_order_id,
-          callback_url: merchantDetails.payout_callback,
-          error: error.message
-        });
       }
     }
     else{

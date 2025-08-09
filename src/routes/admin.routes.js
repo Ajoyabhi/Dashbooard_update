@@ -34,7 +34,16 @@ const {
   getManageFundRequest,
   updateManageFundRequest,
   getChargeback,
-  handleChargebackAction
+  handleChargebackAction,
+  getPayoutTransactions,
+  getPayinTransactions,
+  getPayinTransactionsDownload,
+  getPayoutTransactionsDownload,
+  getWalletTransactionsDownload,
+  getUsersForDropdown,
+  makePayoutFailed,
+  getTrashTransactionCount,
+  deleteTrashTransactions
 } = require('../controllers/admin.controller');
 const { registerUser } = require('../controllers/auth.controller');
 const { auth, authorize } = require('../middleware/auth.middleware');
@@ -94,6 +103,19 @@ router.get('/dashboard', getAdminDashboard);
 // Wallet transactions route with pagination
 router.get('/wallet-transactions', getWalletTransactions);
 
+router.get('/payout-transactions', getPayoutTransactions);
+
+router.get('/payin-transactions', getPayinTransactions);
+
+
+// payout , payin, wallet transaction report downlaod route
+router.get('/payin-transactions/download', getPayinTransactionsDownload);
+router.get('/payout-transactions/download', getPayoutTransactionsDownload);
+router.get('/wallet-transactions/download', getWalletTransactionsDownload);
+
+// Users for dropdown
+router.get('/users-dropdown', getUsersForDropdown);
+
 // Settlement management routes
 router.post('/settle-amount', settleAmount);
 router.get('/settlement-history/:userId', getSettlementHistory);
@@ -107,5 +129,12 @@ router.post('/manage-fund-request/:id', updateManageFundRequest);
 // chargeback routes
 router.get('/chargeback', getChargeback);
 router.post('/chargeback/:id/:action', handleChargebackAction);
+
+// Make payout failed route
+router.post('/make-payout-failed', makePayoutFailed);
+
+// Trash transaction management routes
+router.get('/trash-transactions/count', getTrashTransactionCount);
+router.delete('/trash-transactions/delete', deleteTrashTransactions);
 
 module.exports = router; 

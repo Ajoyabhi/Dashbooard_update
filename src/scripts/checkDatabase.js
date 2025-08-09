@@ -12,14 +12,14 @@ async function checkAndCreateDatabase() {
         console.log('Connected to MySQL server');
 
         // Check if database exists
-        const [rows] = await connection.query('SHOW DATABASES LIKE "techturect"');
+        const [rows] = await connection.query('SHOW DATABASES LIKE "zintexpay_app"');
         
         if (rows.length === 0) {
             // Create database if it doesn't exist
-            await connection.query('CREATE DATABASE techturect');
-            console.log('Database "techturect" created successfully');
+            await connection.query('CREATE DATABASE zintexpay_app');
+            console.log('Database "zintexpay_app" created successfully');
         } else {
-            console.log('Database "techturect" already exists');
+            console.log('Database "zintexpay_app" already exists');
         }
 
         await connection.end();

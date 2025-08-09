@@ -35,6 +35,7 @@ export const mockUsers: User[] = [
     user_name: 'admin_user',
     email: 'admin@example.com',
     user_type: 'admin',
+    mobile: '1234567890',
   },
   {
     id: 2,
@@ -42,6 +43,7 @@ export const mockUsers: User[] = [
     user_name: 'agent_user',
     email: 'agent@example.com',
     user_type: 'agent',
+    mobile: '1234567890',
   },
   {
     id: 3,
@@ -49,6 +51,7 @@ export const mockUsers: User[] = [
     user_name: 'regular_user',
     email: 'user@example.com',
     user_type: 'payin_payout',
+    mobile: '1234567890',
   },
 ];
 
@@ -349,6 +352,8 @@ export const adminMenuItems: MenuItem[] = [
   { title: 'Wallet Report', path: '/admin/wallet-report', icon: 'Wallet' },
   { title: 'Payin Report', path: '/admin/payin-report', icon: 'FileText' },
   { title: 'Payout Report', path: '/admin/payout-report', icon: 'FileText' },
+  { title: 'Make Payout Failed', path: '/admin/make-payout-failed', icon: 'FileText' },
+  { title: 'Trash Report', path: '/admin/trash-payin-payout-report', icon: 'FileText' },
   { title: 'ChargeBack', path: '/admin/chargeback', icon: 'RotateCcw' },
   { title: 'ChargeBack Report', path: '/admin/chargeback-report', icon: 'FileText' },
   { title: 'Manage Fund Request', path: '/admin/manage-fund-request', icon: 'DollarSign' },

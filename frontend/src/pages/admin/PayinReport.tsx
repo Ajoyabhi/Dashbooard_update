@@ -1,144 +1,251 @@
-import React, { useState } from 'react';
-import { Calendar, Download, Filter, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Download, Filter, Search, X } from 'lucide-react';
+import api from '../../utils/axios';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Table from '../../components/dashboard/Table';
+import DownloadPopup, { DownloadFilters } from '../../components/ui/DownloadPopup';
 import { adminMenuItems } from '../../data/mockData';
 import { formatCurrency, formatDate, getStatusColor } from '../../utils/formatUtils';
+import { FilterOption, DateRange } from '../../types';
 
-// Mock payin transactions
-const mockPayinTransactions = [
-  {
-    orderId: 'ORD-2025-001',
-    transactionId: 'TXN123456',
-    utr: 'UTR789012',
-    name: 'John Smith',
-    accountNo: '1234567890',
-    ifsc: 'HDFC0001234',
-    upiId: 'johnsmith@upi',
-    amount: 5000.00,
-    charge: 50.00,
-    gst: 9.00,
-    netAmount: 4941.00,
-    status: 'Successful',
-    date: '2025-01-15T10:30:00',
-  },
-  {
-    orderId: 'ORD-2025-002',
-    transactionId: 'TXN789012',
-    utr: 'UTR345678',
-    name: 'Sarah Wilson',
-    accountNo: '0987654321',
-    ifsc: 'ICIC0005678',
-    upiId: 'sarahw@upi',
-    amount: 2500.00,
-    charge: 25.00,
-    gst: 4.50,
-    netAmount: 2470.50,
-    status: 'pending',
-    date: '2025-01-16T14:45:00',
-  },
+interface UserOption {
+  id: number;
+  name: string;
+  email: string;
+  mobile: string;
+  displayText: string;
+}
+
+// Define PayinRecord type
+interface PayinRecord {
+  _id: string;
+  transaction_id: string;
+  reference_id: string;
+  user: {
+    name: string;
+    email: string;
+    mobile: string;
+  };
+  amount: number;
+  charges: {
+    admin_charge: number;
+    agent_charge: number;
+    total_charges: number;
+  };
+  beneficiary_details: {
+    beneficiary_name: string;
+    beneficiary_email: string;
+    beneficiary_phone: string;
+  };
+  status: string;
+  gateway_response: {
+    utr: string;
+    status: string;
+    message: string;
+  };
+  remark: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const statusOptions: FilterOption[] = [
+  { label: 'All Status', value: 'all' },
+  { label: 'Pending', value: 'pending' },
+  { label: 'Completed', value: 'completed' },
+  { label: 'Failed', value: 'failed' },
+  { label: 'Payin QR Generated', value: 'payin_qr_generated' },
 ];
 
 export default function PayinReport() {
-  const [selectedDate, setSelectedDate] = useState<string>('');
-  const [loading, setLoading] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
-  
-  // Filter states
-  const [filters, setFilters] = useState({
-    orderId: '',
-    transactionId: '',
-    utr: '',
-    status: 'all'
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedUser, setSelectedUser] = useState('');
+  const [dateRange, setDateRange] = useState<DateRange>({
+    startDate: null,
+    endDate: null,
   });
+  const [showFilters, setShowFilters] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [loading, setLoading] = useState(false);
+  const [transactions, setTransactions] = useState<PayinRecord[]>([]);
+  const [pagination, setPagination] = useState({
+    totalItems: 0,
+    totalPages: 0,
+    currentPage: 1,
+    pageSize: 10,
+    hasNextPage: false,
+    hasPrevPage: false,
+  });
+  
+  // Download popup state
+  const [showDownloadPopup, setShowDownloadPopup] = useState(false);
+  const [downloadLoading, setDownloadLoading] = useState(false);
 
-  const handleDateSubmit = async () => {
-    if (!selectedDate) {
-      window.showToast('error', 'Please select a date');
-      return;
-    }
+  // Users for dropdown
+  const [users, setUsers] = useState<UserOption[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
 
-    setLoading(true);
+  // Fetch users for dropdown
+  const fetchUsers = async () => {
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      window.showToast('success', 'Payin transactions fetched successfully');
+      setUsersLoading(true);
+      const response = await api.get('/admin/users-dropdown');
+      setUsers(response.data.data);
     } catch (error) {
-      window.showToast('error', 'Failed to fetch payin transactions');
+      console.error('Error fetching users:', error);
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  // Fetch transactions with pagination and filters
+  const fetchTransactions = async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams({
+        page: currentPage.toString(),
+        pageSize: pageSize.toString(),
+        status: selectedStatus,
+        search: searchTerm,
+      });
+
+      if (selectedUser) {
+        params.append('user', selectedUser);
+      }
+      if (dateRange.startDate) {
+        params.append('startDate', dateRange.startDate.toISOString());
+      }
+      if (dateRange.endDate) {
+        params.append('endDate', dateRange.endDate.toISOString());
+      }
+
+      const response = await api.get(`/admin/payin-transactions?${params}`);
+      const { pagination: paginationData, transactions } = response.data.data;
+
+      setTransactions(transactions);
+      setPagination({
+        totalItems: paginationData.totalItems,
+        totalPages: paginationData.totalPages,
+        currentPage: paginationData.currentPage,
+        pageSize: paginationData.pageSize,
+        hasNextPage: paginationData.hasNextPage,
+        hasPrevPage: paginationData.hasPrevPage,
+      });
+    } catch (error) {
+      console.error('Error fetching payin transactions:', error);
+      // Handle error (show toast notification, etc.)
     } finally {
       setLoading(false);
     }
   };
 
+  // Fetch transactions when filters or pagination changes
+  useEffect(() => {
+    fetchTransactions();
+  }, [currentPage, pageSize, selectedStatus, selectedUser, dateRange, searchTerm]);
+
+  // Fetch users when component mounts
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
   const handleDownload = () => {
-    // Handle report download
-    console.log('Downloading report...');
+    setShowDownloadPopup(true);
+  };
+
+  const handleDownloadSubmit = async (filters: DownloadFilters) => {
+    try {
+      setDownloadLoading(true);
+      
+      // Build query parameters for download
+      const params = new URLSearchParams();
+      if (filters.startDate) params.append('startDate', filters.startDate);
+      if (filters.endDate) params.append('endDate', filters.endDate);
+      if (filters.status && filters.status !== 'all') params.append('status', filters.status);
+      if (filters.user) params.append('user', filters.user);
+
+      // Make API call to download report
+      const response = await api.get(`/admin/payin-transactions/download?${params}`, {
+        responseType: 'blob', // Important for file downloads
+      });
+
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `payin-report-${new Date().toISOString().split('T')[0]}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      // Close popup and show success message
+      setShowDownloadPopup(false);
+      window.showToast('success', 'Report downloaded successfully!');
+    } catch (error) {
+      console.error('Error downloading report:', error);
+      window.showToast('error', 'Failed to download report');
+    } finally {
+      setDownloadLoading(false);
+    }
   };
 
   const resetFilters = () => {
-    setFilters({
-      orderId: '',
-      transactionId: '',
-      utr: '',
-      status: 'all'
-    });
+    setSelectedStatus('all');
+    setSelectedUser('');
+    setDateRange({ startDate: null, endDate: null });
+    setSearchTerm('');
+    setCurrentPage(1);
   };
 
-  // Filter transactions based on criteria
-  const filteredTransactions = mockPayinTransactions.filter(transaction => {
-    const matchesOrderId = filters.orderId ? 
-      transaction.orderId.toLowerCase().includes(filters.orderId.toLowerCase()) : true;
-    
-    const matchesTransactionId = filters.transactionId ? 
-      transaction.transactionId.toLowerCase().includes(filters.transactionId.toLowerCase()) : true;
-    
-    const matchesUTR = filters.utr ? 
-      transaction.utr.toLowerCase().includes(filters.utr.toLowerCase()) : true;
-    
-    const matchesStatus = filters.status === 'all' ? true : transaction.status === filters.status;
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
 
-    return matchesOrderId && matchesTransactionId && matchesUTR && matchesStatus;
-  });
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize);
+    setCurrentPage(1);
+    setPagination(prev => ({
+      ...prev,
+      pageSize: newPageSize,
+      currentPage: 1
+    }));
+  };
 
   const columns = [
     {
-      header: 'Order ID',
-      accessor: 'orderId',
+      header: 'Transaction ID',
+      accessor: 'transaction_id',
       cell: (value: string) => (
         <span className="font-medium text-primary-600">{value}</span>
       ),
     },
     {
-      header: 'Transaction ID',
-      accessor: 'transactionId',
-    },
-    {
-      header: 'UTR',
-      accessor: 'utr',
-    },
-    {
-      header: 'Name',
-      accessor: 'name',
-    },
-    {
-      header: 'A/C No',
-      accessor: 'accountNo',
+      header: 'Reference ID',
+      accessor: 'reference_id',
       cell: (value: string) => (
-        <span className="font-mono">{value}</span>
+        <span className="font-mono text-sm">{value}</span>
       ),
     },
     {
-      header: 'IFSC',
-      accessor: 'ifsc',
-      cell: (value: string) => (
-        <span className="font-mono">{value}</span>
+      header: 'User',
+      accessor: 'user',
+      cell: (value: PayinRecord['user']) => (
+        <div>
+          <div className="font-medium">{value.name}</div>
+          <div className="text-sm text-gray-500">{value.email}</div>
+        </div>
       ),
     },
     {
-      header: 'UPI ID',
-      accessor: 'upiId',
-      cell: (value: string) => (
-        <span className="font-mono">{value}</span>
+      header: 'Beneficiary',
+      accessor: 'beneficiary_details',
+      cell: (value: PayinRecord['beneficiary_details']) => (
+        <div>
+          <div className="font-medium">{value.beneficiary_name}</div>
+          <div className="text-sm text-gray-500">{value.beneficiary_email}</div>
+        </div>
       ),
     },
     {
@@ -149,24 +256,21 @@ export default function PayinReport() {
       ),
     },
     {
-      header: 'Charge',
-      accessor: 'charge',
-      cell: (value: number) => (
-        <span className="text-gray-600">{formatCurrency(value)}</span>
+      header: 'Charges',
+      accessor: 'charges',
+      cell: (value: PayinRecord['charges']) => (
+        <div>
+          <div className="text-sm">Admin: {formatCurrency(value.admin_charge)}</div>
+          <div className="text-sm">Agent: {formatCurrency(value.agent_charge)}</div>
+          <div className="font-medium">Total: {formatCurrency(value.total_charges)}</div>
+        </div>
       ),
     },
     {
-      header: 'GST',
-      accessor: 'gst',
-      cell: (value: number) => (
-        <span className="text-gray-600">{formatCurrency(value)}</span>
-      ),
-    },
-    {
-      header: 'Net Amount',
-      accessor: 'netAmount',
-      cell: (value: number) => (
-        <span className="font-medium">{formatCurrency(value)}</span>
+      header: 'UTR',
+      accessor: 'gateway_response',
+      cell: (value: PayinRecord['gateway_response']) => (
+        <span className="font-mono text-sm">{value.utr || 'N/A'}</span>
       ),
     },
     {
@@ -180,7 +284,7 @@ export default function PayinReport() {
     },
     {
       header: 'Date',
-      accessor: 'date',
+      accessor: 'createdAt',
       cell: (value: string) => formatDate(value),
     },
   ];
@@ -188,143 +292,163 @@ export default function PayinReport() {
   return (
     <DashboardLayout menuItems={adminMenuItems} title="Payin Report">
       <div className="space-y-6">
-        {/* Date Filter */}
-        <div className="bg-white shadow-sm rounded-lg p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex-1 max-w-xs">
-              <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
-                Select Date
-              </label>
-              <div className="relative rounded-md shadow-sm">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Calendar className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  type="date"
-                  id="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                />
-              </div>
-            </div>
-            
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-              >
-                <Filter className="h-4 w-4 mr-1" />
-                Filters
-              </button>
-
-              <button
-                onClick={handleDateSubmit}
-                disabled={loading}
-                className={`inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
-                  loading
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-primary-600 hover:bg-primary-700'
-                }`}
-              >
-                {loading ? 'Loading...' : 'Submit'}
-              </button>
-              
-              <button
-                onClick={handleDownload}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Download Report
-              </button>
-            </div>
-          </div>
-
-          {/* Filters */}
-          {showFilters && (
-            <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-sm font-medium text-gray-700">Filter Transactions</h3>
-                <button
-                  onClick={resetFilters}
-                  className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700"
-                >
-                  <X className="h-4 w-4 mr-1" />
-                  Reset Filters
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Order ID
-                  </label>
-                  <input
-                    type="text"
-                    value={filters.orderId}
-                    onChange={(e) => setFilters({ ...filters, orderId: e.target.value })}
-                    className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                    placeholder="Search by Order ID"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Transaction ID
-                  </label>
-                  <input
-                    type="text"
-                    value={filters.transactionId}
-                    onChange={(e) => setFilters({ ...filters, transactionId: e.target.value })}
-                    className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                    placeholder="Search by Transaction ID"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    UTR
-                  </label>
-                  <input
-                    type="text"
-                    value={filters.utr}
-                    onChange={(e) => setFilters({ ...filters, utr: e.target.value })}
-                    className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                    placeholder="Search by UTR"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Status
-                  </label>
-                  <select
-                    value={filters.status}
-                    onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                    className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                  >
-                    <option value="all">All Status</option>
-                    <option value="Successful">Successful</option>
-                    <option value="pending">Pending</option>
-                    <option value="failed">Failed</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Table */}
         <div className="bg-white shadow-sm rounded-lg">
           <div className="p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+              <h2 className="text-lg font-medium text-gray-900">Payin Transactions</h2>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  <Filter className="h-4 w-4 mr-1" />
+                  Filters
+                </button>
+
+                <button
+                  onClick={handleDownload}
+                  className="inline-flex items-center px-3 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
+                >
+                  <Download className="h-4 w-4 mr-1" />
+                  Download Report
+                </button>
+              </div>
+            </div>
+
+            {/* Filters */}
+            {showFilters && (
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+                  <h3 className="text-sm font-medium text-gray-700">Filter Transactions</h3>
+                  <button
+                    onClick={resetFilters}
+                    className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700"
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Reset Filters
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Status
+                    </label>
+                    <select
+                      value={selectedStatus}
+                      onChange={(e) => setSelectedStatus(e.target.value)}
+                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    >
+                      {statusOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      User
+                    </label>
+                    <select
+                      value={selectedUser}
+                      onChange={(e) => setSelectedUser(e.target.value)}
+                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                      disabled={usersLoading}
+                    >
+                      <option value="">All Users</option>
+                      {users.map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {user.displayText}
+                        </option>
+                      ))}
+                    </select>
+                    {usersLoading && (
+                      <p className="mt-1 text-xs text-gray-500">Loading users...</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Start Date
+                    </label>
+                    <input
+                      type="date"
+                      value={dateRange.startDate?.toISOString().split('T')[0] || ''}
+                      onChange={(e) => setDateRange({
+                        ...dateRange,
+                        startDate: e.target.value ? new Date(e.target.value) : null,
+                      })}
+                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      End Date
+                    </label>
+                    <input
+                      type="date"
+                      value={dateRange.endDate?.toISOString().split('T')[0] || ''}
+                      onChange={(e) => setDateRange({
+                        ...dateRange,
+                        endDate: e.target.value ? new Date(e.target.value) : null,
+                      })}
+                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Search
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Search className="h-4 w-4 text-gray-400" />
+                      </div>
+                      <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Search transactions..."
+                        className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Table */}
             <Table
               columns={columns}
-              data={filteredTransactions}
+              data={transactions}
               pagination={true}
+              pageSize={pagination.pageSize}
+              totalItems={pagination.totalItems}
+              totalPages={pagination.totalPages}
+              currentPage={pagination.currentPage}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+              searchable={true}
+              filterable={false}
+              loading={loading}
             />
           </div>
         </div>
       </div>
+
+      {/* Download Popup */}
+      <DownloadPopup
+        isOpen={showDownloadPopup}
+        onClose={() => setShowDownloadPopup(false)}
+        onDownload={handleDownloadSubmit}
+        title="Download Payin Report"
+        statusOptions={statusOptions}
+        loading={downloadLoading}
+      />
     </DashboardLayout>
   );
 }

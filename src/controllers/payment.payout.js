@@ -8,7 +8,7 @@ const { validatePaymentRequest } = require('../controllers/payment.controller');
 const PayoutTransaction = require('../models/payoutTransaction.model');
 const UserTransaction = require('../models/userTransaction.model');
 const { Op } = require('sequelize');
-const { unpayPayout, spayPayout } = require('../merchant_payin_payout/merchant_payout_request');
+const { unpayPayout, spayPayout, philpayPayout } = require('../merchant_payin_payout/merchant_payout_request');
 const getClientIp = require('../utils/getClientIp');
 const mongoose = require('mongoose');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
@@ -404,6 +404,7 @@ const initiatePayout = async (req, res) => {
           user_id,
           amount,
           amountToDeduct,
+          request_type,
           beneficiary_details: {
             account_number,
             account_ifsc,
@@ -416,8 +417,41 @@ const initiatePayout = async (req, res) => {
           }
         };
         result = await spayPayout(payoutData);
-        console.log("=======================================================")
         console.log("this is result of spay payout", result)
+      }
+      else if (user.MerchantDetail.payout_merchant_name === 'Philpay') {
+        const payoutData = {
+          reference_id,
+          user_id,
+          amount,
+          amountToDeduct,
+          request_type,
+          beneficiary_details: {
+            account_number,
+            account_ifsc,
+            bank_name,
+            beneficiary_name,
+            mobile: user.mobile,
+            email: user.email,
+            address: user.address
+          }
+        };
+        result = await philpayPayout(payoutData);
+        console.log("this is result of philpay payout", result)
+        if (result?.status == 200) {
+          return res.status(200).json({
+           success: true,
+           message: result.data.message || "Payout is processing",
+           merchant_order_id: result.data.merchant_order_id
+          });
+        }
+        else {
+          return res.status(400).json({
+            success: false,
+            message: result.data.message || 'Payout processing failed',
+            reference_id: result.data.apitxnid
+          });
+        }
       }
 
     } catch (error) {
