@@ -366,9 +366,12 @@ export const adminMenuItems: MenuItem[] = [
 export const userMenuItems: MenuItem[] = [
   { title: 'Dashboard', path: '/user', icon: 'BarChart3' },
   { title: 'Fund Request', path: '/user/fund-request', icon: 'DollarSign' },
+  { title: 'Wallet Transaction', path: '/user/wallet-transaction-history', icon: 'FileText' },
   { title: 'Wallet Report', path: '/user/wallet-report', icon: 'Wallet' },
   { title: 'Payin Report', path: '/user/payin-report', icon: 'PayinIcon' },
   { title: 'Payout Report', path: '/user/payout-report', icon: 'FileText' },
+  { title: 'Payout Failed History', path: '/user/payout-failed-history', icon: 'FileText' },
+  { title: 'Settlement Report', path: '/user/settlement-report', icon: 'FileText' },
   { title: 'Developer Settings', path: '/user/developer-settings', icon: 'Settings' },
   { title: 'Development Docs', path: '/user/development-docs', icon: 'FileCode' },
 ];

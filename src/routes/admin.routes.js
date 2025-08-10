@@ -17,6 +17,7 @@ const {
   getUserCallbacks,
   updateUserWallet,
   getUserWallet,
+  getUserWalletTransactionHistory,
   getUserIPs,
   addUserIP,
   removeUserIP,
@@ -43,7 +44,9 @@ const {
   getUsersForDropdown,
   makePayoutFailed,
   getTrashTransactionCount,
-  deleteTrashTransactions
+  deleteTrashTransactions,
+  getPayoutFailedHistory,
+  downloadPayoutFailedHistory
 } = require('../controllers/admin.controller');
 const { registerUser } = require('../controllers/auth.controller');
 const { auth, authorize } = require('../middleware/auth.middleware');
@@ -85,6 +88,7 @@ router.post('/users/:userId/callback/payout', updateUserPayoutCallback);
 // User Wallet Management
 router.get('/users/:userId/wallet', getUserWallet);
 router.post('/users/:userId/wallet', updateUserWallet);
+router.get('/users/:userId/wallet/transactions', getUserWalletTransactionHistory);
 
 // User IP Management
 router.get('/users/:user_id/ips', getUserIPs);
@@ -132,6 +136,10 @@ router.post('/chargeback/:id/:action', handleChargebackAction);
 
 // Make payout failed route
 router.post('/make-payout-failed', makePayoutFailed);
+
+// Payout failed history route
+router.get('/payout-failed-history', getPayoutFailedHistory);
+router.get('/payout-failed-history/download', downloadPayoutFailedHistory);
 
 // Trash transaction management routes
 router.get('/trash-transactions/count', getTrashTransactionCount);

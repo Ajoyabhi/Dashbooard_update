@@ -1,5 +1,5 @@
 const { logger } = require('../utils/logger');
-const { User, FinancialDetails, ManageFundRequest, TransactionCharges, SettlementTransaction } = require('../models');
+const { User, FinancialDetails, ManageFundRequest, TransactionCharges, SettlementTransaction, WalletTransaction } = require('../models');
 const { sequelize } = require('../models');
 const UserTransaction = require('../models/userTransaction.model');
 const PayinTransaction = require('../models/payinTransaction.model');
@@ -11,7 +11,9 @@ const { Op } = require('sequelize');
 const getUserProfile = async (req, res) => {
   try {
     // User can only access their own profile
-    const user = await User.findById(req.user._id).select('-password');
+    const user = await User.findByPk(req.user.id, {
+      attributes: { exclude: ['password'] }
+    });
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -44,13 +46,16 @@ const updateUserProfile = async (req, res) => {
         return obj;
       }, {});
 
-    const user = await User.findByIdAndUpdate(
-      req.user._id,
-      updates,
-      { new: true, runValidators: true }
-    ).select('-password');
+    const user = await User.update(updates, {
+      where: { id: req.user.id },
+      returning: true
+    });
+    
+    const updatedUser = await User.findByPk(req.user.id, {
+      attributes: { exclude: ['password'] }
+    });
 
-    res.json(user);
+    res.json(updatedUser);
   } catch (error) {
     res.status(500).json({ message: 'Error updating user profile' });
   }
@@ -142,6 +147,74 @@ const getUserWalletReports = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error fetching wallet reports',
+      error: error.message
+    });
+  }
+};
+
+
+const getUserWalletTransactionHistory = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    const userId = req.user.id; // Get current user's ID from auth middleware
+
+    const offset = (page - 1) * limit;
+
+    // Build where clause
+    const whereClause = { user_id: userId };
+    
+    // Add search filter
+    if (req.query.search) {
+      whereClause.remark = {
+        [Op.like]: `%${req.query.search}%`
+      };
+    }
+    
+    // Add transaction type filter
+    if (req.query.type && req.query.type !== 'all') {
+      whereClause.transaction_type = req.query.type;
+    }
+
+    // Get wallet transactions with pagination
+    const transactions = await WalletTransaction.findAndCountAll({
+      where: whereClause,
+      include: [
+        {
+          model: User,
+          as: 'createdByUser',
+          attributes: ['id', 'name', 'user_name']
+        }
+      ],
+      order: [['created_at', 'DESC']],
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+
+    // Get current wallet balance
+    const financialDetails = await FinancialDetails.findOne({
+      where: { user_id: userId }
+    });
+
+    const totalPages = Math.ceil(transactions.count / limit);
+
+    res.json({
+      success: true,
+      data: {
+        transactions: transactions.rows,
+        pagination: {
+          current_page: parseInt(page),
+          total_pages: totalPages,
+          total_records: transactions.count,
+          limit: parseInt(limit)
+        },
+        current_balance: financialDetails ? parseFloat(financialDetails.wallet) : 0
+      }
+    });
+  } catch (error) {
+    console.error('Error in getUserWalletTransactionHistory:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching wallet transaction history',
       error: error.message
     });
   }
@@ -628,5 +701,6 @@ module.exports = {
   getUserFundRequests,
   createFundRequest,
   getUserDashboard,
-  getUserSettlementReport
+  getUserSettlementReport,
+  getUserWalletTransactionHistory
 }; 

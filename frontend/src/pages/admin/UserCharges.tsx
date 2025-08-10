@@ -14,7 +14,8 @@ interface ChargeRange {
   endAmount: number;
   payinCharge: number;
   payoutCharge: number;
-  chargeType: 'percentage' | 'fixed';
+  payinChargeType: 'percentage' | 'fixed';
+  payoutChargeType: 'percentage' | 'fixed';
 }
 
 interface PlatformCharge {
@@ -46,7 +47,8 @@ export default function UserCharges() {
 
   // Form states
   const [newChargeRange, setNewChargeRange] = useState<Partial<ChargeRange>>({
-    chargeType: 'percentage'
+    payinChargeType: 'percentage',
+    payoutChargeType: 'percentage'
   });
   const [newPlatformCharge, setNewPlatformCharge] = useState<Partial<PlatformCharge>>({});
   const [newIP, setNewIP] = useState<Partial<IPAddress>>({});
@@ -68,7 +70,8 @@ export default function UserCharges() {
           endAmount: parseFloat(charge.end_amount),
           payinCharge: parseFloat(charge.admin_payin_charge),
           payoutCharge: parseFloat(charge.admin_payout_charge),
-          chargeType: charge.admin_payin_charge_type
+          payinChargeType: charge.admin_payin_charge_type as 'percentage' | 'fixed',
+          payoutChargeType: charge.admin_payout_charge_type as 'percentage' | 'fixed'
         }));
         setChargeRanges(charges);
         setError(null);
@@ -138,8 +141,8 @@ export default function UserCharges() {
           end_amount: charge.endAmount,
           admin_payin_charge: charge.payinCharge,
           admin_payout_charge: charge.payoutCharge,
-          admin_payin_charge_type: charge.chargeType,
-          admin_payout_charge_type: charge.chargeType
+          admin_payin_charge_type: charge.payinChargeType,
+          admin_payout_charge_type: charge.payoutChargeType
         }))
       });
 
@@ -166,16 +169,6 @@ export default function UserCharges() {
         return;
       }
 
-      // Validate that the new range doesn't overlap with existing ranges
-      // const hasOverlap = chargeRanges.some(range =>
-      //   (newChargeRange.startAmount! <= range.endAmount && newChargeRange.endAmount! >= range.startAmount)
-      // );
-
-      // if (hasOverlap) {
-      //   setError('This range overlaps with an existing range');
-      //   return;
-      // }
-
       try {
         setLoading(true);
         const response = await api.post(`/admin/users/${userId}/merchant-charges`, {
@@ -183,8 +176,8 @@ export default function UserCharges() {
           end_amount: newChargeRange.endAmount,
           admin_payin_charge: newChargeRange.payinCharge || 0,
           admin_payout_charge: newChargeRange.payoutCharge || 0,
-          admin_payin_charge_type: newChargeRange.chargeType || 'percentage',
-          admin_payout_charge_type: newChargeRange.chargeType || 'percentage',
+          admin_payin_charge_type: newChargeRange.payinChargeType || 'percentage',
+          admin_payout_charge_type: newChargeRange.payoutChargeType || 'percentage',
         });
 
         if (response.data.success) {
@@ -195,9 +188,10 @@ export default function UserCharges() {
             endAmount: newChargeRange.endAmount,
             payinCharge: newChargeRange.payinCharge || 0,
             payoutCharge: newChargeRange.payoutCharge || 0,
-            chargeType: newChargeRange.chargeType || 'percentage'
-          }]);
-          setNewChargeRange({ chargeType: 'percentage' });
+            payinChargeType: newChargeRange.payinChargeType || 'percentage',
+            payoutChargeType: newChargeRange.payoutChargeType || 'percentage'
+          } as ChargeRange]);
+          setNewChargeRange({ payinChargeType: 'percentage', payoutChargeType: 'percentage' });
           toast.success('Charge range added successfully');
           fetchCharges();
           setError(null);
@@ -216,7 +210,10 @@ export default function UserCharges() {
   };
 
   const handleAddPlatformCharge = async () => {
-    if (newPlatformCharge.charge && newPlatformCharge.gst) {
+    if (
+      newPlatformCharge.charge !== undefined &&
+      newPlatformCharge.gst !== undefined
+    ) {
       try {
         setLoading(true);
         const response = await api.post(`/admin/platform-charges`, {
@@ -230,7 +227,7 @@ export default function UserCharges() {
             charge: newPlatformCharge.charge,
             gst: newPlatformCharge.gst,
             date: new Date().toISOString()
-          }]);
+          } as PlatformCharge]);
           setShowPlatformChargeModal(false);
           setNewPlatformCharge({});
           toast.success('Platform charge added successfully');
@@ -365,7 +362,7 @@ export default function UserCharges() {
 
             {/* Add new charge range form */}
             <div className="mb-6 grid grid-cols-1 gap-6 bg-gray-50 p-4 rounded-lg">
-              <div className="grid grid-cols-5 gap-4">
+              <div className="grid grid-cols-6 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Start Amount</label>
                   <input
@@ -415,12 +412,26 @@ export default function UserCharges() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Charge Type</label>
+                  <label className="block text-sm font-medium text-gray-700">Payin Charge Type</label>
                   <select
-                    value={newChargeRange.chargeType}
+                    value={newChargeRange.payinChargeType}
                     onChange={(e) => setNewChargeRange({
                       ...newChargeRange,
-                      chargeType: e.target.value as 'percentage' | 'fixed'
+                      payinChargeType: e.target.value as 'percentage' | 'fixed'
+                    })}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                  >
+                    <option value="percentage">Percentage</option>
+                    <option value="fixed">Fixed</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Payout Charge Type</label>
+                  <select
+                    value={newChargeRange.payoutChargeType}
+                    onChange={(e) => setNewChargeRange({
+                      ...newChargeRange,
+                      payoutChargeType: e.target.value as 'percentage' | 'fixed'
                     })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                   >
@@ -455,7 +466,10 @@ export default function UserCharges() {
                     Payout Charge
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Type
+                    Payin Type
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Payout Type
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Action
@@ -469,13 +483,16 @@ export default function UserCharges() {
                       {range.startAmount} - {range.endAmount}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {range.payinCharge}{range.chargeType === 'percentage' ? '%' : ''}
+                      {range.payinCharge}{range.payinChargeType === 'percentage' ? '%' : ''}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {range.payoutCharge}{range.chargeType === 'percentage' ? '%' : ''}
+                      {range.payoutCharge}{range.payoutChargeType === 'percentage' ? '%' : ''}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="capitalize">{range.chargeType}</span>
+                      <span className="capitalize">{range.payinChargeType}</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="capitalize">{range.payoutChargeType}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <button
@@ -610,11 +627,14 @@ export default function UserCharges() {
                 <label className="block text-sm font-medium text-gray-700">Charge (%)</label>
                 <input
                   type="number"
-                  value={newPlatformCharge.charge || ''}
-                  onChange={(e) => setNewPlatformCharge({
-                    ...newPlatformCharge,
-                    charge: parseFloat(e.target.value)
-                  })}
+                  value={newPlatformCharge.charge ?? ''}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setNewPlatformCharge({
+                      ...newPlatformCharge,
+                      charge: v === '' ? undefined : parseFloat(v)
+                    });
+                  }}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                 />
               </div>
@@ -622,11 +642,14 @@ export default function UserCharges() {
                 <label className="block text-sm font-medium text-gray-700">GST (%)</label>
                 <input
                   type="number"
-                  value={newPlatformCharge.gst || ''}
-                  onChange={(e) => setNewPlatformCharge({
-                    ...newPlatformCharge,
-                    gst: parseFloat(e.target.value)
-                  })}
+                  value={newPlatformCharge.gst ?? ''}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setNewPlatformCharge({
+                      ...newPlatformCharge,
+                      gst: v === '' ? undefined : parseFloat(v)
+                    });
+                  }}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                 />
               </div>

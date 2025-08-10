@@ -22,21 +22,36 @@ const Sidebar: React.FC<SidebarProps> = ({ items = [], isOpen, onClose }) => {
       case 'agent':
         return 'Agent Portal';
       case 'user':
+      case 'payin_payout':
         return 'User Portal';
       default:
         return 'ZintexPay';
     }
   };
 
-  // Check if the current path matches the menu item path
-  const isPathActive = (path: string) => {
-    // For dashboard paths, require exact match
-    if (path === `/${user?.user_type}`) {
-      return location.pathname === path;
-    }
-    // For other paths, check if current path starts with the menu item path
-    return location.pathname.startsWith(path);
+  // Custom active state logic for NavLink
+  const getActiveClassName = (isActive: boolean) => {
+    return isActive
+      ? 'bg-primary-800 text-white border-l-4 border-accent-400'
+      : 'text-primary-100 hover:bg-primary-800 hover:text-white';
   };
+
+  // Custom function to determine if a path should be active
+  const isPathActive = (path: string) => {
+    const currentPath = location.pathname;
+    
+    // For dashboard paths, check if it matches the user's dashboard path
+    // Users with user_type 'payin_payout' should have dashboard at '/user'
+    const dashboardPath = user?.user_type === 'payin_payout' ? '/user' : `/${user?.user_type}`;
+    if (path === dashboardPath) {
+      return currentPath === path;
+    }
+    
+    // For all other paths, require exact match
+    return currentPath === path;
+  };
+
+
 
   return (
     <div className={`w-64 bg-primary-900 text-white flex flex-col h-full transition-all duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
@@ -59,6 +74,8 @@ const Sidebar: React.FC<SidebarProps> = ({ items = [], isOpen, onClose }) => {
             const Icon = getIconByName(item.icon);
             const active = isPathActive(item.path);
             
+
+            
             return (
               <li key={item.path}>
                 <NavLink
@@ -66,10 +83,7 @@ const Sidebar: React.FC<SidebarProps> = ({ items = [], isOpen, onClose }) => {
                   onClick={onClose}
                   className={`
                     flex items-center px-6 py-3 text-sm
-                    ${active
-                      ? 'bg-primary-800 text-white border-l-4 border-accent-400'
-                      : 'text-primary-100 hover:bg-primary-800 hover:text-white'
-                    }
+                    ${getActiveClassName(active)}
                   `}
                 >
                   <Icon className="h-5 w-5 mr-3" />

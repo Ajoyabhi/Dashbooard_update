@@ -206,13 +206,16 @@ export default function UserCallbacks() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Merchant Name</label>
-                <input
-                  type="text"
+                <select
                   value={settings.payinMerchantName}
                   onChange={(e) => setSettings({ ...settings, payinMerchantName: e.target.value })}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                  placeholder="Enter new merchant name"
-                />
+                >
+                  <option value="">Select Merchant</option>
+                  <option value="Unpay">Unpay</option>
+                  <option value="Spay">Spay</option>
+                  <option value="Philpay">Philpay</option>
+                </select>
               </div>
               <button
                 onClick={handlePayinCallback}
@@ -237,13 +240,16 @@ export default function UserCallbacks() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Merchant Name</label>
-                <input
-                  type="text"
+                <select
                   value={settings.payoutMerchantName}
                   onChange={(e) => setSettings({ ...settings, payoutMerchantName: e.target.value })}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                  placeholder="Enter new merchant name"
-                />
+                >
+                  <option value="">Select Merchant</option>
+                  <option value="Unpay">Unpay</option>
+                  <option value="Spay">Spay</option>
+                  <option value="Philpay">Philpay</option>
+                </select>
               </div>
               <button
                 onClick={handlePayoutCallback}

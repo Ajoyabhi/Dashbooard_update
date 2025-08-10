@@ -6,6 +6,7 @@ import { adminMenuItems } from '../../data/mockData';
 import api from '../../utils/axios';
 import { toast } from 'react-hot-toast';
 import { formatCurrency } from '../../utils/formatUtils';
+import WalletTransactionTable from '../../components/dashboard/WalletTransactionTable';
 
 interface FundTransaction {
   type: 'credit' | 'debit';
@@ -51,7 +52,8 @@ export default function AddFund() {
 
       toast.success('Transaction completed successfully');
       setCurrentBalance(response.data.new_balance);
-      navigate(-1);
+      // Refresh the transaction history
+      window.location.reload();
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Error processing transaction');
     } finally {
@@ -170,6 +172,9 @@ export default function AddFund() {
             </button>
           </div>
         </form>
+
+        {/* Transaction History */}
+        <WalletTransactionTable userId={userId!} />
       </div>
     </DashboardLayout>
   );

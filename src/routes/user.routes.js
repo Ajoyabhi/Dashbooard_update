@@ -9,7 +9,8 @@ const {
   getUserFundRequests,
   createFundRequest,
   getUserDashboard,
-  getUserSettlementReport
+  getUserSettlementReport,
+  getUserWalletTransactionHistory
 } = require('../controllers/user.controller');
 const { auth, authorize } = require('../middleware/auth.middleware');
 
@@ -27,6 +28,9 @@ router.put('/profile', updateUserProfile);
 router.get('/wallet_reports', getUserWalletReports);
 router.get('/payin_reports', getUserPayinReports);
 router.get('/payout_reports', getUserPayoutReports);
+
+// User wallet transaction history
+router.get('/wallet_transaction_history', getUserWalletTransactionHistory);
 
 // User fund request routes
 router.get('/fund-requests', getUserFundRequests);

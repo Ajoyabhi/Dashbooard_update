@@ -24,6 +24,8 @@ const UserIPsModel = require('./UserIPs');
 const TransactionChargesModel = require('./TransactionCharges');
 const SettlementTransactionModel = require('./settlementTransaction.model');
 const ManageFundRequestModel = require('./manageFundRequest.model');
+const WalletTransactionModel = require('./WalletTransaction');
+const PayoutFailedHistoryModel = require('./PayoutFailedHistory');
 
 // Initialize models
 const User = UserModel(sequelize);
@@ -37,6 +39,8 @@ const UserIPs = UserIPsModel(sequelize);
 const TransactionCharges = TransactionChargesModel(sequelize);
 const SettlementTransaction = SettlementTransactionModel(sequelize);
 const ManageFundRequest = ManageFundRequestModel(sequelize);
+const WalletTransaction = WalletTransactionModel(sequelize);
+const PayoutFailedHistory = PayoutFailedHistoryModel(sequelize);
 
 // Define relationships
 User.hasOne(UserStatus, { foreignKey: 'user_id', onDelete: 'CASCADE' });
@@ -72,6 +76,16 @@ ManageFundRequest.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 ManageFundRequest.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
 ManageFundRequest.belongsTo(User, { foreignKey: 'updated_by', as: 'updater' });
 
+// Add WalletTransaction relationships
+User.hasMany(WalletTransaction, { foreignKey: 'user_id', onDelete: 'CASCADE' });
+WalletTransaction.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+WalletTransaction.belongsTo(User, { foreignKey: 'created_by', as: 'createdByUser' });
+
+// Add PayoutFailedHistory relationships
+User.hasMany(PayoutFailedHistory, { foreignKey: 'user_id', onDelete: 'CASCADE' });
+PayoutFailedHistory.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+PayoutFailedHistory.belongsTo(User, { foreignKey: 'failed_by', as: 'failedByUser' });
+
 // Export models
 module.exports = {
     sequelize,
@@ -85,5 +99,7 @@ module.exports = {
     UserIPs,
     TransactionCharges,
     SettlementTransaction,
-    ManageFundRequest
+    ManageFundRequest,
+    WalletTransaction,
+    PayoutFailedHistory
 }; 

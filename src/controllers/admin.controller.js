@@ -1,4 +1,4 @@
-const { User, UserStatus, MerchantDetails, MerchantCharges, MerchantModeCharges, FinancialDetails, UserIPs, PlatformCharges, TransactionCharges, SettlementTransaction, ManageFundRequest } = require('../models');
+const { User, UserStatus, MerchantDetails, MerchantCharges, MerchantModeCharges, FinancialDetails, UserIPs, PlatformCharges, TransactionCharges, SettlementTransaction, ManageFundRequest, WalletTransaction, PayoutFailedHistory } = require('../models');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 const PayoutTransaction = require('../models/payoutTransaction.model');
@@ -735,11 +735,21 @@ const updateUserWallet = async (req, res) => {
       wallet: newBalance
     });
 
-    // TODO: Add transaction record to transaction history table
+    // Create wallet transaction record
+    await WalletTransaction.create({
+      user_id: userId,
+      transaction_type: type,
+      amount: parseFloat(amount),
+      balance_before: currentBalance,
+      balance_after: newBalance,
+      remark: remark,
+      created_by: req.user.id // Assuming req.user contains the admin user info
+    });
 
     res.json({
       success: true,
       message: 'Wallet balance updated successfully',
+      new_balance: newBalance,
       data: {
         previous_balance: currentBalance,
         new_balance: newBalance,
@@ -752,6 +762,76 @@ const updateUserWallet = async (req, res) => {
     console.error('Error updating wallet balance:', error);
     res.status(500).json({ error: 'Error updating wallet balance' });
   }
+};
+
+// user wallet balance transaction history
+const getUserWalletTransactionHistory = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { page = 1, limit = 10 } = req.query;
+
+        // Check if user exists
+        const user = await User.findByPk(userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const offset = (page - 1) * limit;
+
+        // Build where clause
+        const whereClause = { user_id: userId };
+        
+        // Add search filter
+        if (req.query.search) {
+            whereClause.remark = {
+                [Op.like]: `%${req.query.search}%`
+            };
+        }
+        
+        // Add transaction type filter
+        if (req.query.type && req.query.type !== 'all') {
+            whereClause.transaction_type = req.query.type;
+        }
+
+        // Get wallet transactions with pagination
+        const transactions = await WalletTransaction.findAndCountAll({
+            where: whereClause,
+            include: [
+                {
+                    model: User,
+                    as: 'createdByUser',
+                    attributes: ['id', 'name', 'user_name']
+                }
+            ],
+            order: [['created_at', 'DESC']],
+            limit: parseInt(limit),
+            offset: parseInt(offset)
+        });
+
+        // Get current wallet balance
+        const financialDetails = await FinancialDetails.findOne({
+            where: { user_id: userId }
+        });
+
+        const totalPages = Math.ceil(transactions.count / limit);
+
+        res.json({
+            success: true,
+            data: {
+                transactions: transactions.rows,
+                pagination: {
+                    current_page: parseInt(page),
+                    total_pages: totalPages,
+                    total_records: transactions.count,
+                    limit: parseInt(limit)
+                },
+                current_balance: financialDetails ? parseFloat(financialDetails.wallet) : 0
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching user wallet transaction history:', error);
+        res.status(500).json({ error: 'Error fetching user wallet transaction history' });
+    }
 };
 
 // Get user IPs
@@ -889,6 +969,7 @@ const removeUserIP = async (req, res) => {
 const getPlatformCharges = async (req, res) => {
     try {
         const platformCharges = await PlatformCharges.findAll({
+            where: { is_active: true },
             order: [['created_at', 'DESC']]
         });
 
@@ -2286,7 +2367,7 @@ const makePayoutFailed = async (req, res) => {
         console.log("this is here referenceNumbers", referenceNumbers);
 
         // Import SQL models
-        const { User, ManageFundRequest, FinancialDetails, sequelize } = require('../models');
+        const { User, ManageFundRequest, FinancialDetails, PayoutFailedHistory, sequelize } = require('../models');
 
         // Find and update transactions with pending status
         // Update UserTransactions
@@ -2318,12 +2399,14 @@ const makePayoutFailed = async (req, res) => {
         // Get the updated transactions for response
         const updatedTransactions = await UserTransaction.find({
             reference_id: { $in: referenceNumbers }
-        }).select('reference_id status amount user.user_id charges.total_charges createdAt updatedAt');
+        }).select('reference_id status amount user.user_id charges.total_charges beneficiary_details gateway_response createdAt updatedAt');
 
         const updatedTransactionsPayout = await PayoutTransaction.find({
             reference_id: { $in: referenceNumbers }
-        }).select('reference_id status amount user.user_id charges.total_charges createdAt updatedAt');
+        }).select('reference_id status amount user.user_id charges.total_charges beneficiary_details gateway_response createdAt updatedAt');
 
+        console.log("updatedTransactions", "================", updatedTransactions);
+        console.log("updatedTransactionsPayout", "================", updatedTransactionsPayout);
         // Update wallet balance for each user
         const walletUpdates = [];
         const processedReferences = new Set(); // Track processed reference numbers
@@ -2360,7 +2443,8 @@ const makePayoutFailed = async (req, res) => {
                             }
                         });
 
-                        console.log("Current wallet balance:", financialDetails.wallet);
+                        const currentBalance = parseFloat(financialDetails.wallet) || 0;
+                        console.log("Current wallet balance:", currentBalance);
                         
                         // Calculate amount to add to wallet
                         const amount = parseFloat(transaction.amount) || 0;
@@ -2373,9 +2457,12 @@ const makePayoutFailed = async (req, res) => {
                             totalAmount: totalAmount
                         });
 
-                        // Update wallet balance using a more explicit approach
-                        const newBalance = parseFloat(financialDetails.wallet) + totalAmount;
+                        // Calculate new balance
+                        const newBalance = currentBalance + totalAmount;
                         console.log("New wallet balance will be:", newBalance);
+                        
+                        // Store the old balance before updating
+                        const oldBalance = currentBalance;
                         
                         await financialDetails.update({
                             wallet: newBalance
@@ -2393,8 +2480,30 @@ const makePayoutFailed = async (req, res) => {
                             amount_added: totalAmount,
                             transaction_type: 'UserTransaction',
                             reference_id: transaction.reference_id,
-                            old_balance: financialDetails.wallet,
+                            old_balance: oldBalance,
                             new_balance: updatedFinancialDetails.wallet
+                        });
+
+                        // Store failed transaction history
+                        await PayoutFailedHistory.create({
+                            user_id: transaction.user.user_id,
+                            reference_id: transaction.reference_id,
+                            transaction_id: transaction.transaction_id || null,
+                            transaction_type: 'PayoutTransaction',
+                            amount: amount,
+                            charges: charges,
+                            total_amount: totalAmount,
+                            wallet_balance_before: oldBalance,
+                            wallet_balance_after: updatedFinancialDetails.wallet,
+                            beneficiary_name: updatedTransactionsPayout.map(item => item.beneficiary_details?.beneficiary_name).join(', '),
+                            beneficiary_account: updatedTransactionsPayout.map(item => item.beneficiary_details?.account_number).join(', '),
+                            beneficiary_ifsc: updatedTransactionsPayout.map(item => item.beneficiary_details?.account_ifsc).join(', '),
+                            bank_name: updatedTransactionsPayout.map(item => item.beneficiary_details?.bank_name).join(', '), 
+                            utr_number: transaction.gateway_response?.utr || null,
+                            remark: 'Transaction marked as failed by admin',
+                            failed_by: req.user.id,
+                            original_status: 'pending',
+                            new_status: 'failed'
                         });
                     } else {
                         console.log("User not found:", transaction.user.user_id);
@@ -2437,7 +2546,8 @@ const makePayoutFailed = async (req, res) => {
                             }
                         });
 
-                        console.log("Current wallet balance:", financialDetails.wallet);
+                        const currentBalance = parseFloat(financialDetails.wallet) || 0;
+                        console.log("Current wallet balance:", currentBalance);
                         
                         // Calculate amount to add to wallet
                         const amount = parseFloat(transaction.amount) || 0;
@@ -2450,9 +2560,12 @@ const makePayoutFailed = async (req, res) => {
                             totalAmount: totalAmount
                         });
 
-                        // Update wallet balance using a more explicit approach
-                        const newBalance = parseFloat(financialDetails.wallet) + totalAmount;
+                        // Calculate new balance
+                        const newBalance = currentBalance + totalAmount;
                         console.log("New wallet balance will be:", newBalance);
+                        
+                        // Store the old balance before updating
+                        const oldBalance = currentBalance;
                         
                         await financialDetails.update({
                             wallet: newBalance
@@ -2470,8 +2583,30 @@ const makePayoutFailed = async (req, res) => {
                             amount_added: totalAmount,
                             transaction_type: 'PayoutTransaction',
                             reference_id: transaction.reference_id,
-                            old_balance: financialDetails.wallet,
+                            old_balance: oldBalance,
                             new_balance: updatedFinancialDetails.wallet
+                        });
+
+                        // Store failed transaction history
+                        await PayoutFailedHistory.create({
+                            user_id: transaction.user.user_id,
+                            reference_id: transaction.reference_id,
+                            transaction_id: transaction.transaction_id || null,
+                            transaction_type: 'PayoutTransaction',
+                            amount: amount,
+                            charges: charges,
+                            total_amount: totalAmount,
+                            wallet_balance_before: oldBalance,
+                            wallet_balance_after: updatedFinancialDetails.wallet,
+                            beneficiary_name: transaction.beneficiary_details?.beneficiary_name || null,
+                            beneficiary_account: transaction.beneficiary_details?.account_number || null,
+                            beneficiary_ifsc: transaction.beneficiary_details?.account_ifsc || null,
+                            bank_name: transaction.beneficiary_details?.bank_name || null,
+                            utr_number: transaction.gateway_response?.utr || null,
+                            remark: 'Transaction marked as failed by admin',
+                            failed_by: req.user.id,
+                            original_status: 'pending',
+                            new_status: 'failed'
                         });
                     } else {
                         console.log("User not found:", transaction.user.user_id);
@@ -2619,6 +2754,7 @@ const deleteTrashTransactions = async (req, res) => {
             // Delete from both collections
             const payoutResult = await PayoutTransaction.deleteMany({
                 'user.user_id': userId,
+                transaction_type: 'payout',
                 ...statusQuery
             });
             
@@ -2643,6 +2779,250 @@ const deleteTrashTransactions = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error deleting transactions',
+            error: error.message
+        });
+    }
+};
+
+// Get payout failed history with pagination
+const getPayoutFailedHistory = async (req, res) => {
+    try {
+        const {
+            page = 1,
+            pageSize = 10,
+            user,
+            transactionType,
+            startDate,
+            endDate,
+            search
+        } = req.query;
+
+        const offset = (page - 1) * pageSize;
+        const limit = parseInt(pageSize);
+
+        // Build where clause
+        const whereClause = {};
+        
+        // Add user filter
+        if (user && user !== '') {
+            whereClause.user_id = parseInt(user);
+        }
+        
+        // Add transaction type filter
+        if (transactionType && transactionType !== 'all') {
+            whereClause.transaction_type = transactionType;
+        }
+        
+        // Add date range filter
+        if (startDate || endDate) {
+            whereClause.created_at = {};
+            if (startDate) {
+                whereClause.created_at[Op.gte] = new Date(startDate);
+            }
+            if (endDate) {
+                whereClause.created_at[Op.lte] = new Date(endDate);
+            }
+        }
+        
+        // Add search filter
+        if (search && search.trim() !== '') {
+            whereClause[Op.or] = [
+                { reference_id: { [Op.like]: `%${search}%` } },
+                { transaction_id: { [Op.like]: `%${search}%` } },
+                { beneficiary_name: { [Op.like]: `%${search}%` } },
+                { beneficiary_account: { [Op.like]: `%${search}%` } },
+                { utr_number: { [Op.like]: `%${search}%` } }
+            ];
+        }
+
+        // Get total count
+        const totalCount = await PayoutFailedHistory.count({
+            where: whereClause
+        });
+
+        // Get paginated history
+        const history = await PayoutFailedHistory.findAll({
+            where: whereClause,
+            include: [
+                {
+                    model: User,
+                    as: 'user',
+                    attributes: ['id', 'name', 'email', 'mobile']
+                },
+                {
+                    model: User,
+                    as: 'failedByUser',
+                    attributes: ['id', 'name', 'user_name']
+                }
+            ],
+            order: [['created_at', 'DESC']],
+            offset,
+            limit
+        });
+
+        // Calculate pagination info
+        const totalPages = Math.ceil(totalCount / limit);
+        const hasNextPage = page < totalPages;
+        const hasPrevPage = page > 1;
+
+        res.json({
+            success: true,
+            data: {
+                history,
+                pagination: {
+                    currentPage: parseInt(page),
+                    totalPages,
+                    totalItems: totalCount,
+                    pageSize: limit,
+                    hasNextPage,
+                    hasPrevPage
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching payout failed history:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching payout failed history',
+            error: error.message
+        });
+    }
+};
+
+// Download payout failed history
+const downloadPayoutFailedHistory = async (req, res) => {
+    try {
+        const { user, transactionType, startDate, endDate, search } = req.query;
+
+        // Build where clause
+        const whereClause = {};
+        
+        // Add user filter
+        if (user && user !== '') {
+            whereClause.user_id = parseInt(user);
+        }
+        
+        // Add transaction type filter
+        if (transactionType && transactionType !== 'all') {
+            whereClause.transaction_type = transactionType;
+        }
+        
+        // Add date range filter
+        if (startDate || endDate) {
+            whereClause.created_at = {};
+            if (startDate) {
+                whereClause.created_at[Op.gte] = new Date(startDate);
+            }
+            if (endDate) {
+                whereClause.created_at[Op.lte] = new Date(endDate);
+            }
+        }
+        
+        // Add search filter
+        if (search && search.trim() !== '') {
+            whereClause[Op.or] = [
+                { reference_id: { [Op.like]: `%${search}%` } },
+                { transaction_id: { [Op.like]: `%${search}%` } },
+                { beneficiary_name: { [Op.like]: `%${search}%` } },
+                { beneficiary_account: { [Op.like]: `%${search}%` } },
+                { utr_number: { [Op.like]: `%${search}%` } }
+            ];
+        }
+
+        // Get all failed history based on filters
+        const history = await PayoutFailedHistory.findAll({
+            where: whereClause,
+            include: [
+                {
+                    model: User,
+                    as: 'user',
+                    attributes: ['id', 'name', 'email', 'mobile']
+                },
+                {
+                    model: User,
+                    as: 'failedByUser',
+                    attributes: ['id', 'name', 'user_name']
+                }
+            ],
+            order: [['created_at', 'DESC']]
+        });
+
+        // Import ExcelJS for Excel generation
+        const ExcelJS = require('exceljs');
+
+        // Create workbook and worksheet
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Failed Transaction History');
+
+        // Define columns
+        worksheet.columns = [
+            { header: 'Reference ID', key: 'reference_id', width: 20 },
+            { header: 'Transaction ID', key: 'transaction_id', width: 20 },
+            { header: 'Transaction Type', key: 'transaction_type', width: 15 },
+            { header: 'User Name', key: 'user_name', width: 20 },
+            { header: 'User Email', key: 'user_email', width: 25 },
+            { header: 'User Mobile', key: 'user_mobile', width: 15 },
+            { header: 'Amount', key: 'amount', width: 15 },
+            { header: 'Charges', key: 'charges', width: 15 },
+            { header: 'Total Amount', key: 'total_amount', width: 15 },
+            { header: 'Beneficiary Name', key: 'beneficiary_name', width: 20 },
+            { header: 'Account Number', key: 'beneficiary_account', width: 20 },
+            { header: 'IFSC Code', key: 'beneficiary_ifsc', width: 15 },
+            { header: 'Bank Name', key: 'bank_name', width: 20 },
+            { header: 'UTR Number', key: 'utr_number', width: 20 },
+            { header: 'Failed By', key: 'failed_by', width: 20 },
+            { header: 'Original Status', key: 'original_status', width: 15 },
+            { header: 'New Status', key: 'new_status', width: 15 },
+            { header: 'Created Date', key: 'created_date', width: 20 },
+            { header: 'Remark', key: 'remark', width: 30 }
+        ];
+
+        // Style the header row
+        worksheet.getRow(1).font = { bold: true };
+        worksheet.getRow(1).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE0E0E0' }
+        };
+
+        // Add data rows
+        history.forEach(item => {
+            worksheet.addRow({
+                reference_id: item.reference_id,
+                transaction_id: item.transaction_id || 'N/A',
+                transaction_type: item.transaction_type,
+                user_name: item.user?.name || 'N/A',
+                user_email: item.user?.email || 'N/A',
+                user_mobile: item.user?.mobile || 'N/A',
+                amount: item.amount,
+                charges: item.charges,
+                total_amount: item.total_amount,
+                beneficiary_name: item.beneficiary_name || 'N/A',
+                beneficiary_account: item.beneficiary_account || 'N/A',
+                beneficiary_ifsc: item.beneficiary_ifsc || 'N/A',
+                bank_name: item.bank_name || 'N/A',
+                utr_number: item.utr_number || 'N/A',
+                failed_by: item.failedByUser?.name || 'N/A',
+                original_status: item.original_status,
+                new_status: item.new_status,
+                created_date: new Date(item.created_at).toLocaleString('en-IN'),
+                remark: item.remark || 'N/A'
+            });
+        });
+
+        // Set response headers for file download
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename=failed-transaction-history-${new Date().toISOString().split('T')[0]}.xlsx`);
+
+        // Write to response
+        await workbook.xlsx.write(res);
+        res.end();
+
+    } catch (error) {
+        console.error('Error generating failed transaction history download:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error generating failed transaction history download',
             error: error.message
         });
     }
@@ -2691,5 +3071,8 @@ module.exports = {
   getUsersForDropdown,
   makePayoutFailed,
   getTrashTransactionCount,
-  deleteTrashTransactions
+  deleteTrashTransactions,
+  getUserWalletTransactionHistory,
+  getPayoutFailedHistory,
+  downloadPayoutFailedHistory
 };

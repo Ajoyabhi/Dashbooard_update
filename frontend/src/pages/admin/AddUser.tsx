@@ -223,15 +223,21 @@ export default function AddUser() {
                   <label htmlFor="business_type" className="block text-sm font-medium text-gray-700">
                     Business Type
                   </label>
-                  <input
-                    type="text"
-                    name="business_type"
+                  <select
                     id="business_type"
+                    name="business_type"
                     value={formData.business_type}
                     onChange={handleChange}
                     required
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                  />
+                  >
+                    <option value="">Select Business Type</option>
+                    <option value="pvtltd">Private Limited</option>
+                    <option value="partnership">Partnership</option>
+                    <option value="proprietorship">Proprietorship</option>
+                    <option value="llp">LLP</option>
+                    <option value="public">Public</option>
+                  </select>
                 </div>
                 <div>
                   <label htmlFor="pan_card" className="block text-sm font-medium text-gray-700">

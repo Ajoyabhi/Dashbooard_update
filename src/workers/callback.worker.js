@@ -364,8 +364,8 @@ philpayPayoutQueue.process(async function(job) {
     else{
       logger.info('Philpay payout job failed', { 
         jobId: job.id,
-        error: error.message,
-        stack: error.stack,
+        status: job.data.data.object.status,
+        message: job.data.data.object.acquirer_message || 'Transaction failed',
         attempts: job.attemptsMade
       });
       await TransactionCharges.update(
@@ -385,7 +385,7 @@ philpayPayoutQueue.process(async function(job) {
           { reference_id: job.data.data.object.merchant_order_id },
           {
               $set: {
-                  status: 'success',
+                  status: 'failed',
                   gateway_response: {
                       merchant_response: job.data.data.object.merchant_order_id,
                       status: 'failed',
@@ -401,7 +401,7 @@ philpayPayoutQueue.process(async function(job) {
           { reference_id: job.data.data.object.merchant_order_id },
           {
               $set: {
-                  status: 'success',
+                  status: 'failed',
                   gateway_response: {
                       merchant_response: job.data.data.object.merchant_order_id,
                       status: 'failed',
@@ -422,7 +422,26 @@ philpayPayoutQueue.process(async function(job) {
     }
 
     const userId = payinTransaction.user.user_id;
+    const settlement_amount = payinTransaction.amount;
+    const chargesAmount = payinTransaction.charges.total_charges;
+    const userCurrrentBalance = await FinancialDetails.findOne({
+       where: {
+         user_id: parseInt(userId, 10)
+       }
+    });
 
+    if(userCurrrentBalance){
+       // Ensure all values are properly parsed as numbers and handle potential null/undefined values
+       const currentSettlement = parseFloat(userCurrrentBalance.settlement || 0);
+       const settlementAmount = parseFloat(settlement_amount || 0);
+       const chargesAmountParsed = parseFloat(chargesAmount || 0);
+       
+       const newSettlement = currentSettlement + settlementAmount + chargesAmountParsed;
+       
+       // Ensure the result is a valid number and round to 2 decimal places
+       userCurrrentBalance.settlement = parseFloat(newSettlement.toFixed(2));
+       await userCurrrentBalance.save();
+    }
     const merchantDetails = await MerchantDetails.findOne({
       where: { 
         user_id: parseInt(userId, 10)

@@ -13,6 +13,7 @@ const getClientIp = require('../utils/getClientIp');
 const mongoose = require('mongoose');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
 const axios = require('axios');
+const { unpayTransactionStatus, spayTransactionStatus, philpayTransactionStatus } = require('../transactionStatusCheck/TransactionCheck');
 
 /**
  * Initiate a payout
@@ -465,8 +466,20 @@ const initiatePayout = async (req, res) => {
 
 const getPayoutTransactionStatus = async (req, res) => {
   try {
-    const { transaction_id } = req.params;
     const user_id = req.user.id;
+        // Fetch user and all related data
+    const user = await User.findByPk(user_id, {
+          include: [
+              { model: UserStatus },
+              { model: MerchantDetails },
+              { model: MerchantCharges },
+              { model: MerchantModeCharges },
+              { model: FinancialDetails },
+              { model: UserIPs }
+      ]
+      });
+    const { transaction_id } = req.params;
+
 
     // Find transaction
     const transaction = await PayoutTransaction.findOne({
@@ -479,53 +492,33 @@ const getPayoutTransactionStatus = async (req, res) => {
         message: 'Transaction not found'
       });
     }
-
-    // Prepare request body for Unpay API
-    const requestBody = {
-      partner_id: "1809", // Get this from merchant details or config
-      apitxnid: transaction_id
-    };
-
-    // Encrypt request body
-    const aesKey = "brTaJLaVgWvshn3zHM4qt0lI1DqjFeUz"; // Get from config
-    const aesIV = "uBiWATDOnfTvhfJO"; // Get from config
-    const apiKey = "Tn3ybTJGKaDMhhj9jl89aULGf9OI0S8ZPkq0GD42"; // Get from config
-    const encryptedRequestBody = await encryptText(JSON.stringify(requestBody), aesKey, aesIV);
-
-    // Make API request to Unpay using axios
-    const response = await axios.post('https://unpay.in/tech/api/payout/order/status', 
-      { body: encryptedRequestBody },
-      {
-        headers: {
-          'accept': 'application/json',
-          'api-key': apiKey,
-          'content-type': 'application/json'
-        }
+    let result;
+    if(user.MerchantDetail.payout_merchant_name === 'Unpay'){
+      result = await unpayTransactionStatus(transaction_id);
+      console.log("this is result of unpay payout", result)
+    }else if(user.MerchantDetail.payout_merchant_name === 'SPay'){
+      result = await spayTransactionStatus(transaction_id);
+      console.log("this is result of spay payout", result)
+    }else if(user.MerchantDetail.payout_merchant_name === 'Philpay'){
+      result = await philpayTransactionStatus(transaction_id);
+      console.log("this is result of philpay payout", result)
+      if (result && result.data && result.data.response && typeof result.data.response === 'object') {
+        const { metadata, id, vpa, fees, ...sanitized } = result.data.response;
+        result = { ...result, data: { ...result.data, response: sanitized } };
       }
-    );
-
-    const result = response.data;
-
-    // Handle different response status codes
-    console.log("*".repeat(50));
-    console.log(result)
-    if (result.statuscode === 'TXN') {
-      // Success case
-      res.status(200).json({
+      // console.log("this is result of philpay payout", result)
+    }
+    if(result.status === 200){
+      return res.status(200).json({
         success: true,
-        response: result
+        message: 'Transaction status retrieved successfully',
+        result: result
       });
-    } else if (result.statuscode === 'TXF') {
-      // Failed case - No record found
-      res.status(200).json({
+    }
+    else{
+      return res.status(400).json({
         success: false,
-        response: result
-      });
-    } else {
-      // Unknown status code
-      res.status(200).json({
-        success: false,
-        response: result
+        message: 'Transaction status not found'
       });
     }
   } catch (error) {
