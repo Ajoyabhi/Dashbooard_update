@@ -10,7 +10,10 @@ const {
   createFundRequest,
   getUserDashboard,
   getUserSettlementReport,
-  getUserWalletTransactionHistory
+  getUserWalletTransactionHistory,
+  getUserPayoutFailedHistory,
+  downloadSettlementReport,
+  downloadPayoutFailedHistory
 } = require('../controllers/user.controller');
 const { auth, authorize } = require('../middleware/auth.middleware');
 
@@ -32,11 +35,16 @@ router.get('/payout_reports', getUserPayoutReports);
 // User wallet transaction history
 router.get('/wallet_transaction_history', getUserWalletTransactionHistory);
 
+router.get('/payout_failed_history', getUserPayoutFailedHistory);
+router.get('/payout_failed_history/download', downloadPayoutFailedHistory);
+router.get('/settlement_report', getUserSettlementReport);
+
 // User fund request routes
 router.get('/fund-requests', getUserFundRequests);
 router.post('/fund-request', createFundRequest);
 
 router.get('/settlement-report', getUserSettlementReport);
+router.get('/settlement-report/download', downloadSettlementReport);
 
 
 module.exports = router; 

@@ -6,17 +6,25 @@ import { userMenuItems } from '../../data/mockData';
 import { formatCurrency, formatDate, getStatusColor } from '../../utils/formatUtils';
 import api from '../../utils/axios';
 
-interface SettlementRecord {
-  _id: number;
-  date: string;
+interface PayoutFailedRecord {
+  id: number;
+  reference_id: string;
+  transaction_id: string;
+  transaction_type: string;
   amount: number;
+  charges: number;
+  total_amount: number;
   wallet_balance_before: number;
   wallet_balance_after: number;
-  settlement_balance_before: number;
-  settlement_balance_after: number;
-  status: string;
-  processed_by: string;
+  beneficiary_name: string;
+  beneficiary_account: string;
+  beneficiary_ifsc: string;
+  bank_name: string;
+  utr_number: string;
   remark: string;
+  original_status: string;
+  new_status: string;
+  failed_by: string;
   created_at: string;
   updated_at: string;
 }
@@ -31,13 +39,14 @@ interface FilterOption {
   value: string;
 }
 
-export default function SettlementReport() {
+export default function PayoutFailedHistory() {
+  const [selectedDate, setSelectedDate] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [settlementHistory, setSettlementHistory] = useState<SettlementRecord[]>([]);
+  const [failedHistory, setFailedHistory] = useState<PayoutFailedRecord[]>([]);
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [dateRange, setDateRange] = useState<DateRange>({
     startDate: null,
@@ -54,12 +63,12 @@ export default function SettlementReport() {
 
   const statusOptions: FilterOption[] = [
     { label: 'All Status', value: 'all' },
-    { label: 'Completed', value: 'completed' },
     { label: 'Failed', value: 'failed' },
+    { label: 'Pending', value: 'pending' },
   ];
 
-  // Fetch settlement history with pagination and filters
-  const fetchSettlementHistory = async () => {
+  // Fetch failed history with pagination and filters
+  const fetchFailedHistory = async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams({
@@ -76,22 +85,21 @@ export default function SettlementReport() {
         params.append('endDate', dateRange.endDate.toISOString().split('T')[0]);
       }
 
-      const response = await api.get(`/user/settlement-report?${params}`);
+      const response = await api.get(`/user/payout_failed_history?${params}`);
       console.log("response", response);
-      
       if (response.data.success) {
-        setSettlementHistory(response.data.data.transactions);
+        setFailedHistory(response.data.data.failedHistory);
         setPagination(response.data.data.pagination);
       }
     } catch (error) {
-      console.error('Error fetching settlement history:', error);
+      console.error('Error fetching payout failed history:', error);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchSettlementHistory();
+    fetchFailedHistory();
   }, [currentPage, pageSize, selectedStatus, searchTerm, dateRange]);
 
   const handlePageChange = (page: number) => {
@@ -126,7 +134,7 @@ export default function SettlementReport() {
 
       // Use fetch with proper authentication headers
       const token = localStorage.getItem('token');
-      const response = await fetch(`${api.defaults.baseURL}/user/settlement-report/download?${params}`, {
+      const response = await fetch(`${api.defaults.baseURL}/user/payout_failed_history/download?${params}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -145,7 +153,7 @@ export default function SettlementReport() {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `settlement_report_${new Date().toISOString().split('T')[0]}.csv`;
+      link.download = `payout_failed_history_${new Date().toISOString().split('T')[0]}.csv`;
       
       // Trigger download
       document.body.appendChild(link);
@@ -157,16 +165,16 @@ export default function SettlementReport() {
 
       // Show success message
       if (window.showToast) {
-        window.showToast('success', 'Settlement report downloaded successfully');
+        window.showToast('success', 'Report downloaded successfully');
       } else {
-        alert('Settlement report downloaded successfully');
+        alert('Report downloaded successfully');
       }
     } catch (error) {
-      console.error('Error downloading settlement report:', error);
+      console.error('Error downloading report:', error);
       if (window.showToast) {
-        window.showToast('error', 'Failed to download settlement report');
+        window.showToast('error', 'Failed to download report');
       } else {
-        alert('Failed to download settlement report');
+        alert('Failed to download report');
       }
     }
   };
@@ -174,15 +182,43 @@ export default function SettlementReport() {
   const columns = [
     {
       header: 'Date',
-      accessor: 'date',
+      accessor: 'created_at',
       cell: (value: string) => formatDate(value),
+    },
+    {
+      header: 'Reference ID',
+      accessor: 'reference_id',
+      cell: (value: string) => (
+        <span className="text-blue-600 font-medium">{value}</span>
+      ),
+    },
+    {
+      header: 'Beneficiary',
+      accessor: 'beneficiary_name',
+    },
+    {
+      header: 'Account',
+      accessor: 'beneficiary_account',
+      cell: (value: string) => value ? `****${value.slice(-4)}` : '-',
+    },
+    {
+      header: 'Bank',
+      accessor: 'bank_name',
     },
     {
       header: 'Amount',
       accessor: 'amount',
-      cell: (value: number) => (
-        <span className="font-medium text-blue-600">{formatCurrency(value)}</span>
-      ),
+      cell: (value: number) => formatCurrency(value),
+    },
+    {
+      header: 'Charges',
+      accessor: 'charges',
+      cell: (value: number) => formatCurrency(value),
+    },
+    {
+      header: 'Total Amount',
+      accessor: 'total_amount',
+      cell: (value: number) => formatCurrency(value),
     },
     {
       header: 'Wallet Balance Before',
@@ -197,20 +233,8 @@ export default function SettlementReport() {
       ),
     },
     {
-      header: 'Settlement Balance Before',
-      accessor: 'settlement_balance_before',
-      cell: (value: number) => formatCurrency(value),
-    },
-    {
-      header: 'Settlement Balance After',
-      accessor: 'settlement_balance_after',
-      cell: (value: number) => (
-        <span className="text-green-600 font-medium">{formatCurrency(value)}</span>
-      ),
-    },
-    {
       header: 'Status',
-      accessor: 'status',
+      accessor: 'new_status',
       cell: (value: string) => (
         <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(value)}`}>
           {value}
@@ -218,18 +242,13 @@ export default function SettlementReport() {
       ),
     },
     {
-      header: 'Processed By',
-      accessor: 'processed_by',
-    },
-    {
-      header: 'Remark',
-      accessor: 'remark',
-      cell: (value: string) => value || '-',
-    },
+      header: 'Failed By',
+      accessor: 'failed_by',
+    }
   ];
 
   return (
-    <DashboardLayout menuItems={userMenuItems} title="Settlement Report">
+    <DashboardLayout menuItems={userMenuItems} title="Payout Failed History">
       <div className="space-y-6">
         {/* Search and Filters */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
@@ -242,7 +261,7 @@ export default function SettlementReport() {
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search by amount, status, remark..."
+                placeholder="Search by reference ID, transaction ID, beneficiary..."
                 className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
               />
             </div>
@@ -337,7 +356,7 @@ export default function SettlementReport() {
         <div className="bg-white shadow-sm rounded-lg">
           <div className="p-6">
             <Table
-              data={settlementHistory}
+              data={failedHistory}
               columns={columns}
               loading={loading}
               pagination={true}

@@ -1,5 +1,5 @@
 const { logger } = require('../utils/logger');
-const { User, FinancialDetails, ManageFundRequest, TransactionCharges, SettlementTransaction, WalletTransaction } = require('../models');
+const { User, FinancialDetails, ManageFundRequest, TransactionCharges, SettlementTransaction, WalletTransaction, PayoutFailedHistory } = require('../models');
 const { sequelize } = require('../models');
 const UserTransaction = require('../models/userTransaction.model');
 const PayinTransaction = require('../models/payinTransaction.model');
@@ -653,8 +653,10 @@ const getUserSettlementReport = async (req, res) => {
       _id: transaction.id,
       date: transaction.created_at,
       amount: parseFloat(transaction.amount),
-      wallet_balance: parseFloat(transaction.wallet_balance_after),
-      settlement_balance: parseFloat(transaction.settlement_balance_after),
+      wallet_balance_before: parseFloat(transaction.wallet_balance_before),
+      wallet_balance_after: parseFloat(transaction.wallet_balance_after),
+      settlement_balance_before: parseFloat(transaction.settlement_balance_before),
+      settlement_balance_after: parseFloat(transaction.settlement_balance_after),
       status: transaction.status,
       processed_by: transaction.creator ? transaction.creator.name : transaction.updater ? transaction.updater.name : 'System',
       remark: transaction.remark,
@@ -692,6 +694,321 @@ const getUserSettlementReport = async (req, res) => {
   }
 };
 
+const getUserPayoutFailedHistory = async (req, res) => {
+  try {
+    const { page = 1, pageSize = 10, status, search, startDate, endDate } = req.query;
+    const offset = (page - 1) * pageSize;
+    const limit = parseInt(pageSize);
+    const userId = req.user.id;
+
+    logger.info('Fetching payout failed history', { userId, page, pageSize, status, search, startDate, endDate });
+
+    // Build where clause
+    const whereClause = { user_id: userId };
+
+    // Add status filter if provided
+    if (status && status !== 'all') {
+      whereClause.new_status = status;
+    }
+
+    // Add date range filter if provided
+    if (startDate || endDate) {
+      whereClause.created_at = {};
+      if (startDate) {
+        whereClause.created_at[Op.gte] = new Date(startDate);
+      }
+      if (endDate) {
+        whereClause.created_at[Op.lte] = new Date(endDate);
+      }
+    }
+
+    // Add search filter if provided
+    if (search) {
+      whereClause[Op.or] = [
+        { reference_id: { [Op.like]: `%${search}%` } },
+        { transaction_id: { [Op.like]: `%${search}%` } },
+        { beneficiary_name: { [Op.like]: `%${search}%` } },
+        { beneficiary_account: { [Op.like]: `%${search}%` } },
+        { bank_name: { [Op.like]: `%${search}%` } },
+        { remark: { [Op.like]: `%${search}%` } }
+      ];
+    }
+
+    // Get total count
+    const totalCount = await PayoutFailedHistory.count({
+      where: whereClause
+    });
+
+    // Get paginated payout failed history
+    const failedHistory = await PayoutFailedHistory.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['name', 'user_name']
+        },
+        {
+          model: User,
+          as: 'failedByUser',
+          attributes: ['name', 'user_name']
+        }
+      ],
+      order: [['created_at', 'DESC']],
+      offset,
+      limit
+    });
+
+    // Format the response
+    const formattedHistory = failedHistory.map(record => ({
+      id: record.id,
+      reference_id: record.reference_id,
+      transaction_id: record.transaction_id,
+      transaction_type: record.transaction_type,
+      amount: parseFloat(record.amount),
+      charges: parseFloat(record.charges),
+      total_amount: parseFloat(record.total_amount),
+      wallet_balance_before: parseFloat(record.wallet_balance_before),
+      wallet_balance_after: parseFloat(record.wallet_balance_after),
+      beneficiary_name: record.beneficiary_name,
+      beneficiary_account: record.beneficiary_account,
+      beneficiary_ifsc: record.beneficiary_ifsc,
+      bank_name: record.bank_name,
+      utr_number: record.utr_number,
+      remark: record.remark,
+      original_status: record.original_status,
+      new_status: record.new_status,
+      failed_by: record.failedByUser ? record.failedByUser.name : 'System',
+      created_at: record.created_at,
+      updated_at: record.updated_at
+    }));
+
+    logger.info('Payout failed history fetched successfully', { 
+      userId, 
+      totalCount, 
+      pageCount: formattedHistory.length 
+    });
+
+    res.json({
+      success: true,
+      data: {
+        failedHistory: formattedHistory,
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages: Math.ceil(totalCount / pageSize),
+          totalItems: totalCount,
+          pageSize: limit,
+          hasNextPage: offset + limit < totalCount,
+          hasPrevPage: offset > 0
+        }
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching payout failed history:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching payout failed history',
+      error: error.message
+    });
+  }
+}
+
+const downloadSettlementReport = async (req, res) => {
+  try {
+    const { status, search, startDate, endDate } = req.query;
+    const userId = req.user.id;
+
+    logger.info('Downloading settlement report', { userId, status, search, startDate, endDate });
+
+    // Build where clause
+    const whereClause = { user_id: userId };
+
+    // Add status filter if provided
+    if (status && status !== 'all') {
+      whereClause.status = status;
+    }
+
+    // Add date range filter if provided
+    if (startDate || endDate) {
+      whereClause.created_at = {};
+      if (startDate) {
+        whereClause.created_at[Op.gte] = new Date(startDate);
+      }
+      if (endDate) {
+        whereClause.created_at[Op.lte] = new Date(endDate);
+      }
+    }
+
+    // Add search filter if provided
+    if (search) {
+      whereClause[Op.or] = [
+        { amount: { [Op.like]: `%${search}%` } },
+        { status: { [Op.like]: `%${search}%` } },
+        { remark: { [Op.like]: `%${search}%` } }
+      ];
+    }
+
+    // Get all settlement transactions for download
+    const transactions = await SettlementTransaction.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: User,
+          as: 'creator',
+          attributes: ['name', 'user_name']
+        },
+        {
+          model: User,
+          as: 'updater',
+          attributes: ['name', 'user_name']
+        }
+      ],
+      order: [['created_at', 'DESC']]
+    });
+
+    // Format the data for CSV
+    const csvData = transactions.map(transaction => ({
+      Date: new Date(transaction.created_at).toLocaleDateString(),
+      Amount: parseFloat(transaction.amount),
+      'Wallet Balance Before': parseFloat(transaction.wallet_balance_before),
+      'Wallet Balance After': parseFloat(transaction.wallet_balance_after),
+      'Settlement Balance Before': parseFloat(transaction.settlement_balance_before),
+      'Settlement Balance After': parseFloat(transaction.settlement_balance_after),
+      Status: transaction.status,
+      'Processed By': transaction.creator ? transaction.creator.name : transaction.updater ? transaction.updater.name : 'System',
+      Remark: transaction.remark || ''
+    }));
+
+    // Set response headers for CSV download
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="settlement_report_${new Date().toISOString().split('T')[0]}.csv"`);
+
+    // Create CSV content
+    const headers = Object.keys(csvData[0] || {}).join(',');
+    const rows = csvData.map(row => Object.values(row).map(value => `"${value}"`).join(','));
+    const csvContent = [headers, ...rows].join('\n');
+
+    res.send(csvContent);
+
+    logger.info('Settlement report downloaded successfully', { 
+      userId, 
+      recordCount: transactions.length 
+    });
+
+  } catch (error) {
+    logger.error('Error downloading settlement report:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error downloading settlement report',
+      error: error.message
+    });
+  }
+};
+
+const downloadPayoutFailedHistory = async (req, res) => {
+  try {
+    const { status, search, startDate, endDate } = req.query;
+    const userId = req.user.id;
+
+    logger.info('Downloading payout failed history', { userId, status, search, startDate, endDate });
+
+    // Build where clause
+    const whereClause = { user_id: userId };
+
+    // Add status filter if provided
+    if (status && status !== 'all') {
+      whereClause.new_status = status;
+    }
+
+    // Add date range filter if provided
+    if (startDate || endDate) {
+      whereClause.created_at = {};
+      if (startDate) {
+        whereClause.created_at[Op.gte] = new Date(startDate);
+      }
+      if (endDate) {
+        whereClause.created_at[Op.lte] = new Date(endDate);
+      }
+    }
+
+    // Add search filter if provided
+    if (search) {
+      whereClause[Op.or] = [
+        { reference_id: { [Op.like]: `%${search}%` } },
+        { transaction_id: { [Op.like]: `%${search}%` } },
+        { beneficiary_name: { [Op.like]: `%${search}%` } },
+        { beneficiary_account: { [Op.like]: `%${search}%` } },
+        { bank_name: { [Op.like]: `%${search}%` } },
+        { remark: { [Op.like]: `%${search}%` } }
+      ];
+    }
+
+    // Get all payout failed history for download
+    const failedHistory = await PayoutFailedHistory.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['name', 'user_name']
+        },
+        {
+          model: User,
+          as: 'failedByUser',
+          attributes: ['name', 'user_name']
+        }
+      ],
+      order: [['created_at', 'DESC']]
+    });
+
+    // Format the data for CSV
+    const csvData = failedHistory.map(record => ({
+      Date: new Date(record.created_at).toLocaleDateString(),
+      'Reference ID': record.reference_id,
+      'Transaction ID': record.transaction_id,
+      'Transaction Type': record.transaction_type,
+      Amount: parseFloat(record.amount),
+      Charges: parseFloat(record.charges),
+      'Total Amount': parseFloat(record.total_amount),
+      'Wallet Balance Before': parseFloat(record.wallet_balance_before),
+      'Wallet Balance After': parseFloat(record.wallet_balance_after),
+      'Beneficiary Name': record.beneficiary_name,
+      'Beneficiary Account': record.beneficiary_account,
+      'Beneficiary IFSC': record.beneficiary_ifsc,
+      'Bank Name': record.bank_name,
+      'UTR Number': record.utr_number,
+      'Original Status': record.original_status,
+      'New Status': record.new_status,
+      'Failed By': record.failedByUser ? record.failedByUser.name : 'System',
+      Remark: record.remark || ''
+    }));
+
+    // Set response headers for CSV download
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="payout_failed_history_${new Date().toISOString().split('T')[0]}.csv"`);
+
+    // Create CSV content
+    const headers = Object.keys(csvData[0] || {}).join(',');
+    const rows = csvData.map(row => Object.values(row).map(value => `"${value}"`).join(','));
+    const csvContent = [headers, ...rows].join('\n');
+
+    res.send(csvContent);
+
+    logger.info('Payout failed history downloaded successfully', { 
+      userId, 
+      recordCount: failedHistory.length 
+    });
+
+  } catch (error) {
+    logger.error('Error downloading payout failed history:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error downloading payout failed history',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   getUserProfile,
   updateUserProfile,
@@ -702,5 +1019,8 @@ module.exports = {
   createFundRequest,
   getUserDashboard,
   getUserSettlementReport,
-  getUserWalletTransactionHistory
+  getUserWalletTransactionHistory,
+  getUserPayoutFailedHistory,
+  downloadSettlementReport,
+  downloadPayoutFailedHistory
 }; 

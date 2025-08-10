@@ -48,6 +48,11 @@ export const getMenuItems = (userType: string): MenuItem[] => {
         icon: 'FileText'
       },
       {
+        title: 'Payout Failed History',
+        path: '/user/payout-failed-history',
+        icon: 'FileWarning'
+      },
+      {
         title: 'Payin Report',
         path: '/user/payin-report',
         icon: 'ArrowDownToLine'
@@ -192,15 +197,20 @@ export const getMenuItems = (userType: string): MenuItem[] => {
           icon: 'Wallet'
         },
         {
-          title: 'Payout Report',
-          path: '/user/payout-report',
-          icon: 'FileText'
-        },
-        {
-          title: 'Payin Report',
-          path: '/user/payin-report',
-          icon: 'ArrowDownToLine'
-        },
+                  title: 'Payout Report',
+        path: '/user/payout-report',
+        icon: 'FileText'
+      },
+      {
+        title: 'Payout Failed History',
+        path: '/user/payout-failed-history',
+        icon: 'FileWarning'
+      },
+      {
+        title: 'Payin Report',
+        path: '/user/payin-report',
+        icon: 'ArrowDownToLine'
+      },
         {
           title: 'Developer Settings',
           path: '/user/developer-settings',
