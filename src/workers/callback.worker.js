@@ -424,23 +424,39 @@ philpayPayoutQueue.process(async function(job) {
     const userId = payinTransaction.user.user_id;
     const settlement_amount = payinTransaction.amount;
     const chargesAmount = payinTransaction.charges.total_charges;
-    const userCurrrentBalance = await FinancialDetails.findOne({
-       where: {
-         user_id: parseInt(userId, 10)
-       }
-    });
+    
+    // Only update settlement wallet if payout failed (refund the money)
+    if (job.data.data.object.status !== "success" && job.data.data.object.status !== "Success") {
+      const userCurrrentBalance = await FinancialDetails.findOne({
+         where: {
+           user_id: parseInt(userId, 10)
+         }
+      });
 
-    if(userCurrrentBalance){
-       // Ensure all values are properly parsed as numbers and handle potential null/undefined values
-       const currentSettlement = parseFloat(userCurrrentBalance.settlement || 0);
-       const settlementAmount = parseFloat(settlement_amount || 0);
-       const chargesAmountParsed = parseFloat(chargesAmount || 0);
-       
-       const newSettlement = currentSettlement + settlementAmount + chargesAmountParsed;
-       
-       // Ensure the result is a valid number and round to 2 decimal places
-       userCurrrentBalance.settlement = parseFloat(newSettlement.toFixed(2));
-       await userCurrrentBalance.save();
+      if(userCurrrentBalance){
+         // Ensure all values are properly parsed as numbers and handle potential null/undefined values
+         const currentSettlement = parseFloat(userCurrrentBalance.settlement || 0);
+         const settlementAmount = parseFloat(settlement_amount || 0);
+         const chargesAmountParsed = parseFloat(chargesAmount || 0);
+         
+         const newSettlement = currentSettlement + settlementAmount + chargesAmountParsed;
+         
+         // Ensure the result is a valid number and round to 2 decimal places
+         userCurrrentBalance.settlement = parseFloat(newSettlement.toFixed(2));
+         await userCurrrentBalance.save();
+         
+         logger.info('Settlement wallet refunded for failed payout', {
+           reference_id: job.data.data.object.merchant_order_id,
+           user_id: userId,
+           amount_refunded: settlementAmount + chargesAmountParsed,
+           new_settlement_balance: userCurrrentBalance.settlement
+         });
+      }
+    } else {
+      logger.info('Payout successful - no settlement refund needed', {
+        reference_id: job.data.data.object.merchant_order_id,
+        user_id: userId
+      });
     }
     const merchantDetails = await MerchantDetails.findOne({
       where: { 
