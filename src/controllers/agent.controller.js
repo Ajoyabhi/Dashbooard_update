@@ -493,6 +493,115 @@ const getPayinReports = async (req, res) => {
     }
 };
 
+const downloadAgentPayinReports = async (req, res) => {
+    try {
+        const { startDate, endDate, status, search } = req.query;
+        const agentId = req.user.id;
+
+        // Get all users created by this agent from SQL database
+        const users = await User.findAll({
+            where: {
+                created_by: agentId
+            },
+            attributes: ['id']
+        });
+
+        // Extract user IDs
+        const userIds = users.map(user => user.id.toString());
+
+        // Build filter object for MongoDB
+        const filter = {
+            'user.user_id': { $in: userIds }
+        };
+
+        // Add status filter if provided
+        if (status && status !== 'all') {
+            filter.status = status;
+        }
+
+        // Add date range filter if provided
+        if (startDate || endDate) {
+            filter.createdAt = {};
+            if (startDate) {
+                filter.createdAt.$gte = new Date(startDate);
+            }
+            if (endDate) {
+                filter.createdAt.$lte = new Date(endDate);
+            }
+        }
+
+        // Add search filter if provided
+        if (search) {
+            const searchRegex = new RegExp(search, 'i');
+            filter.$or = [
+                { reference_id: searchRegex },
+                { 'gateway_response.utr': searchRegex },
+                { 'beneficiary_details.beneficiary_name': searchRegex },
+                { 'beneficiary_details.account_number': searchRegex },
+                { 'beneficiary_details.account_ifsc': searchRegex }
+            ];
+        }
+
+        // Get all payin transactions based on filters
+        const transactions = await PayinTransaction.find(filter)
+            .sort({ createdAt: -1 })
+            .lean();
+
+        // Create CSV content
+        const headers = [
+            'Order ID',
+            'UTR',
+            'Merchant Name',
+            'Beneficiary Name',
+            'Amount',
+            'Charge',
+            'Net Amount',
+            'Status',
+            'Created Date',
+            'Remark'
+        ];
+
+        const csvRows = [headers];
+
+        // Add data rows
+        transactions.forEach(transaction => {
+            const netAmount = transaction.amount - (transaction.charges?.admin_charge || 0);
+            csvRows.push([
+                transaction.reference_id,
+                transaction.gateway_response?.utr || 'N/A',
+                transaction.user?.name || 'N/A',
+                transaction.beneficiary_details?.beneficiary_name || 'N/A',
+                transaction.amount,
+                transaction.charges?.admin_charge || 0,
+                netAmount,
+                transaction.status,
+                new Date(transaction.createdAt).toLocaleString('en-IN'),
+                transaction.remark || 'N/A'
+            ]);
+        });
+
+        // Convert to CSV string
+        const csvContent = csvRows.map(row => 
+            row.map(cell => `"${cell}"`).join(',')
+        ).join('\n');
+
+        // Set response headers for CSV download
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename=payin-report-${new Date().toISOString().split('T')[0]}.csv`);
+
+        // Send CSV content
+        res.send(csvContent);
+
+    } catch (error) {
+        console.error('Error generating payin report download:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error generating payin report download',
+            error: error.message
+        });
+    }
+};
+
 const getPayoutReports = async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
@@ -569,6 +678,121 @@ const getPayoutReports = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error fetching payout reports',
+            error: error.message
+        });
+    }
+};
+
+const downloadAgentPayoutReports = async (req, res) => {
+    try {
+        const { startDate, endDate, status, search } = req.query;
+        const agentId = req.user.id;
+
+        // Get all users created by this agent from SQL database
+        const users = await User.findAll({
+            where: {
+                created_by: agentId
+            },
+            attributes: ['id']
+        });
+
+        // Extract user IDs
+        const userIds = users.map(user => user.id.toString());
+
+        // Build filter object for MongoDB
+        const filter = {
+            'user.user_id': { $in: userIds }
+        };
+
+        // Add status filter if provided
+        if (status && status !== 'all') {
+            filter.status = status;
+        }
+
+        // Add date range filter if provided
+        if (startDate || endDate) {
+            filter.createdAt = {};
+            if (startDate) {
+                filter.createdAt.$gte = new Date(startDate);
+            }
+            if (endDate) {
+                filter.createdAt.$lte = new Date(endDate);
+            }
+        }
+
+        // Add search filter if provided
+        if (search) {
+            const searchRegex = new RegExp(search, 'i');
+            filter.$or = [
+                { reference_id: searchRegex },
+                { 'gateway_response.utr': searchRegex },
+                { 'beneficiary_details.beneficiary_name': searchRegex },
+                { 'beneficiary_details.account_number': searchRegex },
+                { 'beneficiary_details.account_ifsc': searchRegex }
+            ];
+        }
+
+        // Get all payout transactions based on filters
+        const transactions = await PayoutTransaction.find(filter)
+            .sort({ createdAt: -1 })
+            .lean();
+
+        // Create CSV content
+        const headers = [
+            'Order ID',
+            'Merchant Name',
+            'Beneficiary Name',
+            'UTR',
+            'A/C No',
+            'IFSC',
+            'Amount',
+            'Charge',
+            'GST',
+            'Net Amount',
+            'Status',
+            'Created Date',
+            'Remark'
+        ];
+
+        const csvRows = [headers];
+
+        // Add data rows
+        transactions.forEach(transaction => {
+            const netAmount = transaction.amount + (transaction.charges?.total_charges || 0);
+            csvRows.push([
+                transaction.reference_id,
+                transaction.user?.name || 'N/A',
+                transaction.beneficiary_details?.beneficiary_name || 'N/A',
+                transaction.gateway_response?.utr || 'N/A',
+                transaction.beneficiary_details?.account_number || 'N/A',
+                transaction.beneficiary_details?.account_ifsc || 'N/A',
+                transaction.amount,
+                transaction.charges?.total_charges || 0,
+                transaction.charges?.gst || 0,
+                netAmount,
+                transaction.status,
+                new Date(transaction.createdAt).toLocaleString('en-IN'),
+                transaction.remark || 'N/A'
+            ]);
+        });
+
+        // Convert to CSV string
+        const csvContent = csvRows.map(row => 
+            row.map(cell => `"${cell}"`).join(',')
+        ).join('\n');
+
+        // Set response headers for CSV download
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename=payout-report-${new Date().toISOString().split('T')[0]}.csv`);
+
+        // Send CSV content
+        res.send(csvContent);
+
+    } catch (error) {
+        console.error('Error generating payout report download:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error generating payout report download',
             error: error.message
         });
     }
@@ -708,6 +932,8 @@ module.exports = {
     updateUserCallbacks,
     getWalletReports,
     getPayinReports,
+    downloadAgentPayinReports,
     getPayoutReports,
+    downloadAgentPayoutReports,
     getDashboardData
 }; 

@@ -10,7 +10,9 @@ const {
   updateUserCallbacks,
   getWalletReports,
   getPayinReports,
+  downloadAgentPayinReports,
   getPayoutReports,
+  downloadAgentPayoutReports,
   getDashboardData
 } = require('../controllers/agent.controller');
 const { auth, authorize } = require('../middleware/auth.middleware');
@@ -38,8 +40,10 @@ router.get('/wallet-reports', getWalletReports);
 
 // payin report routes
 router.get('/payin-reports', getPayinReports);
+router.get('/payin-reports/download', downloadAgentPayinReports);
 
 // payout report routes
 router.get('/payout-reports', getPayoutReports);
+router.get('/payout-reports/download', downloadAgentPayoutReports);
 
 module.exports = router; 

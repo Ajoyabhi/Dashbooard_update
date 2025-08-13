@@ -5,7 +5,9 @@ const {
   updateUserProfile,
   getUserWalletReports,
   getUserPayinReports,
+  downloadUserPayinReports,
   getUserPayoutReports,
+  downloadUserPayoutReports,
   getUserFundRequests,
   createFundRequest,
   getUserDashboard,
@@ -30,7 +32,9 @@ router.put('/profile', updateUserProfile);
 // User wallet , payin , payout routes reports
 router.get('/wallet_reports', getUserWalletReports);
 router.get('/payin_reports', getUserPayinReports);
+router.get('/payin_reports/download', downloadUserPayinReports);
 router.get('/payout_reports', getUserPayoutReports);
+router.get('/payout_reports/download', downloadUserPayoutReports);
 
 // User wallet transaction history
 router.get('/wallet_transaction_history', getUserWalletTransactionHistory);

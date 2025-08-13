@@ -148,12 +148,36 @@ export default function PayoutReport() {
     fetchTransactions();
   }, [currentPage, pageSize, selectedStatus, dateRange, searchTerm]);
 
-  const handleDownload = () => {
-    console.log('Downloading report with filters:', {
-      status: selectedStatus,
-      dateRange,
-      searchTerm,
-    });
+  const handleDownload = async () => {
+    try {
+      const params = new URLSearchParams({
+        status: selectedStatus !== 'all' ? selectedStatus : '',
+        search: searchTerm,
+      });
+
+      if (dateRange.startDate) {
+        params.append('startDate', dateRange.startDate.toISOString());
+      }
+      if (dateRange.endDate) {
+        params.append('endDate', dateRange.endDate.toISOString());
+      }
+
+      const response = await api.get(`/user/payout_reports/download?${params.toString()}`, {
+        responseType: 'blob'
+      });
+
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'payout-report.csv');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading report:', error);
+      window.showToast('error', 'Failed to download report');
+    }
   };
 
   const columns = [

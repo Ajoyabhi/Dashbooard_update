@@ -46,7 +46,8 @@ const {
   getTrashTransactionCount,
   deleteTrashTransactions,
   getPayoutFailedHistory,
-  downloadPayoutFailedHistory
+  downloadPayoutFailedHistory,
+  getLast5DaysTransactionDetails
 } = require('../controllers/admin.controller');
 const { registerUser } = require('../controllers/auth.controller');
 const { auth, authorize } = require('../middleware/auth.middleware');
@@ -102,6 +103,7 @@ router.delete('/platform-charges/:charge_id', removePlatformCharge);
 
 // admin dashboard routes
 router.get('/dashboard', getAdminDashboard);
+router.get('/last5days-transactions', getLast5DaysTransactionDetails);
 
 
 // Wallet transactions route with pagination

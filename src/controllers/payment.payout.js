@@ -503,8 +503,10 @@ const getPayoutTransactionStatus = async (req, res) => {
       result = await philpayTransactionStatus(transaction_id);
       console.log("this is result of philpay payout", result)
       if (result && result.data && result.data.response && typeof result.data.response === 'object') {
-        const { metadata, id, vpa, fees, ...sanitized } = result.data.response;
-        result = { ...result, data: { ...result.data, response: sanitized } };
+        const { metadata, id, vpa, fees, amount, ...sanitized } = result.data.response;
+        // Divide amount by 100 if it exists
+        const adjustedAmount = amount ? amount / 100 : amount;
+        result = { ...result, data: { ...result.data, response: { ...sanitized, amount: adjustedAmount } } };
       }
       // console.log("this is result of philpay payout", result)
     }

@@ -3028,6 +3028,140 @@ const downloadPayoutFailedHistory = async (req, res) => {
     }
 };
 
+// Get last 5 days transaction details with charges breakdown
+const getLast5DaysTransactionDetails = async (req, res) => {
+    try {
+        const { Op } = require('sequelize');
+        const TransactionCharges = require('../models/TransactionCharges');
+        const User = require('../models/User');
+
+        const last5DaysData = [];
+
+        for (let i = 4; i >= 0; i--) {
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - i);
+            startDate.setHours(0, 0, 0, 0);
+            
+            const endDate = new Date(startDate);
+            endDate.setHours(23, 59, 59, 999);
+
+            // Get payin transactions for the day
+            const payinTransactions = await TransactionCharges.findAll({
+                where: {
+                    transaction_type: 'payin',
+                    status: 'completed',
+                    created_at: {
+                        [Op.between]: [startDate, endDate]
+                    }
+                },
+                include: [{
+                    model: User,
+                    as: 'user',
+                    attributes: ['name', 'email']
+                }],
+                attributes: [
+                    'transaction_amount',
+                    'merchant_charge',
+                    'agent_charge',
+                    'total_charges',
+                    'gst_amount',
+                    'platform_fee',
+                    'reference_id',
+                    'created_at'
+                ]
+            });
+
+            // Get payout transactions for the day
+            const payoutTransactions = await TransactionCharges.findAll({
+                where: {
+                    transaction_type: 'payout',
+                    status: 'completed',
+                    created_at: {
+                        [Op.between]: [startDate, endDate]
+                    }
+                },
+                include: [{
+                    model: User,
+                    as: 'user',
+                    attributes: ['name', 'email']
+                }],
+                attributes: [
+                    'transaction_amount',
+                    'merchant_charge',
+                    'agent_charge',
+                    'total_charges',
+                    'gst_amount',
+                    'platform_fee',
+                    'reference_id',
+                    'created_at'
+                ]
+            });
+
+            // Calculate totals for payin
+            const payinTotal = payinTransactions.reduce((sum, t) => sum + parseFloat(t.transaction_amount || 0), 0);
+            const payinTotalCharges = payinTransactions.reduce((sum, t) => sum + parseFloat(t.total_charges || 0), 0);
+            const payinTotalGST = payinTransactions.reduce((sum, t) => sum + parseFloat(t.gst_amount || 0), 0);
+            const payinTotalPlatformFee = payinTransactions.reduce((sum, t) => sum + parseFloat(t.platform_fee || 0), 0);
+
+            // Calculate totals for payout
+            const payoutTotal = payoutTransactions.reduce((sum, t) => sum + parseFloat(t.transaction_amount || 0), 0);
+            const payoutTotalCharges = payoutTransactions.reduce((sum, t) => sum + parseFloat(t.total_charges || 0), 0);
+            const payoutTotalGST = payoutTransactions.reduce((sum, t) => sum + parseFloat(t.gst_amount || 0), 0);
+            const payoutTotalPlatformFee = payoutTransactions.reduce((sum, t) => sum + parseFloat(t.platform_fee || 0), 0);
+
+            last5DaysData.push({
+                date: startDate.toISOString().split('T')[0],
+                payin: {
+                    total_amount: payinTotal,
+                    total_charges: payinTotalCharges,
+                    total_gst: payinTotalGST,
+                    total_platform_fee: payinTotalPlatformFee,
+                    transaction_count: payinTransactions.length,
+                    transactions: payinTransactions.map(t => ({
+                        reference_id: t.reference_id,
+                        amount: parseFloat(t.transaction_amount || 0),
+                        charges: parseFloat(t.total_charges || 0),
+                        gst: parseFloat(t.gst_amount || 0),
+                        platform_fee: parseFloat(t.platform_fee || 0),
+                        user_name: t.user?.name || 'N/A',
+                        user_email: t.user?.email || 'N/A',
+                        created_at: t.created_at
+                    }))
+                },
+                payout: {
+                    total_amount: payoutTotal,
+                    total_charges: payoutTotalCharges,
+                    total_gst: payoutTotalGST,
+                    total_platform_fee: payoutTotalPlatformFee,
+                    transaction_count: payoutTransactions.length,
+                    transactions: payoutTransactions.map(t => ({
+                        reference_id: t.reference_id,
+                        amount: parseFloat(t.transaction_amount || 0),
+                        charges: parseFloat(t.total_charges || 0),
+                        gst: parseFloat(t.gst_amount || 0),
+                        platform_fee: parseFloat(t.platform_fee || 0),
+                        user_name: t.user?.name || 'N/A',
+                        user_email: t.user?.email || 'N/A',
+                        created_at: t.created_at
+                    }))
+                }
+            });
+        }
+
+        res.json({
+            success: true,
+            data: last5DaysData
+        });
+    } catch (error) {
+        console.error('Error fetching last 5 days transaction details:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching last 5 days transaction details',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
   getAllUsers,
   getAllAgents,
@@ -3074,5 +3208,6 @@ module.exports = {
   deleteTrashTransactions,
   getUserWalletTransactionHistory,
   getPayoutFailedHistory,
-  downloadPayoutFailedHistory
+  downloadPayoutFailedHistory,
+  getLast5DaysTransactionDetails
 };
