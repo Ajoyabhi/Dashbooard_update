@@ -734,31 +734,140 @@ const getUserDashboard = async (req, res) => {
     .limit(10)
     .lean();
 
-    // Calculate today's pay-in and payout
+    // Calculate today's pay-in and payout with charges handling
     const todayPayin = todayTransactions
       .filter(t => t.transaction_type === 'payin' && t.status === 'completed')
-      .reduce((sum, t) => sum + parseFloat(t.transaction_amount), 0);
+      .reduce((sum, t) => {
+        const amount = parseFloat(t.transaction_amount);
+        const charges = parseFloat(t.total_charges) || 0;
+        const gst = parseFloat(t.gst_amount) || 0;
+        const platformFee = parseFloat(t.platform_fee) || 0;
+        
+        // Case 1: Deduct charges, GST, platform fee from payin
+        const netAmount = amount - charges - gst - platformFee;
+        return sum + netAmount;
+      }, 0);
 
     const todayPayout = todayTransactions
       .filter(t => t.transaction_type === 'payout' && t.status === 'completed')
-      .reduce((sum, t) => sum + parseFloat(t.transaction_amount), 0);
+      .reduce((sum, t) => {
+        const amount = parseFloat(t.transaction_amount);
+        const charges = parseFloat(t.total_charges) || 0;
+        const gst = parseFloat(t.gst_amount) || 0;
+        const platformFee = parseFloat(t.platform_fee) || 0;
+        
+        // Case 2: Add charges, GST, platform fee to payout
+        const totalAmount = amount + charges + gst + platformFee;
+        return sum + totalAmount;
+      }, 0);
 
-    // Calculate total pay-in and payout
+    // Calculate total pay-in and payout with charges handling
     const totalPayin = allTransactions
       .filter(t => t.transaction_type === 'payin' && t.status === 'completed')
-      .reduce((sum, t) => sum + parseFloat(t.transaction_amount), 0);
+      .reduce((sum, t) => {
+        const amount = parseFloat(t.transaction_amount);
+        const charges = parseFloat(t.total_charges) || 0;
+        const gst = parseFloat(t.gst_amount) || 0;
+        const platformFee = parseFloat(t.platform_fee) || 0;
+        
+        // Case 1: Deduct charges, GST, platform fee from payin
+        const netAmount = amount - charges - gst - platformFee;
+        return sum + netAmount;
+      }, 0);
 
     const totalPayout = allTransactions
       .filter(t => t.transaction_type === 'payout' && t.status === 'completed')
-      .reduce((sum, t) => sum + parseFloat(t.transaction_amount), 0);
+      .reduce((sum, t) => {
+        const amount = parseFloat(t.transaction_amount);
+        const charges = parseFloat(t.total_charges) || 0;
+        const gst = parseFloat(t.gst_amount) || 0;
+        const platformFee = parseFloat(t.platform_fee) || 0;
+        
+        // Case 2: Add charges, GST, platform fee to payout
+        const totalAmount = amount + charges + gst + platformFee;
+        return sum + totalAmount;
+      }, 0);
+    // Calculate detailed breakdown for charges
+    const calculateChargesBreakdown = (transactions, type) => {
+      const filteredTransactions = transactions.filter(t => t.transaction_type === type && t.status === 'completed');
+      
+      const breakdown = filteredTransactions.reduce((acc, t) => {
+        const charges = parseFloat(t.total_charges) || 0;
+        const gst = parseFloat(t.gst_amount) || 0;
+        const platformFee = parseFloat(t.platform_fee) || 0;
+        
+        acc.total_charges += charges;
+        acc.total_gst += gst;
+        acc.total_platform_fee += platformFee;
+        acc.total_transactions += 1;
+        
+        return acc;
+      }, {
+        total_charges: 0,
+        total_gst: 0,
+        total_platform_fee: 0,
+        total_transactions: 0
+      });
+      
+      return breakdown;
+    };
+
+    const todayPayinBreakdown = calculateChargesBreakdown(todayTransactions, 'payin');
+    const todayPayoutBreakdown = calculateChargesBreakdown(todayTransactions, 'payout');
+    const totalPayinBreakdown = calculateChargesBreakdown(allTransactions, 'payin');
+    const totalPayoutBreakdown = calculateChargesBreakdown(allTransactions, 'payout');
+
     // Prepare response object
     const dashboardData = {
       settlement_balance: financialDetails ? parseFloat(financialDetails.settlement) : 0,
       wallet_balance: financialDetails ? parseFloat(financialDetails.wallet) : 0,
+      
+      // Today's transactions with net amounts (after charges)
       today_payin: todayPayin,
       today_payout: todayPayout,
+      
+      // Total transactions with net amounts (after charges)
       total_payin: totalPayin,
       total_payout: totalPayout,
+      
+      // Detailed breakdown for today
+      today_payin_breakdown: {
+        net_amount: todayPayin,
+        total_charges: todayPayinBreakdown.total_charges,
+        total_gst: todayPayinBreakdown.total_gst,
+        total_platform_fee: todayPayinBreakdown.total_platform_fee,
+        total_transactions: todayPayinBreakdown.total_transactions
+      },
+      today_payout_breakdown: {
+        net_amount: todayPayout,
+        total_charges: todayPayoutBreakdown.total_charges,
+        total_gst: todayPayoutBreakdown.total_gst,
+        total_platform_fee: todayPayoutBreakdown.total_platform_fee,
+        total_transactions: todayPayoutBreakdown.total_transactions
+      },
+      
+      // Detailed breakdown for all time
+      total_payin_breakdown: {
+        net_amount: totalPayin,
+        total_charges: totalPayinBreakdown.total_charges,
+        total_gst: totalPayinBreakdown.total_gst,
+        total_platform_fee: totalPayinBreakdown.total_platform_fee,
+        total_transactions: totalPayinBreakdown.total_transactions
+      },
+      total_payout_breakdown: {
+        net_amount: totalPayout,
+        total_charges: totalPayoutBreakdown.total_charges,
+        total_gst: totalPayoutBreakdown.total_gst,
+        total_platform_fee: totalPayoutBreakdown.total_platform_fee,
+        total_transactions: totalPayoutBreakdown.total_transactions
+      },
+      
+      // Charge calculation explanation
+      charge_calculation_note: {
+        payin: "For Pay-in transactions: Net Amount = Transaction Amount - Total Charges - GST - Platform Fee",
+        payout: "For Payout transactions: Net Amount = Transaction Amount + Total Charges + GST + Platform Fee"
+      },
+      
       recent_payins: recentPayins.map(payin => ({
         date: payin.createdAt,
         user: payin.beneficiary_details.beneficiary_name,

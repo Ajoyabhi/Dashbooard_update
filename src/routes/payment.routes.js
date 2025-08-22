@@ -4,7 +4,7 @@ const { auth } = require('../middleware/auth.middleware');
 const { checkRole } = require('../middleware/role.middleware');
 const { initiatePayment, getTransactionStatus, handleUnpayCallback, handleSpayCallback, 
   handleSpayPayoutCallback, handlePhilpayPayoutCallback } = require('../controllers/payment.controller');
-const { initiatePayout , getPayoutTransactionStatus} = require('../controllers/payment.payout');
+const { initiatePayout , getPayoutTransactionStatus, handleBalanceCheck} = require('../controllers/payment.payout');
 
 
 // Initiate payout - Only admin and agent can initiate payouts
@@ -52,5 +52,11 @@ router.post('/spay/payout/callback', handleSpayPayoutCallback);
 // Philpay callback route - no authentication needed as it's called by Philpay
 router.get('/philpay/payout/callback', handlePhilpayPayoutCallback);
 router.post('/philpay/payout/callback', handlePhilpayPayoutCallback);
+
+router.get('/balanceCheck', 
+  auth, 
+  checkRole(['admin', 'agent', 'user', 'payin_payout', 'payout_only', 'payin_only']), 
+  handleBalanceCheck
+);
 
 module.exports = router; 

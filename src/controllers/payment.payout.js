@@ -97,10 +97,10 @@ const initiatePayout = async (req, res) => {
         });
       }
 
-      if (reference_id.length !== 12) {
+      if (reference_id.length < 12 || reference_id.length > 25) {
         return res.status(400).json({ 
           success: false, 
-          message: 'Reference number must be 12 digits' 
+          message: 'Reference number must be between 12 and 25 digits' 
         });
       }
       if (!user) {
@@ -556,7 +556,40 @@ const getPayoutTransactionStatus = async (req, res) => {
   }
 };
 
+const handleBalanceCheck = async (req, res) => {
+  try {
+    const user_id = req.user.id;
+    const user = await User.findByPk(user_id);
+    const financialDetails = await FinancialDetails.findOne({
+      where: { user_id: user_id }
+    });
+    if(!financialDetails){
+      return res.status(400).json({
+        success: false,
+        message: 'Financial details not found for user'
+      });
+    }
+    const walletBalance = parseFloat(financialDetails.wallet);
+    const settlementBalance = parseFloat(financialDetails.settlement);
+    return res.status(200).json({
+      success: true,
+      message: 'Balance check successful',
+      data: {
+        wallet_balance: walletBalance,
+        settlement_balance: settlementBalance
+      }
+    });
+  } catch (error) {
+    logger.error('Error retrieving transaction status', {
+      error: error.message,
+      stack: error.stack,
+      transaction_id: req.params.transaction_id
+    });
+  }
+}
+
 module.exports = {
     initiatePayout,
-    getPayoutTransactionStatus
+    getPayoutTransactionStatus,
+    handleBalanceCheck
 };
