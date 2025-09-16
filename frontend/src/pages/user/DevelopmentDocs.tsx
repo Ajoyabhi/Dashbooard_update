@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import DashboardLayout from '../../components/layout/DashboardLayout';
-import { userMenuItems } from '../../data/mockData';
+import { getMenuItems } from '../../utils/menuItems';
+import { useAuth } from '../../context/AuthContext';
 
 // Lightweight code block with copy button
-const CodeBlock: React.FC<{ code: string; language?: string; title?: string } > = ({ code, language = 'bash', title }) => {
+const CodeBlock: React.FC<{ code: string; language?: string; title?: string }> = ({ code, language = 'bash', title }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -36,159 +37,195 @@ const CodeBlock: React.FC<{ code: string; language?: string; title?: string } > 
 };
 
 export default function DevelopmentDocs() {
+  const { user } = useAuth();
+
   return (
-    <DashboardLayout menuItems={userMenuItems} title="Development Documentation">
-      <div className="space-y-6">
-        {/* Overview */}
-        <div className="bg-white p-6 rounded-lg shadow-card border border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-800 mb-2">Overview</h2>
-          <p className="text-gray-600">
-            Use ZentexPay APIs to create payin and payout transactions and to track their status. This guide covers authentication,
-            required headers, endpoint URLs, and request examples.
+    <DashboardLayout menuItems={getMenuItems(user?.user_type || 'user')} title="Development Documentation">
+      <div className="space-y-8">
+        <div className="text-center space-y-4">
+          <h1 className="text-4xl font-bold font-display text-neutral-900">
+            PayzuTech API Documentation
+          </h1>
+          <p className="text-lg text-neutral-600 max-w-3xl mx-auto">
+            Use PayzuTech APIs to create payin and payout transactions and to track their status. This guide covers authentication,
+            endpoints, request/response formats, and best practices for integrating with our payment gateway.
           </p>
         </div>
 
+        {/* API Base URL */}
+        <div className="card p-6">
+          <h2 className="text-2xl font-bold font-display text-neutral-900 mb-4">
+            Base URL
+          </h2>
+          <div className="bg-neutral-100 rounded-xl p-4">
+            <span className="font-mono text-neutral-800">https://dashboard.payzutech.in</span>
+          </div>
+        </div>
+
         {/* Authentication */}
-        <div className="bg-white p-6 rounded-lg shadow-card border border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">Authentication</h2>
-          <div className="space-y-4">
-            <p className="text-gray-600">
-              All API requests require a JWT in the <span className="font-mono">Authorization</span> header. Tokens are valid for 24 hours.
-              Retrieve your token from <Link className="text-indigo-600 hover:underline" to="/user/developer-settings">Developer Settings</Link>.
-            </p>
-            <CodeBlock
-              title="HTTP Header"
-              language="http"
-              code={`Authorization: YOUR_JWT_TOKEN\nContent-Type: application/json`}
-            />
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div className="p-3 rounded-md bg-indigo-50 border border-indigo-200">
-                <p className="text-sm text-indigo-800">
-                  Base URL: <span className="font-mono">https://api.zentexpay.in</span>
-                </p>
-              </div>
-              <div className="p-3 rounded-md bg-amber-50 border border-amber-200">
-                <p className="text-sm text-amber-800">
-                  Keep your token secret. Do not embed it in client-side code shipped to browsers.
-                </p>
-              </div>
-            </div>
+        <div className="card p-6">
+          <h2 className="text-2xl font-bold font-display text-neutral-900 mb-4">
+            Authentication
+          </h2>
+          <p className="text-neutral-600 mb-4">
+            All API requests require authentication using JWT tokens. Include the token in the Authorization header.
+          </p>
+          <div className="bg-neutral-100 rounded-xl p-4">
+            <span className="font-mono text-neutral-800">Authorization: YOUR_JWT_TOKEN</span>
           </div>
         </div>
 
-        {/* Payin */}
-        <div className="bg-white p-6 rounded-lg shadow-card border border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">Payin</h2>
-          <p className="text-gray-600 mb-3">Create a new payment transaction.</p>
+        {/* Payin API */}
+        <div className="card p-6">
+          <h2 className="text-2xl font-bold font-display text-neutral-900 mb-4">
+            Create Payin Transaction
+          </h2>
+          <p className="text-neutral-600 mb-4">
+            Create a new payin transaction to accept payments from customers.
+          </p>
           <div className="space-y-4">
-            <CodeBlock
-              title="Endpoint"
-              code={`POST https://api.zentexpay.in/api/payments/payin`}
-            />
             <div>
-              <h4 className="text-md font-medium text-gray-800 mb-2">Request Body</h4>
-              <CodeBlock
-                title="JSON"
-                language="json"
-                code={`{\n  "order_amount": "500",\n  "email": "user@example.com",\n  "phone": "9876543210",\n  "name": "John Smith",\n  "reference_id": "PAY123456789"\n}`}
-              />
+              <h3 className="text-lg font-semibold text-neutral-900 mb-2">Endpoint</h3>
+              <div className="bg-neutral-100 rounded-xl p-4">
+                <span className="font-mono text-neutral-800">POST https://dashboard.payzutech.in/api/payments/payin</span>
+              </div>
             </div>
             <div>
-              <h4 className="text-md font-medium text-gray-800 mb-2">cURL Example</h4>
-              <CodeBlock
-                title="cURL"
-                language="bash"
-                code={`curl --location 'https://api.zentexpay.in/api/payments/payin' \
---header 'Authorization: YOUR_JWT_TOKEN' \
---header 'Content-Type: application/json' \
---data '{
-  "order_amount": "500",
-  "email": "user@example.com",
+              <h3 className="text-lg font-semibold text-neutral-900 mb-2">Request Body</h3>
+              <div className="bg-neutral-100 rounded-xl p-4">
+                <pre className="text-sm text-neutral-800 overflow-x-auto">
+                  {`{
+  "order_amount": 1000,
+  "name": "John Doe",
+  "email": "john@example.com",
   "phone": "9876543210",
-  "name": "John Smith",
-  "reference_id": "PAY123456789"
-}'`}
-              />
+  "reference_id": "TXN123456"
+}`}
+                </pre>
+              </div>
             </div>
             <div>
-              <h4 className="text-md font-medium text-gray-800 mb-2">Sample Response</h4>
-              <CodeBlock
-                title="JSON"
-                language="json"
-                code={`{\n  "transaction_id": "123e4567-e89b-12d3-a456-426614174000",\n  "result": {\n    "success": true,\n    "reference_id": "PAYIN123456789",\n    "payment_url": "upi://pay?pa=merchant@bank&pn=Merchant%20Name&am=100&tr=PAYIN123456789&cu=INR"\n  }\n}`}
-              />
-              <p className="text-xs text-gray-500 mt-2">Values above are examples. Your <span className="font-mono">transaction_id</span>, <span className="font-mono">reference_id</span> and <span className="font-mono">payment_url</span> will differ.</p>
+              <h3 className="text-lg font-semibold text-neutral-900 mb-2">cURL Example</h3>
+              <div className="bg-neutral-100 rounded-xl p-4">
+                <pre className="text-sm text-neutral-800 overflow-x-auto">
+                  {`curl --location 'https://dashboard.payzutech.in/api/payments/payin' \\
+--header 'Content-Type: application/json' \\
+--header 'Authorization: YOUR_JWT_TOKEN' \\
+--data '{
+  "order_amount": 1000,
+  "name": "John Doe",
+  "email": "john@example.com",
+  "phone": "9876543210",
+  "reference_id": "TXN123456"
+}'`}
+                </pre>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Payout */}
-        <div className="bg-white p-6 rounded-lg shadow-card border border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">Payout</h2>
-          <p className="text-gray-600 mb-3">Initiate a payout transaction.</p>
+        {/* Payout API */}
+        <div className="card p-6">
+          <h2 className="text-2xl font-bold font-display text-neutral-900 mb-4">
+            Create Payout Transaction
+          </h2>
+          <p className="text-neutral-600 mb-4">
+            Create a new payout transaction to transfer money to beneficiaries.
+          </p>
           <div className="space-y-4">
-            <CodeBlock
-              title="Endpoint"
-              code={`POST https://api.zentexpay.in/api/payments/payout/`}
-            />
             <div>
-              <h4 className="text-md font-medium text-gray-800 mb-2">Request Body</h4>
-              <CodeBlock
-                title="JSON"
-                language="json"
-                code={`{\n  "amount": "2000",\n  "account_number": "9876543210",\n  "account_ifsc": "SBIN0001234",\n  "bank_name": "State Bank of India",\n  "beneficiary_name": "Jane Doe",\n  "request_type": "IMPS",\n  "reference_id": "POUT987654321"\n}`}
-              />
+              <h3 className="text-lg font-semibold text-neutral-900 mb-2">Endpoint</h3>
+              <div className="bg-neutral-100 rounded-xl p-4">
+                <span className="font-mono text-neutral-800">POST https://dashboard.payzutech.in/api/payments/payout/</span>
+              </div>
             </div>
             <div>
-              <h4 className="text-md font-medium text-gray-800 mb-2">cURL Example</h4>
-              <CodeBlock
-                title="cURL"
-                language="bash"
-                code={`curl --location 'https://api.zentexpay.in/api/payments/payout/' \
---header 'Authorization: YOUR_JWT_TOKEN' \
---header 'Content-Type: application/json' \
+              <h3 className="text-lg font-semibold text-neutral-900 mb-2">Request Body</h3>
+              <div className="bg-neutral-100 rounded-xl p-4">
+                <pre className="text-sm text-neutral-800 overflow-x-auto">
+                  {`{
+  "amount": 500,
+  "beneficiary_name": "Jane Smith",
+  "account_number": "1234567890",
+  "ifsc_code": "SBIN0001234",
+  "reference_id": "PAYOUT123456"
+}`}
+                </pre>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-neutral-900 mb-2">cURL Example</h3>
+              <div className="bg-neutral-100 rounded-xl p-4">
+                <pre className="text-sm text-neutral-800 overflow-x-auto">
+                  {`curl --location 'https://dashboard.payzutech.in/api/payments/payout/' \\
+--header 'Content-Type: application/json' \\
+--header 'Authorization: YOUR_JWT_TOKEN' \\
 --data '{
-  "amount": "2000",
-  "account_number": "9876543210",
-  "account_ifsc": "SBIN0001234",
-  "bank_name": "State Bank of India",
-  "beneficiary_name": "Jane Doe",
-  "request_type": "IMPS",
-  "reference_id": "POUT987654321"
+  "amount": 500,
+  "beneficiary_name": "Jane Smith",
+  "account_number": "1234567890",
+  "ifsc_code": "SBIN0001234",
+  "reference_id": "PAYOUT123456"
 }'`}
-              />
+                </pre>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Transaction Status */}
-        <div className="bg-white p-6 rounded-lg shadow-card border border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">Transaction Status</h2>
-          <p className="text-gray-600 mb-4">Use these endpoints to retrieve the latest status for a specific transaction.</p>
+        <div className="card p-6">
+          <h2 className="text-2xl font-bold font-display text-neutral-900 mb-4">
+            Check Transaction Status
+          </h2>
+          <p className="text-neutral-600 mb-4">
+            Check the status of payin and payout transactions using their transaction IDs.
+          </p>
           <div className="space-y-4">
             <div>
-              <h4 className="text-md font-medium text-gray-800 mb-2">Payin Status</h4>
-              <div className="p-3 rounded-md bg-gray-50 border border-gray-200 mb-3">
-                <p className="text-sm text-gray-700">
-                  Path parameter <span className="font-mono">{`{transaction_id}`}</span>: The transaction identifier returned when you created the payin.
-                </p>
+              <h3 className="text-lg font-semibold text-neutral-900 mb-2">Payin Status</h3>
+              <div className="bg-neutral-100 rounded-xl p-4">
+                <pre className="text-sm text-neutral-800 overflow-x-auto">
+                  {`curl --location 'https://dashboard.payzutech.in/api/payments/payin/transaction/{transaction_id}' \\
+--header 'Authorization: YOUR_JWT_TOKEN'`}
+                </pre>
               </div>
-              <CodeBlock
-                title="cURL"
-                code={`curl --location 'https://api.zentexpay.in/api/payments/payin/transaction/{transaction_id}' \n--header 'Authorization: YOUR_JWT_TOKEN'`}
-              />
             </div>
             <div>
-              <h4 className="text-md font-medium text-gray-800 mb-2">Payout Status</h4>
-              <div className="p-3 rounded-md bg-gray-50 border border-gray-200 mb-3">
-                <p className="text-sm text-gray-700">
-                  Path parameter <span className="font-mono">{`{transaction_id}`}</span>: The transaction identifier returned when you created the payout.
-                </p>
+              <h3 className="text-lg font-semibold text-neutral-900 mb-2">Payout Status</h3>
+              <div className="bg-neutral-100 rounded-xl p-4">
+                <pre className="text-sm text-neutral-800 overflow-x-auto">
+                  {`curl --location 'https://dashboard.payzutech.in/api/payments/payout/transaction/{transaction_id}' \\
+--header 'Authorization: YOUR_JWT_TOKEN'`}
+                </pre>
               </div>
-              <CodeBlock
-                title="cURL"
-                code={`curl --location 'https://api.zentexpay.in/api/payments/payout/transaction/{transaction_id}' \n--header 'Authorization: YOUR_JWT_TOKEN'`}
-              />
+            </div>
+          </div>
+        </div>
+
+        {/* Balance Check */}
+        <div className="card p-6">
+          <h2 className="text-2xl font-bold font-display text-neutral-900 mb-4">
+            Check Account Balance
+          </h2>
+          <p className="text-neutral-600 mb-4">
+            Check your current account balance and transaction limits.
+          </p>
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-lg font-semibold text-neutral-900 mb-2">Endpoint</h3>
+              <div className="bg-neutral-100 rounded-xl p-4">
+                <span className="font-mono text-neutral-800">GET https://dashboard.payzutech.in/api/payments/balanceCheck</span>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-neutral-900 mb-2">cURL Example</h3>
+              <div className="bg-neutral-100 rounded-xl p-4">
+                <pre className="text-sm text-neutral-800 overflow-x-auto">
+                  {`curl --location 'https://dashboard.payzutech.in/api/payments/balanceCheck' \\
+--header 'Authorization: YOUR_JWT_TOKEN'`}
+                </pre>
+              </div>
             </div>
           </div>
         </div>

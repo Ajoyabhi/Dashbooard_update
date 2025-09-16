@@ -127,9 +127,10 @@ export interface WalletRecord {
 
 export interface MenuItem {
   title: string;
-  path: string;
+  path?: string;
   icon: string;
   badge?: number;
+  children?: MenuItem[];
 }
 
 export interface FilterOption {

@@ -9,7 +9,7 @@ module.exports = {
       max_memory_restart: '1G',
       env: {
         NODE_ENV: 'production',
-        PORT: 3000
+        PORT: 3004
       },
       error_file: 'src/logs/server-error.log',
       out_file: 'src/logs/server-out.log',
@@ -35,7 +35,7 @@ module.exports = {
       script: 'serve',
       env: {
         PM2_SERVE_PATH: 'frontend/dist',
-        PM2_SERVE_PORT: 3002,
+        PM2_SERVE_PORT: 3005,
         PM2_SERVE_SPA: 'true',
         PM2_SERVE_HOMEPAGE: '/index.html'
       },

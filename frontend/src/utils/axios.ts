@@ -1,8 +1,9 @@
 import axios from 'axios';
 
 const api = axios.create({
-    // baseURL: 'http://localhost:3000/api',
-    baseURL: 'https://api.zentexpay.in/api',
+    // baseURL: 'https://dashboard.payzutech.in/api',
+    baseURL: 'http://localhost:3004/api',
+    // baseURL: 'https://api.zentexpay.in/api',
     headers: {
         'Content-Type': 'application/json',
     },

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Download, Filter, Search } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
-import { userMenuItems } from '../../data/mockData';
+import { getMenuItems } from '../../utils/menuItems';
+import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/axios';
 import { toast } from 'react-hot-toast';
 import { formatCurrency } from '../../utils/formatUtils';
@@ -22,6 +23,7 @@ interface WalletTransaction {
 }
 
 export default function WalletTransactionHistory() {
+  const { user } = useAuth();
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -36,17 +38,17 @@ export default function WalletTransactionHistory() {
     setLoading(true);
     try {
       const params: any = { page, limit: 10 };
-      
+
       if (searchTerm) {
         params.search = searchTerm;
       }
-      
+
       if (transactionType !== 'all') {
         params.type = transactionType;
       }
 
       const response = await api.get('/user/wallet_transaction_history', { params });
-      
+
       setTransactions(response.data.data.transactions);
       setCurrentPage(response.data.data.pagination.current_page);
       setTotalPages(response.data.data.pagination.total_pages);
@@ -130,7 +132,7 @@ export default function WalletTransactionHistory() {
   };
 
   return (
-    <DashboardLayout menuItems={userMenuItems} title="Wallet Transaction History">
+    <DashboardLayout menuItems={getMenuItems(user?.user_type || 'user')} title="Wallet Transaction History">
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">

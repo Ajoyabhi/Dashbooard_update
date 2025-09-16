@@ -3031,9 +3031,6 @@ const downloadPayoutFailedHistory = async (req, res) => {
 // Get last 5 days transaction details with charges breakdown
 const getLast5DaysTransactionDetails = async (req, res) => {
     try {
-        const { Op } = require('sequelize');
-        const TransactionCharges = require('../models/TransactionCharges');
-        const User = require('../models/User');
 
         const last5DaysData = [];
 
@@ -3056,7 +3053,6 @@ const getLast5DaysTransactionDetails = async (req, res) => {
                 },
                 include: [{
                     model: User,
-                    as: 'user',
                     attributes: ['name', 'email']
                 }],
                 attributes: [
@@ -3082,7 +3078,6 @@ const getLast5DaysTransactionDetails = async (req, res) => {
                 },
                 include: [{
                     model: User,
-                    as: 'user',
                     attributes: ['name', 'email']
                 }],
                 attributes: [

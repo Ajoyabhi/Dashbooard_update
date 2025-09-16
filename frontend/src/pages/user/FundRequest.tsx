@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Search, Plus, Building2, X } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Table from '../../components/dashboard/Table';
-import { userMenuItems } from '../../data/mockData';
+import { getMenuItems } from '../../utils/menuItems';
+import { useAuth } from '../../context/AuthContext';
 import { formatCurrency } from '../../utils/formatUtils';
 import api from '../../utils/axios';
 
@@ -17,6 +18,7 @@ const bankDetails = {
 };
 
 export default function FundRequest() {
+  const { user } = useAuth();
   const [showBankDetails, setShowBankDetails] = useState(false);
   const [showAddRequest, setShowAddRequest] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -157,7 +159,7 @@ export default function FundRequest() {
   ];
 
   return (
-    <DashboardLayout menuItems={userMenuItems} title="Fund Request">
+    <DashboardLayout menuItems={getMenuItems(user?.user_type || 'user')} title="Fund Request">
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <button

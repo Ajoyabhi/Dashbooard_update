@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Copy, Check } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
-import { userMenuItems } from '../../data/mockData';
+import { getMenuItems } from '../../utils/menuItems';
+import { useAuth } from '../../context/AuthContext';
 
 const DeveloperSettings = () => {
+  const { user } = useAuth();
   const [token, setToken] = useState<string>('');
   const [copied, setCopied] = useState(false);
 
@@ -21,7 +23,7 @@ const DeveloperSettings = () => {
   };
 
   return (
-    <DashboardLayout menuItems={userMenuItems} title="Developer Settings">
+    <DashboardLayout menuItems={getMenuItems(user?.user_type || 'user')} title="Developer Settings">
       <div className="space-y-6">
         <div className="bg-white p-6 rounded-lg shadow-card border border-gray-200">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Authentication Token</h2>

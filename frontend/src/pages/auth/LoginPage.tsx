@@ -1,14 +1,39 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import './LoginPage.css';
+import {
+  User,
+  Lock,
+  Eye,
+  EyeOff,
+  CheckCircle,
+  Shield,
+  CreditCard,
+  TrendingUp,
+  Globe,
+  Building2,
+  Banknote,
+  ArrowRight,
+  Star,
+  Award,
+  Zap,
+  ShieldCheck,
+  Smartphone,
+  Laptop,
+  DollarSign,
+  Target,
+  Users,
+  Clock,
+  ChevronRight
+} from 'lucide-react';
 
 const LoginPage: React.FC = () => {
   const [user_name, setUserName] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [darkMode, setDarkMode] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
@@ -24,150 +49,307 @@ const LoginPage: React.FC = () => {
     setError('');
 
     try {
+      console.log('LoginPage: Attempting login with credentials:', { user_name });
       const success = await login(user_name, password);
+
       if (!success) {
-        setError('Invalid username or password');
+        setError('Invalid username or password. Please check your credentials and try again.');
+      } else {
+        console.log('LoginPage: Login successful, navigation will be handled by AuthContext');
       }
-    } catch (err) {
-      setError('An error occurred during login');
-      console.error('Login error:', err);
+      // If successful, the AuthContext will handle navigation automatically
+    } catch (err: any) {
+      console.error('LoginPage: Login error:', err);
+
+      if (err.response) {
+        // Server responded with error
+        const errorMessage = err.response.data?.message || err.response.data?.error || 'Server error occurred';
+        setError(`Login failed: ${errorMessage}`);
+      } else if (err.request) {
+        // Network error
+        setError('Network error. Please check your internet connection and try again.');
+      } else {
+        // Other error
+        setError('An unexpected error occurred. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="login-page">
-      {/* Background with gradient overlay */}
-      <div className="background-overlay"></div>
-      
-      {/* Main container */}
-      <div className="login-container">
-        {/* Left side - Brand section */}
-        <div className="brand-section">
-          <div className="brand-content">
-            <div className="logo-container">
-              <img 
-                src="/images/zentexpay_logo.jpg" 
-                alt="ZentexPay Logo" 
-                className="logo"
-              />
+    <div className="min-h-screen flex bg-gray-50">
+      {/* Left Side - Image Section */}
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
+        {/* Background Image */}
+        <div
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+          style={{
+            backgroundImage: `url('/images/landing.png')`
+          }}
+        >
+          {/* Overlay */}
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-900/80 via-indigo-900/70 to-purple-900/80"></div>
+        </div>
+
+        {/* Floating Elements */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-20 left-20 w-16 h-16 text-white/20 animate-float">
+            <CreditCard className="w-full h-full" />
+          </div>
+          <div className="absolute top-40 right-32 w-12 h-12 text-white/15 animate-float animation-delay-200">
+            <TrendingUp className="w-full h-full" />
+          </div>
+          <div className="absolute bottom-32 left-32 w-14 h-14 text-white/15 animate-float animation-delay-400">
+            <Banknote className="w-full h-full" />
+          </div>
+
+          {/* Gradient Orbs */}
+          <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-gradient-to-r from-blue-400/10 to-purple-400/10 rounded-full blur-3xl animate-pulse-slow"></div>
+          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-gradient-to-r from-indigo-400/10 to-pink-400/10 rounded-full blur-3xl animate-pulse-slow animation-delay-500"></div>
+        </div>
+
+        {/* Content Overlay */}
+        <div className="relative z-10 flex flex-col justify-center p-12 text-white">
+          <div className="max-w-lg">
+            {/* Logo */}
+            <div className="relative mb-8 flex justify-center">
+              <div className="w-32 h-32 bg-white rounded-2xl flex items-center justify-center shadow-2xl mb-6 transform hover:scale-105 transition-all duration-500 p-2">
+                <img
+                  src="/images/AccuzPay_logo.png"
+                  alt="AccuzPay Logo"
+                  className="w-full h-full object-contain"
+                />
+              </div>
+              <div className="absolute -top-2 -right-2 w-8 h-8 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full flex items-center justify-center shadow-lg">
+                <CheckCircle className="w-5 h-5 text-white" />
+              </div>
             </div>
-            <h1 className="brand-title">ZentexPay</h1>
-            <p className="brand-subtitle">Secure Payment Gateway Solutions</p>
-            <div className="brand-features">
-              <div className="feature-item">
-                <div className="feature-icon">🔒</div>
-                <span>Bank-grade Security</span>
+
+            {/* Brand Content */}
+            <div className="space-y-6 mb-8">
+              {/* <h1 className="text-4xl font-bold font-display leading-tight">
+                AccuzPay
+              </h1> */}
+              <p className="text-xl text-blue-100 font-medium">
+                Premium Banking & Payment Solutions
+              </p>
+              <p className="text-base text-gray-300 leading-relaxed">
+                Experience the future of financial technology with our secure, lightning-fast payment gateway designed for modern businesses.
+              </p>
+            </div>
+
+            {/* Premium Features */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-4 p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 hover:bg-white/15 transition-all duration-300">
+                <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl flex items-center justify-center">
+                  <Shield className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-left">
+                  <h3 className="font-semibold text-white">Bank-Grade Security</h3>
+                  <p className="text-sm text-blue-100">256-bit encryption & fraud protection</p>
+                </div>
               </div>
-              <div className="feature-item">
-                <div className="feature-icon">⚡</div>
-                <span>Lightning Fast</span>
+
+              <div className="flex items-center space-x-4 p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 hover:bg-white/15 transition-all duration-300">
+                <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center">
+                  <Zap className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-left">
+                  <h3 className="font-semibold text-white">Lightning Fast</h3>
+                  <p className="text-sm text-blue-100">Process payments in milliseconds</p>
+                </div>
               </div>
-              <div className="feature-item">
-                <div className="feature-icon">🌐</div>
-                <span>Global Reach</span>
+
+              <div className="flex items-center space-x-4 p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 hover:bg-white/15 transition-all duration-300">
+                <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
+                  <Globe className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-left">
+                  <h3 className="font-semibold text-white">Global Reach</h3>
+                  <p className="text-sm text-blue-100">Accept payments worldwide</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Trust Badges */}
+            <div className="mt-8 p-6 bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10">
+              <p className="text-sm text-gray-300 mb-4 text-center">Trusted by 50,000+ businesses globally</p>
+              <div className="flex justify-center space-x-4">
+                <div className="flex items-center space-x-2 px-3 py-2 bg-white/10 rounded-lg">
+                  <Award className="w-4 h-4 text-yellow-400" />
+                  <span className="text-xs text-white font-medium">PCI DSS</span>
+                </div>
+                <div className="flex items-center space-x-2 px-3 py-2 bg-white/10 rounded-lg">
+                  <ShieldCheck className="w-4 h-4 text-green-400" />
+                  <span className="text-xs text-white font-medium">SSL</span>
+                </div>
+                <div className="flex items-center space-x-2 px-3 py-2 bg-white/10 rounded-lg">
+                  <Star className="w-4 h-4 text-blue-400" />
+                  <span className="text-xs text-white font-medium">ISO 27001</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Right side - Login form */}
-        <div className="form-section">
-          <div className="form-container">
-            <div className="form-header">
-              <h2>Welcome Back</h2>
-              <p>Sign in to your ZentexPay account</p>
+      {/* Right Side - Login Form */}
+      <div className="flex-1 flex items-center justify-center p-8 bg-white">
+        <div className="w-full max-w-md">
+          {/* Mobile Logo */}
+          <div className="lg:hidden mb-8 text-center">
+            <div className="w-20 h-20 mx-auto bg-white rounded-2xl flex items-center justify-center shadow-xl mb-4 p-3">
+              <img
+                src="/images/AccuzPay_logo.png"
+                alt="AccuzPay Logo"
+                className="w-full h-full object-contain"
+              />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900">AccuzPay</h1>
+          </div>
+
+          {/* Form Container */}
+          <div className="bg-white rounded-3xl shadow-2xl p-8 border border-gray-100">
+            {/* Form Header */}
+            <div className="text-center mb-8">
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">
+                Welcome Back
+              </h2>
+              <p className="text-gray-600">
+                Sign in to your AccuzPay account
+              </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="login-form">
-              {error && (
-                <div className="error-message">
-                  <svg className="error-icon" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                  </svg>
-                  {error}
+            {/* Error Message */}
+            {error && (
+              <div className="mb-6 p-4 bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 rounded-2xl flex items-center space-x-3">
+                <div className="w-8 h-8 bg-gradient-to-r from-red-500 to-pink-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-sm">!</span>
                 </div>
-              )}
+                <p className="text-red-700 text-sm font-medium">{error}</p>
+              </div>
+            )}
 
-              <div className="form-group">
-                <label htmlFor="username" className="form-label">Username</label>
-                <div className="input-wrapper">
-                  <svg className="input-icon" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                  </svg>
+            {/* Login Form */}
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Username Field */}
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-gray-700">
+                  Username
+                </label>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <User className="h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+                  </div>
                   <input
-                    id="username"
                     type="text"
-                    className="form-input"
                     value={user_name}
                     onChange={(e) => setUserName(e.target.value)}
+                    className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-gray-200 rounded-2xl text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-300"
                     placeholder="Enter your username"
                     required
                   />
                 </div>
               </div>
 
-              <div className="form-group">
-                <label htmlFor="password" className="form-label">Password</label>
-                <div className="input-wrapper">
-                  <svg className="input-icon" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
-                  </svg>
+              {/* Password Field */}
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-gray-700">
+                  Password
+                </label>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <Lock className="h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+                  </div>
                   <input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    className="form-input"
+                    type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    className="w-full pl-12 pr-12 py-4 bg-gray-50 border border-gray-200 rounded-2xl text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-300"
                     placeholder="Enter your password"
                     required
                   />
                   <button
                     type="button"
-                    className="password-toggle"
                     onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
                   >
                     {showPassword ? (
-                      <svg viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
-                      </svg>
+                      <EyeOff className="h-5 w-5" />
                     ) : (
-                      <svg viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/>
-                      </svg>
+                      <Eye className="h-5 w-5" />
                     )}
                   </button>
                 </div>
               </div>
 
-              <div className="form-options">
-                <label className="checkbox-container">
-                  <input type="checkbox" className="checkbox" />
-                  <span className="checkmark"></span>
-                  Remember me
+              {/* Remember Me & Forgot Password */}
+              <div className="flex items-center justify-between">
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-600">Remember me</span>
                 </label>
-                <a href="/forgot-password" className="forgot-link">Forgot Password?</a>
+                <button
+                  type="button"
+                  className="text-sm font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+                >
+                  Forgot Password?
+                </button>
               </div>
 
+              {/* Login Button */}
               <button
                 type="submit"
-                className={`login-button ${loading ? 'loading' : ''}`}
                 disabled={loading}
+                className={`w-full py-4 px-6 rounded-2xl font-semibold text-white transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg ${loading
+                  ? 'bg-gradient-to-r from-gray-400 to-gray-500 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 shadow-xl'
+                  } flex items-center justify-center space-x-2`}
               >
                 {loading ? (
                   <>
-                    <div className="spinner"></div>
-                    Signing in...
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <span>Signing in...</span>
                   </>
                 ) : (
-                  'Sign In'
+                  <>
+                    <span>Sign In</span>
+                    <ArrowRight className="w-5 h-5" />
+                  </>
                 )}
               </button>
             </form>
 
-            <div className="form-footer">
-              <p>Don't have an account? <a href="/register" className="signup-link">Sign up</a></p>
+            {/* Form Footer */}
+            <div className="mt-8 text-center">
+              <p className="text-sm text-gray-600">
+                Don't have an account?{' '}
+                <button className="font-semibold text-blue-600 hover:text-blue-700 transition-colors">
+                  Contact Sales
+                </button>
+              </p>
+            </div>
+          </div>
+
+          {/* Additional Info */}
+          <div className="mt-6 text-center">
+            <div className="flex justify-center space-x-6 text-xs text-gray-500">
+              <div className="flex items-center space-x-1">
+                <Shield className="w-4 h-4" />
+                <span>Secure</span>
+              </div>
+              <div className="flex items-center space-x-1">
+                <Zap className="w-4 h-4" />
+                <span>Fast</span>
+              </div>
+              <div className="flex items-center space-x-1">
+                <Globe className="w-4 h-4" />
+                <span>Global</span>
+              </div>
             </div>
           </div>
         </div>

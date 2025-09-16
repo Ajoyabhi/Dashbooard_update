@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Search, Calendar, Download, Filter, X } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Table from '../../components/dashboard/Table';
-import { userMenuItems } from '../../data/mockData';
+import { getMenuItems } from '../../utils/menuItems';
+import { useAuth } from '../../context/AuthContext';
 import { formatCurrency, formatDate, getStatusColor } from '../../utils/formatUtils';
 import api from '../../utils/axios';
 
@@ -58,6 +59,7 @@ interface FilterOption {
 }
 
 export default function PayoutReport() {
+  const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
@@ -276,7 +278,7 @@ export default function PayoutReport() {
   ];
 
   return (
-    <DashboardLayout menuItems={userMenuItems} title="Payout Report">
+    <DashboardLayout menuItems={getMenuItems(user?.user_type || 'user')} title="Payout Report">
       <div className="space-y-6">
         <div className="bg-white shadow-sm rounded-lg">
           <div className="p-6">

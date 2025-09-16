@@ -21,27 +21,33 @@ mongoose.connect(config.mongodb.uri, {
   serverSelectionTimeoutMS: 5000,
   socketTimeoutMS: 45000,
 })
-.then(() => {
-  logger.info('MongoDB connected successfully in callback worker');
-})
-.catch((err) => {
-  logger.error('MongoDB connection error in callback worker:', err);
-  process.exit(1);
-});
+  .then(() => {
+    logger.info('MongoDB connected successfully in callback worker');
+  })
+  .catch((err) => {
+    logger.error('MongoDB connection error in callback worker:', err);
+    process.exit(1);
+  });
 
 // Process callback jobs
-callbackQueue.process(async function(job) {
+callbackQueue.process(async function (job) {
+  const startTime = Date.now();
   try {
-    logger.info('Processing callback job', { 
+    logger.info('Processing callback job', {
       jobId: job.id,
       data: job.data,
       attempts: job.attemptsMade
     });
 
-    // Set job timeout
+    // Set job timeout - increased to 5 minutes to handle slow operations
     const timeout = setTimeout(() => {
+      logger.error('Job processing timeout - taking too long', {
+        jobId: job.id,
+        attempts: job.attemptsMade,
+        data: job.data
+      });
       throw new Error('Job processing timeout');
-    }, 30000); // 30 seconds timeout
+    }, 300000); // 5 minutes timeout
 
     const {
       statuscode,
@@ -57,11 +63,31 @@ callbackQueue.process(async function(job) {
     const mappedStatus = (statuscode === 'TXN' || statuscode === 'SUCCESS') ? 'completed' : 'failed';
 
 
-    // Find transactions once
-    const payinTransaction = await PayinTransaction.findOne({ reference_id: apitxnid });
-    const userTransaction = await UserTransaction.findOne({ reference_id: apitxnid });
+    // Find transactions once - use Promise.all for parallel execution
+    logger.info('Starting database lookups', { jobId: job.id, apitxnid });
+    const [payinTransaction, userTransaction] = await Promise.all([
+      PayinTransaction.findOne({ reference_id: apitxnid }),
+      UserTransaction.findOne({ reference_id: apitxnid })
+    ]);
+    logger.info('Database lookups completed', { jobId: job.id, apitxnid });
+
+    logger.info('Transaction lookup results', {
+      jobId: job.id,
+      apitxnid,
+      payinTransactionFound: !!payinTransaction,
+      userTransactionFound: !!userTransaction,
+      payinTransactionId: payinTransaction?._id,
+      userTransactionId: userTransaction?._id
+    });
 
     if (!payinTransaction || !userTransaction) {
+      logger.error('Transaction records not found', {
+        jobId: job.id,
+        apitxnid,
+        payinTransactionFound: !!payinTransaction,
+        userTransactionFound: !!userTransaction,
+        jobData: job.data
+      });
       throw new Error('Transaction records not found');
     }
 
@@ -91,7 +117,7 @@ callbackQueue.process(async function(job) {
       // Update user transaction balance
       await UserTransaction.updateOne(
         { reference_id: apitxnid },
-        { 
+        {
           $set: {
             'balance.after': newBalance
           }
@@ -104,7 +130,7 @@ callbackQueue.process(async function(job) {
       });
 
       const amountToAdd = transactionAmount - adminCharge - platformFee - gstAmount;
-      
+
       if (financialDetails) {
         await financialDetails.increment('wallet', {
           by: amountToAdd
@@ -128,6 +154,7 @@ callbackQueue.process(async function(job) {
     }
 
     // Update all transaction records in a single session
+    logger.info('Starting transaction updates', { jobId: job.id, apitxnid });
     const session = await mongoose.startSession();
     try {
       await session.withTransaction(async () => {
@@ -141,11 +168,11 @@ callbackQueue.process(async function(job) {
             { $set: updateData }
           ),
           TransactionCharges.update(
-            { 
+            {
               status: mappedStatus,
               transaction_utr: utr
             },
-            { 
+            {
               where: { reference_id: apitxnid },
               returning: true
             }
@@ -155,51 +182,66 @@ callbackQueue.process(async function(job) {
     } finally {
       await session.endSession();
     }
+    logger.info('Transaction updates completed', { jobId: job.id, apitxnid });
 
-    // Send callback to merchant
+    // Get merchant details early for potential parallel processing
+    logger.info('Starting merchant details lookup', { jobId: job.id, userId });
     const merchantDetails = await MerchantDetails.findOne({
-      where: { 
+      where: {
         user_id: parseInt(userId, 10)
       }
     });
+    logger.info('Merchant details lookup completed', { jobId: job.id, userId, hasCallback: !!merchantDetails?.payin_callback });
 
     if (merchantDetails?.payin_callback) {
-      // Retry configuration
-      const maxRetries = 3;
-      const baseDelay = 2000; // 2 seconds
+      logger.info('Starting merchant callback process', { jobId: job.id, callbackUrl: merchantDetails.payin_callback });
+      // Retry configuration - optimized for faster processing
+      const maxRetries = 2; // Reduced from 3 to 2
+      const baseDelay = 1000; // Reduced from 2 seconds to 1 second
       let lastError;
+
+      // Add a timeout for the entire callback process (30 seconds max)
+      const callbackTimeout = setTimeout(() => {
+        logger.warn('Merchant callback process timeout - skipping callback', {
+          jobId: job.id,
+          apitxnid,
+          callbackUrl: merchantDetails.payin_callback
+        });
+      }, 30000); // 30 seconds max for entire callback process
 
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
+          logger.info(`Starting callback attempt ${attempt}/${maxRetries}`, { jobId: job.id, apitxnid });
+
           let callbackData;
-          if (statuscode === 'SUCCESS'){  
-          callbackData = {
-            reference_id: apitxnid,
-            amount: amount,
-            status: mappedStatus,
-            utr: utr,
-            message: message || 'Transaction processed',
-            timestamp: new Date().toISOString()
-          };
-          }else{
-          callbackData = {
-            reference_id: apitxnid,
-            transaction_id: txnid,
-            amount: amount,
-            status: mappedStatus,
-            utr: utr,
-            message: message || 'Transaction processed',
-            timestamp: new Date().toISOString()
-          };
+          if (statuscode === 'SUCCESS') {
+            callbackData = {
+              reference_id: apitxnid,
+              amount: amount,
+              status: mappedStatus,
+              utr: utr,
+              message: message || 'Transaction processed',
+              timestamp: new Date().toISOString()
+            };
+          } else {
+            callbackData = {
+              reference_id: apitxnid,
+              transaction_id: txnid,
+              amount: amount,
+              status: mappedStatus,
+              utr: utr,
+              message: message || 'Transaction processed',
+              timestamp: new Date().toISOString()
+            };
           }
-          
+
           console.log("this is callback data", callbackData)
 
           const response = await axios.post(merchantDetails.payin_callback, callbackData, {
             headers: {
               'Content-Type': 'application/json'
             },
-            timeout: 10000
+            timeout: 5000 // Reduced from 10 seconds to 5 seconds
           });
 
           logger.info('Callback sent successfully to merchant', {
@@ -208,13 +250,14 @@ callbackQueue.process(async function(job) {
             response_status: response.status,
             attempt: attempt
           });
-          
-          // Success - break out of retry loop
+
+          // Clear callback timeout and break out of retry loop
+          clearTimeout(callbackTimeout);
           break;
-          
+
         } catch (error) {
           lastError = error;
-          
+
           logger.warn('Callback attempt failed', {
             reference_id: apitxnid,
             callback_url: merchantDetails.payin_callback,
@@ -231,6 +274,8 @@ callbackQueue.process(async function(job) {
               error: error.message,
               totalAttempts: maxRetries
             });
+            // Clear callback timeout on final failure
+            clearTimeout(callbackTimeout);
           } else {
             // Wait before retrying with exponential backoff
             const delay = baseDelay * Math.pow(2, attempt - 1);
@@ -248,12 +293,15 @@ callbackQueue.process(async function(job) {
       });
     }
 
+    // Clear timeout on successful completion
     clearTimeout(timeout);
 
+    const processingTime = Date.now() - startTime;
     logger.info('Callback processed successfully', {
       reference_id: apitxnid,
       status: mappedStatus,
-      utr
+      utr,
+      processingTimeMs: processingTime
     });
 
     return {
@@ -263,6 +311,9 @@ callbackQueue.process(async function(job) {
     };
 
   } catch (error) {
+    // Clear timeout in case of error
+    clearTimeout(timeout);
+
     logger.error('Error processing callback', {
       jobId: job.id,
       error: error.message,
@@ -284,14 +335,14 @@ callbackQueue.process(async function(job) {
 
 // Handle job events
 callbackQueue.on('completed', (job, result) => {
-  logger.info('Callback job completed successfully', { 
+  logger.info('Callback job completed successfully', {
     jobId: job.id,
     result
   });
 });
 
 callbackQueue.on('failed', (job, error) => {
-  logger.error('Callback job failed', { 
+  logger.error('Callback job failed', {
     jobId: job.id,
     error: error.message,
     stack: error.stack,
@@ -306,110 +357,110 @@ callbackQueue.on('stalled', (job) => {
   });
 });
 
-philpayPayoutQueue.process(async function(job) {
+philpayPayoutQueue.process(async function (job) {
   try {
-    logger.info('Processing philpay payout job', { 
+    logger.info('Processing philpay payout job', {
       jobId: job.id,
       data: job.data,
       attempts: job.attemptsMade
     });
     console.log("this is philpay payout job data", job.data)
-    if(job.data.data.object.status == "success" || job.data.data.object.status == "Success"){
+    if (job.data.data.object.status == "success" || job.data.data.object.status == "Success") {
       // Update transaction charges
       await TransactionCharges.update(
-          {
-              status: 'completed',
-              transaction_utr: job.data.data.object.bank_reference_id || null
-          },
-          {
-              where: {
-                  reference_id: job.data.data.object.merchant_order_id
-              }
+        {
+          status: 'completed',
+          transaction_utr: job.data.data.object.bank_reference_id || null
+        },
+        {
+          where: {
+            reference_id: job.data.data.object.merchant_order_id
           }
+        }
       );
       logger.info('Transaction charges stored', { reference: job.data.data.object.merchant_order_id });
       // Update user transaction
       await UserTransaction.updateOne(
-          { reference_id: job.data.data.object.merchant_order_id },
-          {
-              $set: {
-                  status: 'success',
-                  gateway_response: {
-                      merchant_response: job.data.data.object.merchant_order_id,
-                      status: 'success',
-                      message: job.data.data.object.message || 'Transaction processed',
-                      utr: job.data.data.object.bank_reference_id || null
-                  }
-              }
+        { reference_id: job.data.data.object.merchant_order_id },
+        {
+          $set: {
+            status: 'success',
+            gateway_response: {
+              merchant_response: job.data.data.object.merchant_order_id,
+              status: 'success',
+              message: job.data.data.object.message || 'Transaction processed',
+              utr: job.data.data.object.bank_reference_id || null
+            }
           }
+        }
       );
       logger.info('User transaction updated', { reference: job.data.data.object.merchant_order_id });
       // Update payout transaction
       await PayoutTransaction.updateOne(
-          { reference_id: job.data.data.object.merchant_order_id },
-          {
-              $set: {
-                  status: 'success',
-                  gateway_response: {
-                      merchant_response: job.data.data.object.merchant_order_id,
-                      status: 'success',
-                      message: job.data.data.object.message || 'Transaction processed',
-                      utr: job.data.data.object.bank_reference_id || null
-                  }
-              }
+        { reference_id: job.data.data.object.merchant_order_id },
+        {
+          $set: {
+            status: 'success',
+            gateway_response: {
+              merchant_response: job.data.data.object.merchant_order_id,
+              status: 'success',
+              message: job.data.data.object.message || 'Transaction processed',
+              utr: job.data.data.object.bank_reference_id || null
+            }
           }
+        }
       );
       logger.info('Payout transaction updated', { reference: job.data.data.object.merchant_order_id });
     }
-    else{
-      logger.info('Philpay payout job failed', { 
+    else {
+      logger.info('Philpay payout job failed', {
         jobId: job.id,
         status: job.data.data.object.status,
         message: job.data.data.object.acquirer_message || 'Transaction failed',
         attempts: job.attemptsMade
       });
       await TransactionCharges.update(
-          {
-              status: 'failed',
-              transaction_utr: job.data.data.object.bank_reference_id || null
-          },
-          {
-              where: {
-                  reference_id: job.data.data.object.merchant_order_id
-              }
+        {
+          status: 'failed',
+          transaction_utr: job.data.data.object.bank_reference_id || null
+        },
+        {
+          where: {
+            reference_id: job.data.data.object.merchant_order_id
           }
+        }
       );
       logger.info('Transaction charges stored', { reference: job.data.data.object.merchant_order_id });
       // Update user transaction
       await UserTransaction.updateOne(
-          { reference_id: job.data.data.object.merchant_order_id },
-          {
-              $set: {
-                  status: 'failed',
-                  gateway_response: {
-                      merchant_response: job.data.data.object.merchant_order_id,
-                      status: 'failed',
-                      message: job.data.data.object.message || 'Transaction failed',
-                      utr: job.data.data.object.bank_reference_id || null
-                  }
-              }
+        { reference_id: job.data.data.object.merchant_order_id },
+        {
+          $set: {
+            status: 'failed',
+            gateway_response: {
+              merchant_response: job.data.data.object.merchant_order_id,
+              status: 'failed',
+              message: job.data.data.object.message || 'Transaction failed',
+              utr: job.data.data.object.bank_reference_id || null
+            }
           }
+        }
       );
       logger.info('User transaction updated', { reference: job.data.data.object.merchant_order_id });
       // Update payout transaction
       await PayoutTransaction.updateOne(
-          { reference_id: job.data.data.object.merchant_order_id },
-          {
-              $set: {
-                  status: 'failed',
-                  gateway_response: {
-                      merchant_response: job.data.data.object.merchant_order_id,
-                      status: 'failed',
-                      message: job.data.data.object.message || 'Transaction failed',
-                      utr: job.data.data.object.bank_reference_id || null
-                  }
-              }
+        { reference_id: job.data.data.object.merchant_order_id },
+        {
+          $set: {
+            status: 'failed',
+            gateway_response: {
+              merchant_response: job.data.data.object.merchant_order_id,
+              status: 'failed',
+              message: job.data.data.object.message || 'Transaction failed',
+              utr: job.data.data.object.bank_reference_id || null
+            }
           }
+        }
       );
       logger.info('Payout transaction updated', { reference: job.data.data.object.merchant_order_id });
     }
@@ -424,33 +475,33 @@ philpayPayoutQueue.process(async function(job) {
     const userId = payinTransaction.user.user_id;
     const settlement_amount = payinTransaction.amount;
     const chargesAmount = payinTransaction.charges.total_charges;
-    
+
     // Only update settlement wallet if payout failed (refund the money)
     if (job.data.data.object.status !== "success" && job.data.data.object.status !== "Success") {
       const userCurrrentBalance = await FinancialDetails.findOne({
-         where: {
-           user_id: parseInt(userId, 10)
-         }
+        where: {
+          user_id: parseInt(userId, 10)
+        }
       });
 
-      if(userCurrrentBalance){
-         // Ensure all values are properly parsed as numbers and handle potential null/undefined values
-         const currentSettlement = parseFloat(userCurrrentBalance.settlement || 0);
-         const settlementAmount = parseFloat(settlement_amount || 0);
-         const chargesAmountParsed = parseFloat(chargesAmount || 0);
-         
-         const newSettlement = currentSettlement + settlementAmount + chargesAmountParsed;
-         
-         // Ensure the result is a valid number and round to 2 decimal places
-         userCurrrentBalance.settlement = parseFloat(newSettlement.toFixed(2));
-         await userCurrrentBalance.save();
-         
-         logger.info('Settlement wallet refunded for failed payout', {
-           reference_id: job.data.data.object.merchant_order_id,
-           user_id: userId,
-           amount_refunded: settlementAmount + chargesAmountParsed,
-           new_settlement_balance: userCurrrentBalance.settlement
-         });
+      if (userCurrrentBalance) {
+        // Ensure all values are properly parsed as numbers and handle potential null/undefined values
+        const currentSettlement = parseFloat(userCurrrentBalance.settlement || 0);
+        const settlementAmount = parseFloat(settlement_amount || 0);
+        const chargesAmountParsed = parseFloat(chargesAmount || 0);
+
+        const newSettlement = currentSettlement + settlementAmount + chargesAmountParsed;
+
+        // Ensure the result is a valid number and round to 2 decimal places
+        userCurrrentBalance.settlement = parseFloat(newSettlement.toFixed(2));
+        await userCurrrentBalance.save();
+
+        logger.info('Settlement wallet refunded for failed payout', {
+          reference_id: job.data.data.object.merchant_order_id,
+          user_id: userId,
+          amount_refunded: settlementAmount + chargesAmountParsed,
+          new_settlement_balance: userCurrrentBalance.settlement
+        });
       }
     } else {
       logger.info('Payout successful - no settlement refund needed', {
@@ -459,7 +510,7 @@ philpayPayoutQueue.process(async function(job) {
       });
     }
     const merchantDetails = await MerchantDetails.findOne({
-      where: { 
+      where: {
         user_id: parseInt(userId, 10)
       }
     });
@@ -473,27 +524,27 @@ philpayPayoutQueue.process(async function(job) {
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           let callbackData;
-          if (job.data.data.object.status == "success" || job.data.data.object.status == "Success"){  
-          callbackData = {
-            reference_id: job.data.data.object.merchant_order_id,
-            amount: job.data.data.object.amount / 100,
-            status: job.data.data.object.status,
-            utr: job.data.data.object.bank_reference_id,
-            message: job.data.data.object.message || 'Transaction processed',
-            timestamp: new Date().toISOString()
-          };
-          }else{
-          callbackData = {
-            reference_id: job.data.data.object.merchant_order_id,
-            transaction_id: job.data.data.object.merchant_order_id,
-            amount: job.data.data.object.amount / 100,
-            status: job.data.data.object.status,
-            utr: job.data.data.object.bank_reference_id,
-            message: job.data.data.object.message || 'Transaction failed',
-            timestamp: new Date().toISOString()
-          };
+          if (job.data.data.object.status == "success" || job.data.data.object.status == "Success") {
+            callbackData = {
+              reference_id: job.data.data.object.merchant_order_id,
+              amount: job.data.data.object.amount / 100,
+              status: job.data.data.object.status,
+              utr: job.data.data.object.bank_reference_id,
+              message: job.data.data.object.message || 'Transaction processed',
+              timestamp: new Date().toISOString()
+            };
+          } else {
+            callbackData = {
+              reference_id: job.data.data.object.merchant_order_id,
+              transaction_id: job.data.data.object.merchant_order_id,
+              amount: job.data.data.object.amount / 100,
+              status: job.data.data.object.status,
+              utr: job.data.data.object.bank_reference_id,
+              message: job.data.data.object.message || 'Transaction failed',
+              timestamp: new Date().toISOString()
+            };
           }
-          
+
           console.log("this is callback data of philpay payout", callbackData)
 
           const response = await axios.post(merchantDetails.payout_callback, callbackData, {
@@ -509,13 +560,13 @@ philpayPayoutQueue.process(async function(job) {
             response_status: response.status,
             attempt: attempt
           });
-          
+
           // Success - break out of retry loop
           break;
-          
+
         } catch (error) {
           lastError = error;
-          
+
           logger.warn('Callback attempt failed', {
             reference_id: job.data.data.object.merchant_order_id,
             callback_url: merchantDetails.payout_callback,
@@ -543,7 +594,7 @@ philpayPayoutQueue.process(async function(job) {
         }
       }
     }
-    else{
+    else {
       logger.warn('No callback URL found for merchant', {
         reference_id: job.data.data.object.merchant_order_id,
         user_id: userId
@@ -563,14 +614,14 @@ philpayPayoutQueue.process(async function(job) {
 });
 
 philpayPayoutQueue.on('completed', (job, result) => {
-  logger.info('Philpay payout job completed successfully', { 
+  logger.info('Philpay payout job completed successfully', {
     jobId: job.id,
     result
   });
 });
 
 philpayPayoutQueue.on('failed', (job, error) => {
-  logger.error('Philpay payout job failed', { 
+  logger.error('Philpay payout job failed', {
     jobId: job.id,
     error: error.message,
     stack: error.stack,

@@ -12,12 +12,12 @@ export default defineConfig({
     // Log all requests
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:3005',
         changeOrigin: true,
         secure: false
       }
     },
-    port: 3002
+    port: 3005
   },
   // Enable source maps for better debugging
   build: {

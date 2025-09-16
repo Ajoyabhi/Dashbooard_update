@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Search, Calendar, Download, Filter, X } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Table from '../../components/dashboard/Table';
-import { userMenuItems } from '../../data/mockData';
+import { getMenuItems } from '../../utils/menuItems';
+import { useAuth } from '../../context/AuthContext';
 import { formatCurrency, formatDate, getStatusColor } from '../../utils/formatUtils';
 import api from '../../utils/axios';
 
@@ -23,6 +24,8 @@ interface PayinRecord {
     agent_charge: number;
     total_charges: number;
   };
+  gst_amount: number;
+  platform_fee: number;
   beneficiary_details: {
     account_number: string;
     account_ifsc: string;
@@ -59,6 +62,7 @@ interface FilterOption {
 }
 
 export default function PayinReport() {
+  const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
@@ -231,18 +235,25 @@ export default function PayinReport() {
         <span className="text-gray-600">{formatCurrency(value.admin_charge)}</span>
       ),
     },
-    // {
-    //   header: 'GST',
-    //   accessor: 'charges',
-    //   cell: (value: any) => (
-    //     <span className="text-gray-600">{formatCurrency(value.gst)}</span>
-    //   ),
-    // },
+    {
+      header: 'GST',
+      accessor: 'gst_amount',
+      cell: (value: number) => (
+        <span className="text-gray-600">{formatCurrency(value)}</span>
+      ),
+    },
+    {
+      header: 'Platform Fee',
+      accessor: 'platform_fee',
+      cell: (value: number) => (
+        <span className="text-gray-600">{formatCurrency(value)}</span>
+      ),
+    },
     {
       header: 'Net Amount',
       accessor: 'amount',
       cell: (value: number, row: PayinRecord) => (
-        <span className="font-medium">{formatCurrency(value - row.charges.admin_charge)}</span>
+        <span className="font-medium">{formatCurrency(value - row.charges.admin_charge - row.gst_amount - row.platform_fee)}</span>
       ),
     },
     {
@@ -262,7 +273,7 @@ export default function PayinReport() {
   ];
 
   return (
-    <DashboardLayout menuItems={userMenuItems} title="Payin Report">
+    <DashboardLayout menuItems={getMenuItems(user?.user_type || 'user')} title="Payin Report">
       <div className="space-y-6">
         <div className="bg-white shadow-sm rounded-lg">
           <div className="p-6">

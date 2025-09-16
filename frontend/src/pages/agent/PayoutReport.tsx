@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Filter, Download, Search, X } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Table from '../../components/dashboard/Table';
-import { agentMenuItems } from '../../data/mockData';
+import { getMenuItems } from '../../utils/menuItems';
+import { useAuth } from '../../context/AuthContext';
 import { formatDate, formatCurrency, getStatusColor } from '../../utils/formatUtils';
 import api from '../../utils/axios';
 import { toast } from 'react-hot-toast';
@@ -42,6 +43,7 @@ interface PayoutRecord {
 }
 
 const PayoutReport = () => {
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [dateRange, setDateRange] = useState<DateRange>({
@@ -240,7 +242,7 @@ const PayoutReport = () => {
   ];
 
   return (
-    <DashboardLayout menuItems={agentMenuItems} title="Payout Report">
+    <DashboardLayout menuItems={getMenuItems(user?.user_type || 'agent')} title="Payout Report">
       <div className="space-y-6">
         <div className="bg-white shadow-sm rounded-lg">
           <div className="p-6">

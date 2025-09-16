@@ -7,7 +7,7 @@ require('dotenv').config();
 // Create Redis clients for different purposes
 const createRedisClient = (type) => {
   logger.info(`Creating Redis client for ${type}`);
-  
+
   // Ensure port is a valid number
   const port = parseInt(process.env.REDIS_PORT);
   if (isNaN(port) || port < 0 || port > 65535) {
@@ -76,8 +76,8 @@ const queueOptions = {
     return createRedisClient(type);
   },
   settings: {
-    lockDuration: 15000, // 15 seconds lock
-    stalledInterval: 15000,
+    lockDuration: 300000, // 5 minutes lock to match timeout
+    stalledInterval: 60000, // Check for stalled jobs every 60 seconds
     maxStalledCount: 1,
     guardInterval: 5000,
     retryProcessDelay: 5000,
@@ -95,15 +95,19 @@ const queueOptions = {
     },
     removeOnComplete: true,
     removeOnFail: false,
-    timeout: 30000 // 30 second timeout for jobs
+    timeout: 300000 // 5 minute timeout for jobs to match worker timeout
   }
 };
 
 // Create callback queue
-const callbackQueue = new Bull('callback', queueOptions);
+const callbackQueue = new Bull('callback_payzutech', queueOptions);
 logger.info("Callback queue created with proper Redis configuration");
 
-// Handle queue events
+// Create payin queue
+const payinQueue = new Bull('payin_payzutech', queueOptions);
+logger.info("Payin queue created with proper Redis configuration");
+
+// Handle callback queue events
 callbackQueue.on('error', (error) => {
   logger.error('Callback queue error:', error);
   // Attempt to recover from connection errors
@@ -118,22 +122,58 @@ callbackQueue.on('ready', () => {
 });
 
 callbackQueue.on('active', (job) => {
-  logger.info('Callback job started processing', { 
+  logger.info('Callback job started processing', {
     jobId: job.id,
     timestamp: new Date().toISOString()
   });
 });
 
 callbackQueue.on('completed', (job) => {
-  logger.info('Callback job completed', { 
+  logger.info('Callback job completed', {
     jobId: job.id,
     timestamp: new Date().toISOString()
   });
 });
 
 callbackQueue.on('failed', (job, error) => {
-  logger.error('Callback job failed', { 
-    jobId: job.id, 
+  logger.error('Callback job failed', {
+    jobId: job.id,
+    error: error.message,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Handle payin queue events
+payinQueue.on('error', (error) => {
+  logger.error('Payin queue error:', error);
+  // Attempt to recover from connection errors
+  if (error.message.includes('Connection is closed')) {
+    logger.info('Attempting to recover from connection error...');
+    payinQueue.resume();
+  }
+});
+
+payinQueue.on('ready', () => {
+  logger.info('Payin queue is ready and connected to Redis');
+});
+
+payinQueue.on('active', (job) => {
+  logger.info('Payin job started processing', {
+    jobId: job.id,
+    timestamp: new Date().toISOString()
+  });
+});
+
+payinQueue.on('completed', (job) => {
+  logger.info('Payin job completed', {
+    jobId: job.id,
+    timestamp: new Date().toISOString()
+  });
+});
+
+payinQueue.on('failed', (job, error) => {
+  logger.error('Payin job failed', {
+    jobId: job.id,
     error: error.message,
     timestamp: new Date().toISOString()
   });
@@ -192,22 +232,22 @@ philpayPayoutQueue.on('ready', () => {
 });
 
 philpayPayoutQueue.on('active', (job) => {
-  logger.info('Philpay payout job started processing', { 
+  logger.info('Philpay payout job started processing', {
     jobId: job.id,
     timestamp: new Date().toISOString()
   });
 });
 
 philpayPayoutQueue.on('completed', (job) => {
-  logger.info('Philpay payout job completed', { 
+  logger.info('Philpay payout job completed', {
     jobId: job.id,
     timestamp: new Date().toISOString()
   });
 });
 
 philpayPayoutQueue.on('failed', (job, error) => {
-  logger.error('Philpay payout job failed', { 
-    jobId: job.id, 
+  logger.error('Philpay payout job failed', {
+    jobId: job.id,
     error: error.message,
     timestamp: new Date().toISOString()
   });
@@ -224,10 +264,13 @@ handleRedisEvents(createRedisClient('bclient'), 'bclient');
 process.on('SIGTERM', async () => {
   logger.info('Shutting down queues...');
   await callbackQueue.close();
+  await payinQueue.close();
+  await philpayPayoutQueue.close();
   process.exit(0);
 });
 
 module.exports = {
   callbackQueue,
-  philpayPayoutQueue
+  philpayPayoutQueue,
+  payinQueue
 }; 

@@ -20,7 +20,10 @@ import {
   LayoutDashboard,
   UserCog,
   ArrowDownToLine,
-  FileWarning
+  FileWarning,
+  ChevronDown,
+  FileBarChart,
+  Code
 } from 'lucide-react';
 
 export const getMenuItems = (userType: string): MenuItem[] => {
@@ -38,34 +41,41 @@ export const getMenuItems = (userType: string): MenuItem[] => {
         icon: 'DollarSign'
       },
       {
-        title: 'Wallet Report',
-        path: '/user/wallet-report',
-        icon: 'Wallet'
+        title: 'Reports',
+        icon: 'FileBarChart',
+        children: [
+          {
+            title: 'Payout Report',
+            path: '/user/payout-report',
+            icon: 'FileText'
+          },
+          {
+            title: 'Payout Failed History',
+            path: '/user/payout-failed-history',
+            icon: 'FileWarning'
+          },
+          {
+            title: 'Payin Report',
+            path: '/user/payin-report',
+            icon: 'ArrowDownToLine'
+          }
+        ]
       },
       {
-        title: 'Payout Report',
-        path: '/user/payout-report',
-        icon: 'FileText'
-      },
-      {
-        title: 'Payout Failed History',
-        path: '/user/payout-failed-history',
-        icon: 'FileWarning'
-      },
-      {
-        title: 'Payin Report',
-        path: '/user/payin-report',
-        icon: 'ArrowDownToLine'
-      },
-      {
-        title: 'Developer Settings',
-        path: '/user/developer-settings',
-        icon: 'Settings'
-      },
-      {
-        title: 'Development Docs',
-        path: '/user/development-docs',
-        icon: 'BookOpen'
+        title: 'Developer',
+        icon: 'Code',
+        children: [
+          {
+            title: 'Developer Settings',
+            path: '/user/developer-settings',
+            icon: 'Settings'
+          },
+          {
+            title: 'Development Docs',
+            path: '/user/development-docs',
+            icon: 'BookOpen'
+          }
+        ]
       }
     ];
   }
@@ -99,19 +109,25 @@ export const getMenuItems = (userType: string): MenuItem[] => {
           icon: 'FileSpreadsheet'
         },
         {
-          title: 'Wallet Report',
-          path: '/admin/wallet-report',
-          icon: 'Wallet'
-        },
-        {
-          title: 'Payout Report',
-          path: '/admin/payout-report',
-          icon: 'FileText'
-        },
-        {
-          title: 'Payin Report',
-          path: '/admin/payin-report',
-          icon: 'ArrowDownToLine'
+          title: 'Reports',
+          icon: 'FileBarChart',
+          children: [
+            {
+              title: 'Wallet Report',
+              path: '/admin/wallet-report',
+              icon: 'Wallet'
+            },
+            {
+              title: 'Payout Report',
+              path: '/admin/payout-report',
+              icon: 'FileText'
+            },
+            {
+              title: 'Payin Report',
+              path: '/admin/payin-report',
+              icon: 'ArrowDownToLine'
+            }
+          ]
         },
         {
           title: 'Chargeback',
@@ -153,29 +169,41 @@ export const getMenuItems = (userType: string): MenuItem[] => {
           icon: 'DollarSign'
         },
         {
-          title: 'Wallet Report',
-          path: '/agent/wallet-report',
-          icon: 'Wallet'
+          title: 'Reports',
+          icon: 'FileBarChart',
+          children: [
+            {
+              title: 'Wallet Report',
+              path: '/agent/wallet-report',
+              icon: 'Wallet'
+            },
+            {
+              title: 'Payout Report',
+              path: '/agent/payout-report',
+              icon: 'FileText'
+            },
+            {
+              title: 'Payin Report',
+              path: '/agent/payin-report',
+              icon: 'ArrowDownToLine'
+            }
+          ]
         },
         {
-          title: 'Payout Report',
-          path: '/agent/payout-report',
-          icon: 'FileText'
-        },
-        {
-          title: 'Payin Report',
-          path: '/agent/payin-report',
-          icon: 'ArrowDownToLine'
-        },
-        {
-          title: 'Developer Settings',
-          path: '/agent/developer-settings',
-          icon: 'Settings'
-        },
-        {
-          title: 'Development Docs',
-          path: '/agent/development-docs',
-          icon: 'BookOpen'
+          title: 'Developer',
+          icon: 'Code',
+          children: [
+            {
+              title: 'Developer Settings',
+              path: '/agent/developer-settings',
+              icon: 'Settings'
+            },
+            {
+              title: 'Development Docs',
+              path: '/agent/development-docs',
+              icon: 'BookOpen'
+            }
+          ]
         }
       ];
 
@@ -192,34 +220,41 @@ export const getMenuItems = (userType: string): MenuItem[] => {
           icon: 'DollarSign'
         },
         {
-          title: 'Wallet Report',
-          path: '/user/wallet-report',
-          icon: 'Wallet'
+          title: 'Reports',
+          icon: 'FileBarChart',
+          children: [
+            {
+              title: 'Payout Report',
+              path: '/user/payout-report',
+              icon: 'FileText'
+            },
+            {
+              title: 'Payout Failed History',
+              path: '/user/payout-failed-history',
+              icon: 'FileWarning'
+            },
+            {
+              title: 'Payin Report',
+              path: '/user/payin-report',
+              icon: 'ArrowDownToLine'
+            }
+          ]
         },
         {
-                  title: 'Payout Report',
-        path: '/user/payout-report',
-        icon: 'FileText'
-      },
-      {
-        title: 'Payout Failed History',
-        path: '/user/payout-failed-history',
-        icon: 'FileWarning'
-      },
-      {
-        title: 'Payin Report',
-        path: '/user/payin-report',
-        icon: 'ArrowDownToLine'
-      },
-        {
-          title: 'Developer Settings',
-          path: '/user/developer-settings',
-          icon: 'Settings'
-        },
-        {
-          title: 'Development Docs',
-          path: '/user/development-docs',
-          icon: 'BookOpen'
+          title: 'Developer',
+          icon: 'Code',
+          children: [
+            {
+              title: 'Developer Settings',
+              path: '/user/developer-settings',
+              icon: 'Settings'
+            },
+            {
+              title: 'Development Docs',
+              path: '/user/development-docs',
+              icon: 'BookOpen'
+            }
+          ]
         }
       ];
 

@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Table from '../../components/dashboard/Table';
-import { userMenuItems } from '../../data/mockData';
+import { getMenuItems } from '../../utils/menuItems';
+import { useAuth } from '../../context/AuthContext';
 import { formatCurrency, formatDate, getStatusColor } from '../../utils/formatUtils';
 import { WalletRecord, FilterOption, DateRange } from '../../types';
 import { Download, Filter, Search, X } from 'lucide-react';
 import api from '../../utils/axios';
 
 const UserWalletReport = () => {
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = React.useState('');
   const [selectedType, setSelectedType] = React.useState('all');
   const [selectedStatus, setSelectedStatus] = React.useState('all');
@@ -182,14 +184,14 @@ const UserWalletReport = () => {
       cell: (value: { admin_charge: number; agent_charge: number; total_charges: number }) => (
         <div className="text-sm">
           <div>Admin: {formatCurrency(value.admin_charge)}</div>
-          
+
         </div>
       ),
     }
   ];
 
   return (
-    <DashboardLayout menuItems={userMenuItems} title="Wallet Report">
+    <DashboardLayout menuItems={getMenuItems(user?.user_type || 'user')} title="Wallet Report">
       <div className="space-y-6">
         <div className="bg-white shadow-sm rounded-lg">
           <div className="p-6">

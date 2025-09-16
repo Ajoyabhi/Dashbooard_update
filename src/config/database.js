@@ -4,14 +4,14 @@ const config = require('./index');
 const { logger } = require('../utils/logger');
 
 console.log(config)
-// MySQL Configuration for XAMPP
+// MySQL Configuration
 const sequelize = new Sequelize(
-    'zintexpay_app',  // database name
-    'root',        // username
-    '',            // password (empty by default in XAMPP)
+    config.database.database,  // database name
+    config.database.username,  // username
+    config.database.password,  // password
     {
-        host: 'localhost',
-        port: 3306,
+        host: config.database.host,
+        port: config.database.port,
         dialect: 'mysql',
         logging: (msg) => logger.debug(msg),
         pool: {
@@ -43,11 +43,11 @@ mongoose.connect(config.mongodb.uri, {
     useNewUrlParser: true,
     useUnifiedTopology: true
 })
-.then(() => logger.info('Connected to MongoDB'))
-.catch(err => {
-    logger.error('MongoDB connection error:', err);
-    process.exit(1); // Exit if database connection fails
-});
+    .then(() => logger.info('Connected to MongoDB'))
+    .catch(err => {
+        logger.error('MongoDB connection error:', err);
+        process.exit(1); // Exit if database connection fails
+    });
 
 module.exports = {
     sequelize,

@@ -12,9 +12,9 @@ const { encryptText } = require('../merchant_payin_payout/utils_payout');
  * @returns {string} - Client IP address
  */
 const getClientIp = (req) => {
-  return req.headers['x-forwarded-for']?.split(',')[0] || 
-         req.connection.remoteAddress || 
-         req.socket.remoteAddress;
+  return req.headers['x-forwarded-for']?.split(',')[0] ||
+    req.connection.remoteAddress ||
+    req.socket.remoteAddress;
 };
 
 /**
@@ -42,7 +42,7 @@ const validatePaymentRequest = (req) => {
 
 const validatePaymentRequestpayin = (req) => {
   const errors = [];
-  const {name, order_amount, email, phone, reference_id } = req.body;
+  const { name, order_amount, email, phone, reference_id } = req.body;
 
   if (!name) errors.push('Name is required');
   if (!order_amount) errors.push('Order amount is required');
@@ -79,14 +79,14 @@ const initiatePayment = async (req, res) => {
     const validationResult = validatePaymentRequestpayin(req);
     setValidationResultpayin(req, validationResult);
     if (!validationResult.isValid) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid request', 
-        errors: validationResult.errors 
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid request',
+        errors: validationResult.errors
       });
     }
 
-    const {name, order_amount, email, phone, reference_id} = req.body;
+    const { name, order_amount, email, phone, reference_id } = req.body;
     const user_id = req.user.id;
     const clientIp = getClientIp(req);
     const transaction_id = uuidv4();
@@ -104,7 +104,7 @@ const initiatePayment = async (req, res) => {
     });
 
     // Send response
-    if(result.success){ 
+    if (result.success) {
       res.status(200).json({
         transaction_id,
         result
@@ -118,8 +118,8 @@ const initiatePayment = async (req, res) => {
 
   } catch (error) {
     logger.error('Error processing payment', { error: error.message });
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: error.message || 'Error processing payment'
     });
   }
@@ -134,39 +134,53 @@ const handleUnpayCallback = async (req, res) => {
   try {
     // Get callback data from either query params (GET) or body (POST)
     const callbackData = req.method === 'GET' ? req.query : req.body;
-    
-    logger.info('Received Unpay callback', { 
+
+    logger.info('Received Unpay callback', {
       method: req.method,
-      data: callbackData 
+      data: callbackData
     });
 
     // Validate required parameters
     const requiredParams = ['statuscode', 'status', 'amount', 'apitxnid', 'txnid', 'utr'];
     const missingParams = requiredParams.filter(param => !callbackData[param]);
-    
+
     if (missingParams.length > 0) {
       logger.error('Missing required parameters in callback', { missingParams });
-      return res.status(400).json({ 
-        success: false, 
+      return res.status(400).json({
+        success: false,
         message: `Missing required parameters: ${missingParams.join(', ')}`
       });
     }
 
     // Add callback to queue
-    const job = await callbackQueue.add(callbackData, {
-      attempts: 3,
-      backoff: {
-        type: 'exponential',
-        delay: 5000
-      }
-    });
+    const transactionInDb = await PayinTransaction.findOne({ reference_id: callbackData.apitxnid });
+    console.log("transactionInDb", transactionInDb);
 
-    // Send immediate response
-    res.json({ 
-      success: true, 
-      message: 'Callback queued for processing',
-      job_id: job.id
-    });
+    if (!transactionInDb) {
+      console.log("transactionInDb not found");
+      console.log("callbackData is sending to payzutech");
+      const response = await axios.post('https://dashboard.payzutech.in/api/payments/unpay/callback', {
+        callbackData
+      });
+      res.status(200).json({
+        success: true,
+        message: 'Callback processed successfully',
+        response: response.jo
+      });
+    } else {
+      const job = await callbackQueue.add(callbackData, {
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 5000
+        }
+      });
+      res.status(200).json({
+        success: true,
+        message: 'Callback queued for processing',
+        job_id: job.id
+      });
+    }
 
   } catch (error) {
     logger.error('Error queuing Unpay callback', {
@@ -255,8 +269,8 @@ const getTransactionStatus = async (req, res) => {
 
   } catch (error) {
     logger.error('Error getting transaction status', { error: error.message });
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: 'Error getting transaction status'
     });
   }
@@ -267,10 +281,10 @@ const handleSpayCallback = async (req, res) => {
     // Get callback data from either query params (GET) or body (POST)
     const callbackData = req.method === 'GET' ? req.query : req.body;
     console.log("callbackData", callbackData);
-    
-    logger.info('Received SPay callback', { 
+
+    logger.info('Received SPay callback', {
       method: req.method,
-      data: callbackData 
+      data: callbackData
     });
 
     // Map SPay callback data to expected format
@@ -286,11 +300,11 @@ const handleSpayCallback = async (req, res) => {
     // Validate required parameters
     const requiredParams = ['statuscode', 'apitxnid', 'amount', 'utr'];
     const missingParams = requiredParams.filter(param => !mappedData[param]);
-    
+
     if (missingParams.length > 0) {
       logger.error('Missing required parameters in callback', { missingParams });
-      return res.status(400).json({ 
-        success: false, 
+      return res.status(400).json({
+        success: false,
         message: `Missing required parameters: ${missingParams.join(', ')}`
       });
     }
@@ -308,8 +322,8 @@ const handleSpayCallback = async (req, res) => {
     });
 
     // Send immediate response
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Callback queued for processing',
       job_id: job.id
     });
@@ -327,9 +341,9 @@ const handleSpayCallback = async (req, res) => {
 const handleSpayPayoutCallback = async (req, res) => {
   try {
     const callbackData = req.method === 'GET' ? req.query : req.body;
-    logger.info('Received SPay payout callback', { 
+    logger.info('Received SPay payout callback', {
       method: req.method,
-      data: callbackData 
+      data: callbackData
     });
     console.log(callbackData);
     res.status(200).json({ success: true, message: 'Callback processed successfully' });
@@ -342,9 +356,9 @@ const handleSpayPayoutCallback = async (req, res) => {
 const handlePhilpayPayoutCallback = async (req, res) => {
   try {
     const callbackData = req.method === 'GET' ? req.query : req.body;
-    logger.info('Received Philpay payout callback', { 
+    logger.info('Received Philpay payout callback', {
       method: req.method,
-      data: callbackData 
+      data: callbackData
     });
     console.log("this is callback data of philpay payout", callbackData);
     const job = await philpayPayoutQueue.add(callbackData, {
@@ -354,7 +368,8 @@ const handlePhilpayPayoutCallback = async (req, res) => {
         delay: 5000
       }
     });
-    res.status(200).json({ success: true, 
+    res.status(200).json({
+      success: true,
       message: 'Callback processed successfully',
       job_id: job.id
     });
@@ -374,6 +389,6 @@ module.exports = {
   handleSpayCallback,
   handleSpayPayoutCallback,
   handlePhilpayPayoutCallback
-}; 
+};
 
 

@@ -400,6 +400,7 @@ const initiatePayout = async (req, res) => {
         }
       }
       else if (user.MerchantDetail.payout_merchant_name === 'SPay') {
+        console.log("this is payout data of spay", payoutData)
         const payoutData = {
           reference_id,
           user_id,

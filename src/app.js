@@ -44,20 +44,20 @@ const mongoOptions = {
 logger.info('Attempting to connect to MongoDB with URI:', config.mongodb.uri);
 
 mongoose.connect(config.mongodb.uri, mongoOptions)
-.then(() => {
-  logger.info('Connected to MongoDB successfully');
-})
-.catch(err => {
-  logger.error('MongoDB connection error:', err);
-  if (err.name === 'MongooseServerSelectionError') {
-    logger.error('MongoDB connection details:', {
-      uri: config.mongodb.uri,
-      error: err.message,
-      code: err.code,
-      name: err.name
-    });
-  }
-});
+  .then(() => {
+    logger.info('Connected to MongoDB successfully');
+  })
+  .catch(err => {
+    logger.error('MongoDB connection error:', err);
+    if (err.name === 'MongooseServerSelectionError') {
+      logger.error('MongoDB connection details:', {
+        uri: config.mongodb.uri,
+        error: err.message,
+        code: err.code,
+        name: err.name
+      });
+    }
+  });
 
 // Middleware
 app.use(helmet());
@@ -96,26 +96,26 @@ app.use((req, res) => {
 });
 
 // Database connection and server start
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3004;
 
 const startServer = async () => {
-    try {
-        await sequelize.authenticate();
-        console.log('Database connection established successfully.');
-        
-        await sequelize.sync();
-        console.log('Database synchronized successfully.');
+  try {
+    await sequelize.authenticate();
+    console.log('Database connection established successfully.');
 
-        // Only start the server if it's not already running
-        if (!module.parent) {
-            app.listen(PORT, () => {
-                logger.info(`Server is running on port ${PORT}`);
-            });
-        }
-    } catch (error) {
-        console.error('Unable to connect to the database:', error);
-        process.exit(1);
+    await sequelize.sync();
+    console.log('Database synchronized successfully.');
+
+    // Only start the server if it's not already running
+    if (!module.parent) {
+      app.listen(PORT, () => {
+        logger.info(`Server is running on port ${PORT}`);
+      });
     }
+  } catch (error) {
+    console.error('Unable to connect to the database:', error);
+    process.exit(1);
+  }
 };
 
 startServer();

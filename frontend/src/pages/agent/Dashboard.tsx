@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import SummaryCard from '../../components/dashboard/SummaryCard';
 import Table from '../../components/dashboard/Table';
-import { agentMenuItems } from '../../data/mockData';
+import { getMenuItems } from '../../utils/menuItems';
+import { useAuth } from '../../context/AuthContext';
 import { formatCurrency, formatDate, getStatusColor } from '../../utils/formatUtils';
 import api from '../../utils/axios';
 import { Pie, Bar, Doughnut } from 'react-chartjs-2';
@@ -71,6 +72,7 @@ interface DashboardData {
 }
 
 const AgentDashboard: React.FC = () => {
+  const { user } = useAuth();
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -321,7 +323,7 @@ const AgentDashboard: React.FC = () => {
 
   if (loading) {
     return (
-      <DashboardLayout menuItems={agentMenuItems} title="Agent Dashboard">
+      <DashboardLayout menuItems={getMenuItems(user?.user_type || 'agent')} title="Agent Dashboard">
         <div className="flex items-center justify-center h-64">
           <div className="text-gray-600">Loading dashboard data...</div>
         </div>
@@ -331,7 +333,7 @@ const AgentDashboard: React.FC = () => {
 
   if (error) {
     return (
-      <DashboardLayout menuItems={agentMenuItems} title="Agent Dashboard">
+      <DashboardLayout menuItems={getMenuItems(user?.user_type || 'agent')} title="Agent Dashboard">
         <div className="flex items-center justify-center h-64">
           <div className="text-red-600">{error}</div>
         </div>
@@ -340,7 +342,7 @@ const AgentDashboard: React.FC = () => {
   }
 
   return (
-    <DashboardLayout menuItems={agentMenuItems} title="Agent Dashboard">
+    <DashboardLayout menuItems={getMenuItems(user?.user_type || 'agent')} title="Agent Dashboard">
       <div className="space-y-6">
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

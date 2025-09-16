@@ -13,7 +13,7 @@ const axios = require('axios');
  */
 const processPayin = async (data) => {
   try {
-    logger.info('Starting to process payin request', { 
+    logger.info('Starting to process payin request', {
       transaction_id: data.transaction_id,
       data
     });
@@ -130,20 +130,20 @@ const processPayin = async (data) => {
     }
 
     const totalCharges = parseFloat(adminCharge);
-    
+
     // Fetch platform charges from database
     const platformCharges = await PlatformCharges.findOne({
       where: { is_active: true }
     });
 
-    if(platformCharges?.charge){
+    if (platformCharges?.charge) {
       platformFee = (totalCharges * parseFloat(platformCharges.charge)) / 100;
     }
 
-    if(platformCharges?.gst){
+    if (platformCharges?.gst) {
       gstAmount = (totalCharges * parseFloat(platformCharges.gst)) / 100;
     }
-    
+
     // Initialize wallet if it's null
     if (!user.FinancialDetail || user.FinancialDetail.wallet === null) {
       await FinancialDetails.create({
@@ -154,7 +154,7 @@ const processPayin = async (data) => {
         rolling_reserve: 0
       });
     }
-    
+
 
     // Create user transaction
     const userTransaction = await UserTransaction.create({
@@ -162,7 +162,7 @@ const processPayin = async (data) => {
         id: new mongoose.Types.ObjectId(user_id),
         user_id: user_id,
       },
-      beneficiary_details:{
+      beneficiary_details: {
         name: name || '',
         email: email || '',
         mobile: phone || ''
@@ -275,12 +275,12 @@ const processPayin = async (data) => {
     };
 
     let result;
-    if(user.MerchantDetail.payin_merchant_name == "Unpay"){
+    if (user.MerchantDetail.payin_merchant_name == "Unpay") {
       result = await unpayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee);
-    } else if(user.MerchantDetail.payin_merchant_name == "Spay"){
+    } else if (user.MerchantDetail.payin_merchant_name == "Spay") {
       result = await spayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee);
-    } else if(user.MerchantDetail.payin_merchant_name == "SpayIcici"){
-      result =  await spayPayinIcici(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee);
+    } else if (user.MerchantDetail.payin_merchant_name == "SpayIcici") {
+      result = await spayPayinIcici(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee);
     }
     else {
       throw new Error('Invalid merchant name');
@@ -308,27 +308,31 @@ const processPayin = async (data) => {
 
       await PayinTransaction.updateOne(
         { reference_id },
-        { $set: { 
-          status: 'payin_qr_generated', 
-          gateway_response: { 
-            utr: null, 
-            status: 'payin_qr_generated', 
-            message: 'Payin qr string generated', 
-            merchant_response: result.data.apitxnid 
-          } 
-        }}
+        {
+          $set: {
+            status: 'payin_qr_generated',
+            gateway_response: {
+              utr: null,
+              status: 'payin_qr_generated',
+              message: 'Payin qr string generated',
+              merchant_response: result.data.apitxnid
+            }
+          }
+        }
       );
       await UserTransaction.updateOne(
         { reference_id },
-        { $set: { 
-          status: 'payin_qr_generated', 
-          gateway_response: { 
-            utr: null, 
-            status: 'payin_qr_generated', 
-            message: 'Payin qr string generated', 
-            merchant_response: result.data.apitxnid 
-          } 
-        }}
+        {
+          $set: {
+            status: 'payin_qr_generated',
+            gateway_response: {
+              utr: null,
+              status: 'payin_qr_generated',
+              message: 'Payin qr string generated',
+              merchant_response: result.data.apitxnid
+            }
+          }
+        }
       );
       await TransactionCharges.update(
         {
@@ -338,7 +342,7 @@ const processPayin = async (data) => {
         {
           where: {
             reference_id: reference_id
-          } 
+          }
         }
       );
       return {
@@ -364,7 +368,7 @@ const processPayin = async (data) => {
             reference_id: reference_id
           }
         }
-      );      
+      );
       logger.error('DEBUG: Payin request failed', {
         reference_id,
         status: 'failed',
@@ -388,7 +392,7 @@ const processPayin = async (data) => {
 const unpayPayin = async (payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp) => {
   try {
     const { order_amount, reference_id } = payinData;
-    
+
     // Get merchant details from database
     const merchantDetails = await MerchantDetails.findOne({ where: { user_id } });
     if (!merchantDetails) {
@@ -419,7 +423,7 @@ const unpayPayin = async (payinData, adminCharge, agentCharge, totalCharges, use
         'content-type': 'application/json'
       },
       body: JSON.stringify({
-        body: encryptedRequestBody 
+        body: encryptedRequestBody
       })
     });
 
@@ -429,15 +433,15 @@ const unpayPayin = async (payinData, adminCharge, agentCharge, totalCharges, use
       throw new Error(`Unpay API error: ${result.message || 'Unknown error'}`);
     }
     console.log(result);
-    if(result.statuscode == "TXN"){
+    if (result.statuscode == "TXN") {
       return {
         statuscode: result.statuscode,
         message: result.message,
         data: {
-        apitxnid: result.data?.apitxnid,
-        qrString: result.data?.qrString,
+          apitxnid: result.data?.apitxnid,
+          qrString: result.data?.qrString,
         }
-    };
+      };
     } else {
       return {
         statuscode: result.statuscode,
@@ -456,81 +460,81 @@ const unpayPayin = async (payinData, adminCharge, agentCharge, totalCharges, use
 };
 
 const spayPayin = async (payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee) => {
-    try {
-        // Validate required fields
-        if (!payinData.name || !payinData.email || !payinData.phone || !payinData.order_amount) {
-            throw new Error('Missing required fields: name, email, mobile, or amount');
-        }
-
-        // Generate unique transaction ID
-
-        const requestBody = {
-            token: "JPi2bq7JPPaiEaFDBp0WtGcVTEjTMG", // Make sure to set this in your environment variables
-            apitxnid: payinData.reference_id,
-            name: payinData.name,
-            email: payinData.email,
-            mobile: payinData.phone,
-            amount: payinData.order_amount.toString(),
-            return_url: "https://api.zentexpay.in/api/payments/spay/callback" // Make sure to set this in your environment variables
-        };
-
-        const response = await axios.post('https://dashboard.spay.live/api/upiintent/vp2/create', requestBody, {
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (response.data.statuscode === 'TXNS') {
-            // Store transaction details in your database
-            const transactionData = {
-                user_id,
-                transaction_id: payinData.reference_id,
-                amount: payinData.order_amount,
-                admin_charge: adminCharge,
-                agent_charge: agentCharge,
-                total_charges: totalCharges,
-                gst_amount: gstAmount,
-                platform_fee: platformFee,
-                client_ip: clientIp,
-                payment_link: response.data.payment_link,
-                status: 'PENDING',
-                payment_provider: 'SPAY',
-                created_at: new Date()
-            };
-
-            // Save transaction to database (implement your database save logic here)
-            // await Transaction.create(transactionData);
-
-            return {
-                success: true,
-                data: {
-                    statuscode: response.data.statuscode,
-                    qrString: response.data.payment_link,
-                    message: response.data.message,
-                    apitxnid: payinData.reference_id
-                }
-            };
-        } else {
-            throw new Error(response.data.message || 'Payment initiation failed');
-        }
-    } catch (error) {
-        // Handle specific error cases
-        if (error.response) {
-            switch (error.response.status) {
-                case 400:
-                    throw new Error('Missing required fields');
-                case 401:
-                    throw new Error('Invalid amount format');
-                case 409:
-                    throw new Error('Transaction ID already exists');
-                case 500:
-                    throw new Error('Internal server error');
-                default:
-                    throw new Error(error.response.data.message || 'Payment initiation failed');
-            }
-        }
-        throw error;
+  try {
+    // Validate required fields
+    if (!payinData.name || !payinData.email || !payinData.phone || !payinData.order_amount) {
+      throw new Error('Missing required fields: name, email, mobile, or amount');
     }
+
+    // Generate unique transaction ID
+
+    const requestBody = {
+      token: "JPi2bq7JPPaiEaFDBp0WtGcVTEjTMG", // Make sure to set this in your environment variables
+      apitxnid: payinData.reference_id,
+      name: payinData.name,
+      email: payinData.email,
+      mobile: payinData.phone,
+      amount: payinData.order_amount.toString(),
+      return_url: "https://api.zentexpay.in/api/payments/spay/callback" // Make sure to set this in your environment variables
+    };
+
+    const response = await axios.post('https://dashboard.spay.live/api/upiintent/vp2/create', requestBody, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.data.statuscode === 'TXNS') {
+      // Store transaction details in your database
+      const transactionData = {
+        user_id,
+        transaction_id: payinData.reference_id,
+        amount: payinData.order_amount,
+        admin_charge: adminCharge,
+        agent_charge: agentCharge,
+        total_charges: totalCharges,
+        gst_amount: gstAmount,
+        platform_fee: platformFee,
+        client_ip: clientIp,
+        payment_link: response.data.payment_link,
+        status: 'PENDING',
+        payment_provider: 'SPAY',
+        created_at: new Date()
+      };
+
+      // Save transaction to database (implement your database save logic here)
+      // await Transaction.create(transactionData);
+
+      return {
+        success: true,
+        data: {
+          statuscode: response.data.statuscode,
+          qrString: response.data.payment_link,
+          message: response.data.message,
+          apitxnid: payinData.reference_id
+        }
+      };
+    } else {
+      throw new Error(response.data.message || 'Payment initiation failed');
+    }
+  } catch (error) {
+    // Handle specific error cases
+    if (error.response) {
+      switch (error.response.status) {
+        case 400:
+          throw new Error('Missing required fields');
+        case 401:
+          throw new Error('Invalid amount format');
+        case 409:
+          throw new Error('Transaction ID already exists');
+        case 500:
+          throw new Error('Internal server error');
+        default:
+          throw new Error(error.response.data.message || 'Payment initiation failed');
+      }
+    }
+    throw error;
+  }
 };
 
 const spayPayinIcici = async (payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee) => {

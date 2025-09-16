@@ -6,11 +6,11 @@ module.exports = {
         env: process.env.NODE_ENV || 'development'
     },
     database: {
-        host: 'localhost',
-        port: 3306,
-        database: 'zintexpay_app',
-        username: 'root',
-        password: ''
+        host: process.env.DB_HOST || 'localhost',
+        port: process.env.DB_PORT || 3306,
+        database: process.env.DB_NAME || 'accuzpay_db',
+        username: process.env.DB_USER || 'admin',
+        password: process.env.DB_PASSWORD || ''
     },
     mongodb: {
         uri: process.env.MONGODB_URI || 'mongodb://paydexadmin:j123KJkslw21Bk34G@10.10.22.98:27017/techturect?authSource=admin'

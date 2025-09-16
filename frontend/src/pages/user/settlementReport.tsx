@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Search, Calendar, Download, Filter, X } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Table from '../../components/dashboard/Table';
-import { userMenuItems } from '../../data/mockData';
+import { getMenuItems } from '../../utils/menuItems';
+import { useAuth } from '../../context/AuthContext';
 import { formatCurrency, formatDate, getStatusColor } from '../../utils/formatUtils';
 import api from '../../utils/axios';
 
@@ -32,6 +33,7 @@ interface FilterOption {
 }
 
 export default function SettlementReport() {
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -78,7 +80,7 @@ export default function SettlementReport() {
 
       const response = await api.get(`/user/settlement-report?${params}`);
       console.log("response", response);
-      
+
       if (response.data.success) {
         setSettlementHistory(response.data.data.transactions);
         setPagination(response.data.data.pagination);
@@ -140,18 +142,18 @@ export default function SettlementReport() {
 
       // Get the blob from the response
       const blob = await response.blob();
-      
+
       // Create download link
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.download = `settlement_report_${new Date().toISOString().split('T')[0]}.csv`;
-      
+
       // Trigger download
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
+
       // Clean up the URL object
       window.URL.revokeObjectURL(url);
 
@@ -229,7 +231,7 @@ export default function SettlementReport() {
   ];
 
   return (
-    <DashboardLayout menuItems={userMenuItems} title="Settlement Report">
+    <DashboardLayout menuItems={getMenuItems(user?.user_type || 'user')} title="Settlement Report">
       <div className="space-y-6">
         {/* Search and Filters */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
