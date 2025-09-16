@@ -1,13 +1,14 @@
+require('dotenv').config();
 const { Sequelize } = require('sequelize');
 const config = require('../config/index');
 
 const sequelize = new Sequelize(
     config.database.database,  // database name
     config.database.username,        // username
-    config.database.password,            // password (empty by default in XAMPP)
+    config.database.password,            // password
     {
-        host: 'localhost',
-        port: 3306,
+        host: config.database.host,
+        port: config.database.port,
         dialect: 'mysql'
     }
 );
