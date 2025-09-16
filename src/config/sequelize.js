@@ -3,7 +3,7 @@ require('dotenv').config();
 module.exports = {
   development: {
     username: process.env.DB_USER || 'admin',
-    password: process.env.DB_PASSWORD || '',
+    password: process.env.DB_PASSWORD || 'Jmlastro@2025',
     database: process.env.DB_NAME || 'accuzpay_db',
     host: process.env.DB_HOST || 'localhost',
     port: process.env.DB_PORT || 3306,
@@ -12,7 +12,7 @@ module.exports = {
   },
   test: {
     username: process.env.DB_USER || 'admin',
-    password: process.env.DB_PASSWORD || '',
+    password: process.env.DB_PASSWORD || 'Jmlastro@2025',
     database: process.env.DB_NAME || 'accuzpay_db',
     host: process.env.DB_HOST || 'localhost',
     port: process.env.DB_PORT || 3306,
@@ -21,7 +21,7 @@ module.exports = {
   },
   production: {
     username: process.env.DB_USER || 'admin',
-    password: process.env.DB_PASSWORD || '',
+    password: process.env.DB_PASSWORD || 'Jmlastro@2025',
     database: process.env.DB_NAME || 'accuzpay_db',
     host: process.env.DB_HOST || 'localhost',
     port: process.env.DB_PORT || 3306,

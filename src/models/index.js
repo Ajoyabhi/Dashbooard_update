@@ -1,10 +1,10 @@
 const { Sequelize } = require('sequelize');
-const config = require('../config');
+const config = require('../config/index');
 
 const sequelize = new Sequelize(
-    'zintexpay_app',  // database name
-    'root',        // username
-    '',            // password (empty by default in XAMPP)
+    config.database.database,  // database name
+    config.database.username,        // username
+    config.database.password,            // password (empty by default in XAMPP)
     {
         host: 'localhost',
         port: 3306,
