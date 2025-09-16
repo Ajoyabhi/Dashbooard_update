@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
   User,
@@ -11,20 +10,12 @@ import {
   CreditCard,
   TrendingUp,
   Globe,
-  Building2,
   Banknote,
   ArrowRight,
   Star,
   Award,
   Zap,
-  ShieldCheck,
-  Smartphone,
-  Laptop,
-  DollarSign,
-  Target,
-  Users,
-  Clock,
-  ChevronRight
+  ShieldCheck
 } from 'lucide-react';
 
 const LoginPage: React.FC = () => {
@@ -33,9 +24,7 @@ const LoginPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [darkMode, setDarkMode] = useState(false);
   const { login } = useAuth();
-  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -195,35 +184,61 @@ const LoginPage: React.FC = () => {
       </div>
 
       {/* Right Side - Login Form */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-white">
-        <div className="w-full max-w-md">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 lg:p-8 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 relative overflow-hidden">
+        {/* Mobile Background Pattern */}
+        <div className="absolute inset-0 opacity-30">
+          <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-blue-600/5 via-indigo-600/5 to-purple-600/5"></div>
+          <div className="absolute top-1/4 right-1/4 w-64 h-64 bg-gradient-to-r from-blue-400/10 to-indigo-400/10 rounded-full blur-3xl animate-pulse"></div>
+          <div className="absolute bottom-1/4 left-1/4 w-48 h-48 bg-gradient-to-r from-indigo-400/10 to-purple-400/10 rounded-full blur-3xl animate-pulse animation-delay-1000"></div>
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-32 h-32 bg-gradient-to-r from-blue-300/5 to-indigo-300/5 rounded-full blur-2xl animate-pulse animation-delay-500"></div>
+        </div>
+
+        {/* Floating Banking Icons for Mobile */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none lg:hidden">
+          <div className="absolute top-20 left-8 w-8 h-8 text-blue-400/20 animate-bounce">
+            <CreditCard className="w-full h-full" />
+          </div>
+          <div className="absolute top-32 right-12 w-6 h-6 text-indigo-400/20 animate-bounce animation-delay-300">
+            <Shield className="w-full h-full" />
+          </div>
+          <div className="absolute bottom-40 left-12 w-7 h-7 text-purple-400/20 animate-bounce animation-delay-700">
+            <Banknote className="w-full h-full" />
+          </div>
+          <div className="absolute bottom-20 right-8 w-6 h-6 text-blue-400/20 animate-bounce animation-delay-1000">
+            <TrendingUp className="w-full h-full" />
+          </div>
+        </div>
+        <div className="w-full max-w-md relative z-10">
           {/* Mobile Logo */}
-          <div className="lg:hidden mb-8 text-center">
-            <div className="w-20 h-20 mx-auto bg-white rounded-2xl flex items-center justify-center shadow-xl mb-4 p-3">
+          <div className="lg:hidden mb-6 sm:mb-8 text-center">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto bg-white/90 backdrop-blur-sm rounded-2xl flex items-center justify-center shadow-2xl mb-3 sm:mb-4 p-2 sm:p-3 border border-white/20">
               <img
                 src="/images/AccuzPay_logo.png"
                 alt="AccuzPay Logo"
                 className="w-full h-full object-contain"
               />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">AccuzPay</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-800 mb-1 sm:mb-2">AccuzPay</h1>
+            <p className="text-xs sm:text-sm text-gray-600 font-medium">Secure Banking Platform</p>
           </div>
 
           {/* Form Container */}
-          <div className="bg-white rounded-3xl shadow-2xl p-8 border border-gray-100">
+          <div className="bg-white/95 backdrop-blur-sm rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-6 lg:p-8 border border-white/20 relative overflow-hidden">
+            {/* Subtle pattern overlay */}
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 via-transparent to-indigo-50/50 pointer-events-none"></div>
             {/* Form Header */}
-            <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-gray-900 mb-2">
+            <div className="text-center mb-6 sm:mb-8 relative z-10">
+              <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1 sm:mb-2">
                 Welcome Back
               </h2>
-              <p className="text-gray-600">
+              <p className="text-sm sm:text-base text-gray-600">
                 Sign in to your AccuzPay account
               </p>
             </div>
 
             {/* Error Message */}
             {error && (
-              <div className="mb-6 p-4 bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 rounded-2xl flex items-center space-x-3">
+              <div className="mb-6 p-4 bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 rounded-2xl flex items-center space-x-3 relative z-10">
                 <div className="w-8 h-8 bg-gradient-to-r from-red-500 to-pink-500 rounded-full flex items-center justify-center">
                   <span className="text-white text-sm">!</span>
                 </div>
@@ -232,7 +247,7 @@ const LoginPage: React.FC = () => {
             )}
 
             {/* Login Form */}
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6 relative z-10">
               {/* Username Field */}
               <div className="space-y-2">
                 <label className="block text-sm font-semibold text-gray-700">
@@ -246,7 +261,7 @@ const LoginPage: React.FC = () => {
                     type="text"
                     value={user_name}
                     onChange={(e) => setUserName(e.target.value)}
-                    className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-gray-200 rounded-2xl text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-300"
+                    className="w-full pl-12 pr-4 py-3 sm:py-4 bg-gray-50 border border-gray-200 rounded-xl sm:rounded-2xl text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-300 text-sm sm:text-base"
                     placeholder="Enter your username"
                     required
                   />
@@ -266,7 +281,7 @@ const LoginPage: React.FC = () => {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-12 pr-12 py-4 bg-gray-50 border border-gray-200 rounded-2xl text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-300"
+                    className="w-full pl-12 pr-12 py-3 sm:py-4 bg-gray-50 border border-gray-200 rounded-xl sm:rounded-2xl text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-300 text-sm sm:text-base"
                     placeholder="Enter your password"
                     required
                   />
@@ -305,7 +320,7 @@ const LoginPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className={`w-full py-4 px-6 rounded-2xl font-semibold text-white transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg ${loading
+                className={`w-full py-3 sm:py-4 px-6 rounded-xl sm:rounded-2xl font-semibold text-white transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg text-sm sm:text-base ${loading
                   ? 'bg-gradient-to-r from-gray-400 to-gray-500 cursor-not-allowed'
                   : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 shadow-xl'
                   } flex items-center justify-center space-x-2`}
@@ -325,8 +340,8 @@ const LoginPage: React.FC = () => {
             </form>
 
             {/* Form Footer */}
-            <div className="mt-8 text-center">
-              <p className="text-sm text-gray-600">
+            <div className="mt-6 sm:mt-8 text-center relative z-10">
+              <p className="text-xs sm:text-sm text-gray-600">
                 Don't have an account?{' '}
                 <button className="font-semibold text-blue-600 hover:text-blue-700 transition-colors">
                   Contact Sales
@@ -336,19 +351,19 @@ const LoginPage: React.FC = () => {
           </div>
 
           {/* Additional Info */}
-          <div className="mt-6 text-center">
-            <div className="flex justify-center space-x-6 text-xs text-gray-500">
-              <div className="flex items-center space-x-1">
-                <Shield className="w-4 h-4" />
-                <span>Secure</span>
+          <div className="mt-4 sm:mt-6 text-center relative z-10">
+            <div className="flex justify-center space-x-3 sm:space-x-6 text-xs text-gray-600">
+              <div className="flex items-center space-x-1 px-2 sm:px-3 py-1.5 sm:py-2 bg-white/60 backdrop-blur-sm rounded-lg border border-white/30">
+                <Shield className="w-3 h-3 sm:w-4 sm:h-4 text-blue-600" />
+                <span className="font-medium text-xs sm:text-sm">Secure</span>
               </div>
-              <div className="flex items-center space-x-1">
-                <Zap className="w-4 h-4" />
-                <span>Fast</span>
+              <div className="flex items-center space-x-1 px-2 sm:px-3 py-1.5 sm:py-2 bg-white/60 backdrop-blur-sm rounded-lg border border-white/30">
+                <Zap className="w-3 h-3 sm:w-4 sm:h-4 text-indigo-600" />
+                <span className="font-medium text-xs sm:text-sm">Fast</span>
               </div>
-              <div className="flex items-center space-x-1">
-                <Globe className="w-4 h-4" />
-                <span>Global</span>
+              <div className="flex items-center space-x-1 px-2 sm:px-3 py-1.5 sm:py-2 bg-white/60 backdrop-blur-sm rounded-lg border border-white/30">
+                <Globe className="w-3 h-3 sm:w-4 sm:h-4 text-purple-600" />
+                <span className="font-medium text-xs sm:text-sm">Global</span>
               </div>
             </div>
           </div>
