@@ -44,10 +44,10 @@ export default function DevelopmentDocs() {
       <div className="space-y-8">
         <div className="text-center space-y-4">
           <h1 className="text-4xl font-bold font-display text-neutral-900">
-            PayzuTech API Documentation
+            AccuzPay API Documentation
           </h1>
           <p className="text-lg text-neutral-600 max-w-3xl mx-auto">
-            Use PayzuTech APIs to create payin and payout transactions and to track their status. This guide covers authentication,
+            Use AccuzPay APIs to create payin and payout transactions and to track their status. This guide covers authentication,
             endpoints, request/response formats, and best practices for integrating with our payment gateway.
           </p>
         </div>
@@ -58,7 +58,7 @@ export default function DevelopmentDocs() {
             Base URL
           </h2>
           <div className="bg-neutral-100 rounded-xl p-4">
-            <span className="font-mono text-neutral-800">https://dashboard.payzutech.in</span>
+            <span className="font-mono text-neutral-800">https://dashboard.accuzpay.in</span>
           </div>
         </div>
 
@@ -87,7 +87,7 @@ export default function DevelopmentDocs() {
             <div>
               <h3 className="text-lg font-semibold text-neutral-900 mb-2">Endpoint</h3>
               <div className="bg-neutral-100 rounded-xl p-4">
-                <span className="font-mono text-neutral-800">POST https://dashboard.payzutech.in/api/payments/payin</span>
+                <span className="font-mono text-neutral-800">POST https://dashboard.accuzpay.in/api/payments/payin</span>
               </div>
             </div>
             <div>
@@ -108,7 +108,7 @@ export default function DevelopmentDocs() {
               <h3 className="text-lg font-semibold text-neutral-900 mb-2">cURL Example</h3>
               <div className="bg-neutral-100 rounded-xl p-4">
                 <pre className="text-sm text-neutral-800 overflow-x-auto">
-                  {`curl --location 'https://dashboard.payzutech.in/api/payments/payin' \\
+                  {`curl --location 'https://dashboard.accuzpay.in/api/payments/payin' \\
 --header 'Content-Type: application/json' \\
 --header 'Authorization: YOUR_JWT_TOKEN' \\
 --data '{
@@ -136,7 +136,7 @@ export default function DevelopmentDocs() {
             <div>
               <h3 className="text-lg font-semibold text-neutral-900 mb-2">Endpoint</h3>
               <div className="bg-neutral-100 rounded-xl p-4">
-                <span className="font-mono text-neutral-800">POST https://dashboard.payzutech.in/api/payments/payout/</span>
+                <span className="font-mono text-neutral-800">POST https://dashboard.accuzpay.in/api/payments/payout/</span>
               </div>
             </div>
             <div>
@@ -157,7 +157,7 @@ export default function DevelopmentDocs() {
               <h3 className="text-lg font-semibold text-neutral-900 mb-2">cURL Example</h3>
               <div className="bg-neutral-100 rounded-xl p-4">
                 <pre className="text-sm text-neutral-800 overflow-x-auto">
-                  {`curl --location 'https://dashboard.payzutech.in/api/payments/payout/' \\
+                  {`curl --location 'https://dashboard.accuzpay.in/api/payments/payout/' \\
 --header 'Content-Type: application/json' \\
 --header 'Authorization: YOUR_JWT_TOKEN' \\
 --data '{
@@ -186,7 +186,7 @@ export default function DevelopmentDocs() {
               <h3 className="text-lg font-semibold text-neutral-900 mb-2">Payin Status</h3>
               <div className="bg-neutral-100 rounded-xl p-4">
                 <pre className="text-sm text-neutral-800 overflow-x-auto">
-                  {`curl --location 'https://dashboard.payzutech.in/api/payments/payin/transaction/{transaction_id}' \\
+                  {`curl --location 'https://dashboard.accuzpay.in/api/payments/payin/transaction/{transaction_id}' \\
 --header 'Authorization: YOUR_JWT_TOKEN'`}
                 </pre>
               </div>
@@ -195,7 +195,7 @@ export default function DevelopmentDocs() {
               <h3 className="text-lg font-semibold text-neutral-900 mb-2">Payout Status</h3>
               <div className="bg-neutral-100 rounded-xl p-4">
                 <pre className="text-sm text-neutral-800 overflow-x-auto">
-                  {`curl --location 'https://dashboard.payzutech.in/api/payments/payout/transaction/{transaction_id}' \\
+                  {`curl --location 'https://dashboard.accuzpay.in/api/payments/payout/transaction/{transaction_id}' \\
 --header 'Authorization: YOUR_JWT_TOKEN'`}
                 </pre>
               </div>
@@ -215,14 +215,14 @@ export default function DevelopmentDocs() {
             <div>
               <h3 className="text-lg font-semibold text-neutral-900 mb-2">Endpoint</h3>
               <div className="bg-neutral-100 rounded-xl p-4">
-                <span className="font-mono text-neutral-800">GET https://dashboard.payzutech.in/api/payments/balanceCheck</span>
+                <span className="font-mono text-neutral-800">GET https://dashboard.accuzpay.in/api/payments/balanceCheck</span>
               </div>
             </div>
             <div>
               <h3 className="text-lg font-semibold text-neutral-900 mb-2">cURL Example</h3>
               <div className="bg-neutral-100 rounded-xl p-4">
                 <pre className="text-sm text-neutral-800 overflow-x-auto">
-                  {`curl --location 'https://dashboard.payzutech.in/api/payments/balanceCheck' \\
+                  {`curl --location 'https://dashboard.accuzpay.in/api/payments/balanceCheck' \\
 --header 'Authorization: YOUR_JWT_TOKEN'`}
                 </pre>
               </div>

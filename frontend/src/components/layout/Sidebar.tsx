@@ -29,7 +29,7 @@ const Sidebar: React.FC<SidebarProps> = ({ items = [], isOpen, onClose, onToggle
       case 'payin_payout':
         return 'User Portal';
       default:
-        return 'PayzuTech';
+        return 'AccuzPay';
     }
   };
 
@@ -285,7 +285,7 @@ const Sidebar: React.FC<SidebarProps> = ({ items = [], isOpen, onClose, onToggle
               </div>
             </div>
             <p className={`text-xs font-bold ${darkMode ? 'text-neutral-300' : 'text-neutral-700'}`}>
-              PayzuTech &copy; {new Date().getFullYear()}
+              AccuzPay &copy; {new Date().getFullYear()}
             </p>
             <p className={`text-xs ${darkMode ? 'text-neutral-500' : 'text-neutral-500'}`}>
               Powered by Advanced Technology

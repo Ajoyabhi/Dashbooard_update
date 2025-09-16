@@ -100,11 +100,11 @@ const queueOptions = {
 };
 
 // Create callback queue
-const callbackQueue = new Bull('callback_payzutech', queueOptions);
+const callbackQueue = new Bull('callback_accuzpay', queueOptions);
 logger.info("Callback queue created with proper Redis configuration");
 
 // Create payin queue
-const payinQueue = new Bull('payin_payzutech', queueOptions);
+const payinQueue = new Bull('payin_accuzpay', queueOptions);
 logger.info("Payin queue created with proper Redis configuration");
 
 // Handle callback queue events

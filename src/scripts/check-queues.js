@@ -74,7 +74,7 @@ async function checkQueues() {
 
         // Create both queues
         const oldQueue = new Bull('callback', queueOptions);
-        const newQueue = new Bull('callback_payzutech', queueOptions);
+        const newQueue = new Bull('callback_accuzpay', queueOptions);
 
         // Wait for queues to be ready
         await oldQueue.isReady();
@@ -105,7 +105,7 @@ async function checkQueues() {
         const newFailedJobs = await newQueue.getFailed();
         const newCompletedJobs = await newQueue.getCompleted();
 
-        console.log('\n=== NEW QUEUE (callback_payzutech) STATUS ===');
+        console.log('\n=== NEW QUEUE (callback_accuzpay) STATUS ===');
         console.log({
             waiting: newWaitingJobs.length,
             active: newActiveJobs.length,
