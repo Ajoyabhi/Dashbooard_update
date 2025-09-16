@@ -1,14 +1,15 @@
 const { Sequelize } = require('sequelize');
 const TransactionCharges = require('../models/TransactionCharges');
+require('dotenv').config();
 
-// Initialize Sequelize with XAMPP configuration
+// Initialize Sequelize with environment configuration
 const sequelize = new Sequelize(
-    'zintexpay_app',  // database name
-    'root',        // username
-    '',            // password (empty by default in XAMPP)
+    process.env.DB_NAME || 'accuzpay_db',  // database name
+    process.env.DB_USER || 'admin',        // username
+    process.env.DB_PASSWORD || 'Jmlastro@2025',         // password
     {
-        host: 'localhost',
-        port: 3306,
+        host: process.env.DB_HOST || 'localhost',
+        port: process.env.DB_PORT || 3306,
         dialect: 'mysql',
         logging: false,
         pool: {
