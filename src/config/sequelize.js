@@ -2,29 +2,29 @@ require('dotenv').config();
 
 module.exports = {
   development: {
-    username: 'root',
-    password: '',
-    database: 'zintexpay_app',
-    host: 'localhost',
-    port: 3306,
+    username: process.env.DB_USER || 'admin',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'accuzpay_db',
+    host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT || 3306,
     dialect: 'mysql',
     logging: false
   },
   test: {
-    username: 'apizentexpay_zentexpay',
-    password: 'user@007',
-    database: 'apizentexpay_zentexpay',
-    host: 'localhost',
-    port: 3306,
+    username: process.env.DB_USER || 'admin',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'accuzpay_db',
+    host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT || 3306,
     dialect: 'mysql',
     logging: false
   },
   production: {
-    host: 'localhost',
-    port: 3306,
-    database: 'apizentexpay_zentexpay',
-    username: 'apizentexpay_zentexpay',
-    password: 'user@007',
+    username: process.env.DB_USER || 'admin',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'accuzpay_db',
+    host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT || 3306,
     dialect: 'mysql',
     logging: false
   }
