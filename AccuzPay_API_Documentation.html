@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AccuzPay API Documentation</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #fff;
+        }
+
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+
+        h2 {
+            color: #34495e;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 8px;
+            margin-top: 40px;
+            margin-bottom: 20px;
+        }
+
+        h3 {
+            color: #2c3e50;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+
+        h4 {
+            color: #7f8c8d;
+            margin-top: 25px;
+            margin-bottom: 10px;
+        }
+
+        code {
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9em;
+            color: #e74c3c;
+        }
+
+        pre {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 15px 0;
+            border-left: 4px solid #3498db;
+        }
+
+        pre code {
+            background: none;
+            color: #ecf0f1;
+            padding: 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: #fff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        th,
+        td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background: #3498db;
+            color: white;
+            font-weight: 600;
+        }
+
+        tr:hover {
+            background: #f5f5f5;
+        }
+
+        .toc {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            border-left: 4px solid #3498db;
+        }
+
+        .toc ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .toc a {
+            color: #3498db;
+            text-decoration: none;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+        .endpoint {
+            background: #e8f5e8;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-weight: bold;
+            color: #27ae60;
+            margin: 10px 0;
+        }
+
+        .note {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+
+        .warning {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+
+        ul,
+        ol {
+            margin: 15px 0;
+            padding-left: 30px;
+        }
+
+        li {
+            margin: 8px 0;
+        }
+
+        .footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #ecf0f1;
+            text-align: center;
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+
+        @media print {
+            body {
+                font-size: 12pt;
+                line-height: 1.4;
+            }
+
+            h1,
+            h2,
+            h3 {
+                page-break-after: avoid;
+            }
+
+            pre,
+            table {
+                page-break-inside: avoid;
+            }
+
+            /* Hide file path and URL from print */
+            @page {
+                margin: 1in;
+
+                @bottom-center {
+                    content: "";
+                }
+
+                @bottom-left {
+                    content: "";
+                }
+
+                @bottom-right {
+                    content: "";
+                }
+            }
+
+            /* Additional CSS to prevent URL display */
+            body::after {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <h1>AccuzPay API Documentation</h1>
+
+    <div class="toc">
+        <h2>Table of Contents</h2>
+        <ul>
+            <li><a href="#introduction">Introduction</a></li>
+            <li><a href="#base-url">Base URL</a></li>
+            <li><a href="#authentication">Authentication</a></li>
+            <li><a href="#create-payin-transaction">Create Payin Transaction</a></li>
+            <li><a href="#create-payout-transaction">Create Payout Transaction</a></li>
+            <li><a href="#check-transaction-status">Check Transaction Status</a></li>
+            <li><a href="#check-account-balance">Check Account Balance</a></li>
+            <li><a href="#notes-requirements">Notes & Requirements</a></li>
+            <li><a href="#error-handling">Error Handling</a></li>
+            <li><a href="#best-practices">Best Practices</a></li>
+        </ul>
+    </div>
+
+    <h2 id="introduction">Introduction</h2>
+    <p>Use AccuzPay APIs to create payin and payout transactions and to track their status. This guide covers
+        authentication, endpoints, request/response formats, and best practices for integrating with our payment
+        gateway.</p>
+
+    <p>AccuzPay provides a comprehensive payment gateway solution that allows you to:</p>
+    <ul>
+        <li>Accept payments from customers (Payin)</li>
+        <li>Transfer money to beneficiaries (Payout)</li>
+        <li>Track transaction status in real-time</li>
+        <li>Monitor account balances and transaction limits</li>
+    </ul>
+
+    <h2 id="base-url">Base URL</h2>
+    <p>All API endpoints are hosted at:</p>
+    <div class="endpoint">https://dashboard.accuzpay.in</div>
+
+    <h2 id="authentication">Authentication</h2>
+    <p>All API requests require authentication using JWT tokens. Include the token in the Authorization header of your
+        requests.</p>
+
+    <h3>Header Format</h3>
+    <pre><code>Authorization: YOUR_JWT_TOKEN</code></pre>
+
+    <h3>Example</h3>
+    <pre><code>curl --location 'https://dashboard.accuzpay.in/api/payments/payin' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: YOUR_JWT_TOKEN' \
+--data '{...}'</code></pre>
+
+    <div class="note">
+        <strong>Note:</strong> Get your JWT token from the Developer Settings section in your dashboard.
+    </div>
+
+    <h2 id="create-payin-transaction">Create Payin Transaction</h2>
+    <p>Create a new payin transaction to accept payments from customers.</p>
+
+    <h3>Endpoint</h3>
+    <div class="endpoint">POST https://dashboard.accuzpay.in/api/payments/payin</div>
+
+    <h3>Request Body</h3>
+    <pre><code>{
+  "order_amount": 1000,
+  "name": "John Doe",
+  "email": "john@example.com",
+  "phone": "9876543210",
+  "reference_id": "TXN123456"
+}</code></pre>
+
+    <h3>Parameters</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Parameter</th>
+                <th>Type</th>
+                <th>Required</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>order_amount</code></td>
+                <td>number</td>
+                <td>Yes</td>
+                <td>Amount to be charged (in paise)</td>
+            </tr>
+            <tr>
+                <td><code>name</code></td>
+                <td>string</td>
+                <td>Yes</td>
+                <td>Customer's full name</td>
+            </tr>
+            <tr>
+                <td><code>email</code></td>
+                <td>string</td>
+                <td>Yes</td>
+                <td>Customer's email address</td>
+            </tr>
+            <tr>
+                <td><code>phone</code></td>
+                <td>string</td>
+                <td>Yes</td>
+                <td>Customer's phone number (10 digits)</td>
+            </tr>
+            <tr>
+                <td><code>reference_id</code></td>
+                <td>string</td>
+                <td>Yes</td>
+                <td>Unique reference ID (12-25 alphanumeric characters)</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>cURL Example</h3>
+    <pre><code>curl --location 'https://dashboard.accuzpay.in/api/payments/payin' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: YOUR_JWT_TOKEN' \
+--data '{
+  "order_amount": 1000,
+  "name": "John Doe",
+  "email": "john@example.com",
+  "phone": "9876543210",
+  "reference_id": "TXN123456"
+}'</code></pre>
+
+    <h3>Response Example</h3>
+    <pre><code>{
+  "success": true,
+  "data": {
+    "transaction_id": "TXN_123456789",
+    "payment_url": "https://dashboard.accuzpay.in/pay/TXN_123456789",
+    "status": "pending",
+    "amount": 1000,
+    "reference_id": "TXN123456"
+  }
+}</code></pre>
+
+    <h2 id="create-payout-transaction">Create Payout Transaction</h2>
+    <p>Create a new payout transaction to transfer money to beneficiaries.</p>
+
+    <h3>Endpoint</h3>
+    <div class="endpoint">POST https://dashboard.accuzpay.in/api/payments/payout/</div>
+
+    <h3>Request Body</h3>
+    <pre><code>{
+  "amount": 500,
+  "beneficiary_name": "Jane Smith",
+  "account_number": "1234567890",
+  "ifsc_code": "SBIN0001234",
+  "reference_id": "PAYOUT123456"
+}</code></pre>
+
+    <h3>Parameters</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Parameter</th>
+                <th>Type</th>
+                <th>Required</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>amount</code></td>
+                <td>number</td>
+                <td>Yes</td>
+                <td>Amount to be transferred (in paise)</td>
+            </tr>
+            <tr>
+                <td><code>beneficiary_name</code></td>
+                <td>string</td>
+                <td>Yes</td>
+                <td>Beneficiary's full name</td>
+            </tr>
+            <tr>
+                <td><code>account_number</code></td>
+                <td>string</td>
+                <td>Yes</td>
+                <td>Beneficiary's bank account number</td>
+            </tr>
+            <tr>
+                <td><code>ifsc_code</code></td>
+                <td>string</td>
+                <td>Yes</td>
+                <td>Bank's IFSC code</td>
+            </tr>
+            <tr>
+                <td><code>reference_id</code></td>
+                <td>string</td>
+                <td>Yes</td>
+                <td>Unique reference ID (12-25 alphanumeric characters)</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>cURL Example</h3>
+    <pre><code>curl --location 'https://dashboard.accuzpay.in/api/payments/payout/' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: YOUR_JWT_TOKEN' \
+--data '{
+  "amount": 500,
+  "beneficiary_name": "Jane Smith",
+  "account_number": "1234567890",
+  "ifsc_code": "SBIN0001234",
+  "reference_id": "PAYOUT123456"
+}'</code></pre>
+
+    <h3>Response Example</h3>
+    <pre><code>{
+  "success": true,
+  "data": {
+    "transaction_id": "PAYOUT_123456789",
+    "status": "processing",
+    "amount": 500,
+    "reference_id": "PAYOUT123456",
+    "estimated_completion": "2024-01-15T10:30:00Z"
+  }
+}</code></pre>
+
+    <h2 id="check-transaction-status">Check Transaction Status</h2>
+    <p>Check the status of payin and payout transactions using their transaction IDs.</p>
+
+    <h3>Payin Status</h3>
+
+    <h4>Endpoint</h4>
+    <div class="endpoint">GET https://dashboard.accuzpay.in/api/payments/payin/transaction/{transaction_id}</div>
+
+    <h4>cURL Example</h4>
+    <pre><code>curl --location 'https://dashboard.accuzpay.in/api/payments/payin/transaction/TXN_123456789' \
+--header 'Authorization: YOUR_JWT_TOKEN'</code></pre>
+
+    <h4>Response Example</h4>
+    <pre><code>{
+  "success": true,
+  "data": {
+    "transaction_id": "TXN_123456789",
+    "status": "completed",
+    "amount": 1000,
+    "reference_id": "TXN123456",
+    "payment_method": "UPI",
+    "created_at": "2024-01-15T09:00:00Z",
+    "completed_at": "2024-01-15T09:05:00Z"
+  }
+}</code></pre>
+
+    <h3>Payout Status</h3>
+
+    <h4>Endpoint</h4>
+    <div class="endpoint">GET https://dashboard.accuzpay.in/api/payments/payout/transaction/{transaction_id}</div>
+
+    <h4>cURL Example</h4>
+    <pre><code>curl --location 'https://dashboard.accuzpay.in/api/payments/payout/transaction/PAYOUT_123456789' \
+--header 'Authorization: YOUR_JWT_TOKEN'</code></pre>
+
+    <h4>Response Example</h4>
+    <pre><code>{
+  "success": true,
+  "data": {
+    "transaction_id": "PAYOUT_123456789",
+    "status": "completed",
+    "amount": 500,
+    "reference_id": "PAYOUT123456",
+    "beneficiary_name": "Jane Smith",
+    "account_number": "1234567890",
+    "ifsc_code": "SBIN0001234",
+    "created_at": "2024-01-15T09:00:00Z",
+    "completed_at": "2024-01-15T10:30:00Z"
+  }
+}</code></pre>
+
+    <h3>Transaction Status Values</h3>
+    <ul>
+        <li><code>pending</code> - Transaction is being processed</li>
+        <li><code>processing</code> - Transaction is in progress</li>
+        <li><code>completed</code> - Transaction completed successfully</li>
+        <li><code>failed</code> - Transaction failed</li>
+        <li><code>cancelled</code> - Transaction was cancelled</li>
+    </ul>
+
+    <h2 id="check-account-balance">Check Account Balance</h2>
+    <p>Check your current account balance and transaction limits.</p>
+
+    <h3>Endpoint</h3>
+    <div class="endpoint">GET https://dashboard.accuzpay.in/api/payments/balanceCheck</div>
+
+    <h3>cURL Example</h3>
+    <pre><code>curl --location 'https://dashboard.accuzpay.in/api/payments/balanceCheck' \
+--header 'Authorization: YOUR_JWT_TOKEN'</code></pre>
+
+    <h3>Response Example</h3>
+    <pre><code>{
+  "success": true,
+  "data": {
+    "wallet_balance": 50000,
+    "settlement_balance": 25000,
+    "daily_limit": 100000,
+    "monthly_limit": 1000000,
+    "used_daily": 15000,
+    "used_monthly": 75000
+  }
+}</code></pre>
+
+    <h2 id="notes-requirements">Notes & Requirements</h2>
+
+    <h3>Important Guidelines</h3>
+
+    <div class="note">
+        <h4>1. Reference ID Requirements</h4>
+        <ul>
+            <li><code>reference_id</code> must be a unique alphanumeric string</li>
+            <li>Length should be between 12 to 25 characters</li>
+            <li>Must be unique across all your transactions</li>
+        </ul>
+    </div>
+
+    <div class="note">
+        <h4>2. Data Format Requirements</h4>
+        <ul>
+            <li>Amounts should be provided as numbers (in paise)</li>
+            <li>Phone numbers must be exactly 10 digits</li>
+            <li>Email addresses should be valid format</li>
+        </ul>
+    </div>
+
+    <div class="note">
+        <h4>3. Request Headers</h4>
+        <ul>
+            <li>Always include <code>Content-Type: application/json</code> for POST requests</li>
+            <li>Include <code>Authorization: YOUR_JWT_TOKEN</code> in all requests</li>
+        </ul>
+    </div>
+
+    <div class="warning">
+        <h4>4. Authentication</h4>
+        <ul>
+            <li>Get your JWT token from Developer Settings in your dashboard</li>
+            <li>Keep your token secure and don't share it publicly</li>
+            <li>Tokens may expire and need to be refreshed</li>
+        </ul>
+    </div>
+
+    <div class="note">
+        <h4>5. Rate Limits</h4>
+        <ul>
+            <li>API calls are rate limited to prevent abuse</li>
+            <li>Contact support if you need higher limits</li>
+        </ul>
+    </div>
+
+    <h2 id="error-handling">Error Handling</h2>
+
+    <h3>Common Error Responses</h3>
+
+    <h4>400 Bad Request</h4>
+    <pre><code>{
+  "success": false,
+  "error": "Invalid request parameters",
+  "details": "Phone number must be exactly 10 digits"
+}</code></pre>
+
+    <h4>401 Unauthorized</h4>
+    <pre><code>{
+  "success": false,
+  "error": "Unauthorized",
+  "details": "Invalid or expired JWT token"
+}</code></pre>
+
+    <h4>403 Forbidden</h4>
+    <pre><code>{
+  "success": false,
+  "error": "Forbidden",
+  "details": "Insufficient balance for transaction"
+}</code></pre>
+
+    <h4>404 Not Found</h4>
+    <pre><code>{
+  "success": false,
+  "error": "Not Found",
+  "details": "Transaction not found"
+}</code></pre>
+
+    <h4>500 Internal Server Error</h4>
+    <pre><code>{
+  "success": false,
+  "error": "Internal Server Error",
+  "details": "An unexpected error occurred"
+}</code></pre>
+
+    <h3>Error Handling Best Practices</h3>
+    <ol>
+        <li>Always check the <code>success</code> field in responses</li>
+        <li>Handle different HTTP status codes appropriately</li>
+        <li>Implement retry logic for transient errors</li>
+        <li>Log errors for debugging purposes</li>
+        <li>Display user-friendly error messages</li>
+    </ol>
+
+    <h2 id="best-practices">Best Practices</h2>
+
+    <h3>Security</h3>
+    <ol>
+        <li><strong>Never expose your JWT token</strong> in client-side code</li>
+        <li><strong>Use HTTPS</strong> for all API communications</li>
+        <li><strong>Validate all inputs</strong> before sending requests</li>
+        <li><strong>Implement proper error handling</strong> to avoid exposing sensitive information</li>
+    </ol>
+
+    <h3>Performance</h3>
+    <ol>
+        <li><strong>Cache responses</strong> when appropriate</li>
+        <li><strong>Implement pagination</strong> for large data sets</li>
+        <li><strong>Use webhooks</strong> for real-time updates instead of polling</li>
+        <li><strong>Batch requests</strong> when possible</li>
+    </ol>
+
+    <h3>Integration</h3>
+    <ol>
+        <li><strong>Test thoroughly</strong> in sandbox environment before going live</li>
+        <li><strong>Implement idempotency</strong> for critical operations</li>
+        <li><strong>Use webhooks</strong> for transaction status updates</li>
+        <li><strong>Keep transaction records</strong> for reconciliation</li>
+    </ol>
+
+    <h3>Monitoring</h3>
+    <ol>
+        <li><strong>Monitor API response times</strong> and error rates</li>
+        <li><strong>Set up alerts</strong> for failed transactions</li>
+        <li><strong>Track transaction volumes</strong> and patterns</li>
+        <li><strong>Regular reconciliation</strong> of transactions</li>
+    </ol>
+
+    <h2>Support</h2>
+    <p>For technical support and questions:</p>
+    <ul>
+        <li>Email: support@accuzpay.in</li>
+        <li>Documentation: Available in your dashboard</li>
+        <li>Status Page: Check for service updates</li>
+    </ul>
+
+    <div class="footer">
+        <p><strong>Document Version:</strong> 1.0<br>
+            <strong>Last Updated:</strong> January 2024<br>
+            <strong>API Version:</strong> v1
+        </p>
+
+        <p><em>This documentation is provided as-is and may be updated periodically. Please refer to the latest version
+                in your dashboard for the most current information.</em></p>
+    </div>
+</body>
+
+</html>

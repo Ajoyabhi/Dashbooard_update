@@ -272,5 +272,6 @@ process.on('SIGTERM', async () => {
 module.exports = {
   callbackQueue,
   philpayPayoutQueue,
-  payinQueue
+  payinQueue,
+  createRedisClient
 }; 
