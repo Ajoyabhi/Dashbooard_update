@@ -136,7 +136,7 @@ export default function DevelopmentDocs() {
             <div>
               <h3 className="text-lg font-semibold text-neutral-900 mb-2">Endpoint</h3>
               <div className="bg-neutral-100 rounded-xl p-4">
-                <span className="font-mono text-neutral-800">POST https://dashboard.accuzpay.in/api/payments/payout/</span>
+                <span className="font-mono text-neutral-800">POST https://dashboard.accuzpay.in/api/payments/payout</span>
               </div>
             </div>
             <div>
@@ -144,10 +144,12 @@ export default function DevelopmentDocs() {
               <div className="bg-neutral-100 rounded-xl p-4">
                 <pre className="text-sm text-neutral-800 overflow-x-auto">
                   {`{
-  "amount": 500,
-  "beneficiary_name": "Jane Smith",
+  "amount": "1000",
   "account_number": "1234567890",
-  "ifsc_code": "SBIN0001234",
+  "account_ifsc": "SBIN0001234",
+  "bank_name": "State Bank of India",
+  "beneficiary_name": "John Doe",
+  "request_type": "IMPS",
   "reference_id": "PAYOUT123456"
 }`}
                 </pre>
@@ -157,14 +159,16 @@ export default function DevelopmentDocs() {
               <h3 className="text-lg font-semibold text-neutral-900 mb-2">cURL Example</h3>
               <div className="bg-neutral-100 rounded-xl p-4">
                 <pre className="text-sm text-neutral-800 overflow-x-auto">
-                  {`curl --location 'https://dashboard.accuzpay.in/api/payments/payout/' \\
+                  {`curl --location 'https://dashboard.accuzpay.in/api/payments/payout' \\
 --header 'Content-Type: application/json' \\
 --header 'Authorization: YOUR_JWT_TOKEN' \\
 --data '{
-  "amount": 500,
-  "beneficiary_name": "Jane Smith",
+  "amount": "1000",
   "account_number": "1234567890",
-  "ifsc_code": "SBIN0001234",
+  "account_ifsc": "SBIN0001234",
+  "bank_name": "State Bank of India",
+  "beneficiary_name": "John Doe",
+  "request_type": "IMPS",
   "reference_id": "PAYOUT123456"
 }'`}
                 </pre>
