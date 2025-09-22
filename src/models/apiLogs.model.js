@@ -1,42 +1,35 @@
 const mongoose = require('mongoose');
 
-const apiLogsSchema = new mongoose.Schema({
-  request: {
+const apilogsSchema = new mongoose.Schema({
+  level: {
+    type: String,
+    required: true,
+    enum: ['error', 'warn', 'info', 'debug', 'verbose']
+  },
+  message: {
     type: String,
     required: true
   },
-  response: {
-    type: String,
-    required: true
+  timestamp: {
+    type: Date,
+    default: Date.now
   },
   service: {
     type: String,
-    required: true
+    default: 'accuzpay-api'
   },
-  service_api: {
-    type: String,
-    required: true
-  },
-  status: {
-    type: String,
-    enum: ['success', 'error'],
-    default: 'success'
-  },
-  error_message: {
-    type: String
-  },
-  execution_time: {
-    type: Number  // in milliseconds
+  metadata: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
   }
 }, {
-  timestamps: true  // This will add createdAt and updatedAt fields automatically
+  timestamps: true
 });
 
-// Indexes for faster queries
-apiLogsSchema.index({ service: 1 });
-apiLogsSchema.index({ service_api: 1 });
-apiLogsSchema.index({ createdAt: 1 });
+// Index for faster queries
+apilogsSchema.index({ timestamp: -1 });
+apilogsSchema.index({ level: 1 });
 
-const ApiLogs = mongoose.model('ApiLogs', apiLogsSchema);
+const Apilogs = mongoose.model('Apilogs', apilogsSchema);
 
-module.exports = ApiLogs; 
+module.exports = Apilogs;

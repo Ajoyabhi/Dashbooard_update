@@ -23,6 +23,49 @@ const filterSqlQueries = winston.format((info) => {
   return info;
 })();
 
+// Custom MongoDB transport
+class MongoDBTransport extends winston.Transport {
+  constructor(options = {}) {
+    super(options);
+    this.name = 'mongodb';
+    this.level = options.level || 'info';
+  }
+
+  log(info, callback) {
+    setImmediate(() => {
+      this.emit('logged', info);
+    });
+
+    // Lazy load the model to avoid connection issues
+    try {
+      const Apilogs = require('../models/apiLogs.model');
+
+      // Extract all data from the log info
+      const { level, message, timestamp, service, ...rest } = info;
+
+      // Save to MongoDB with all data
+      const logData = {
+        level: level,
+        message: message,
+        timestamp: timestamp || new Date(),
+        service: service || 'accuzpay-api',
+        metadata: {
+          ...rest,
+          ...(info.metadata || {})
+        }
+      };
+
+      Apilogs.create(logData).catch(err => {
+        console.error('Failed to save log to MongoDB:', err);
+      });
+    } catch (err) {
+      console.error('Failed to load Apilogs model:', err);
+    }
+
+    callback();
+  }
+}
+
 // Create logger instance
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
@@ -38,18 +81,9 @@ const logger = winston.createLogger({
         winston.format.simple()
       )
     }),
-    // File transport for all logs
-    new winston.transports.File({
-      filename: path.join('src/logs', 'combined.log'),
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-    }),
-    // File transport for errors
-    new winston.transports.File({
-      filename: path.join('src/logs', 'error.log'),
-      level: 'error',
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
+    // MongoDB transport
+    new MongoDBTransport({
+      level: process.env.LOG_LEVEL || 'info'
     })
   ]
 });
@@ -64,54 +98,50 @@ const stream = {
   }
 };
 
-// Log unhandled exceptions and rejections
+// Log unhandled exceptions and rejections to MongoDB
 logger.exceptions.handle(
-  new winston.transports.File({
-    filename: path.join('src/logs', 'exceptions.log'),
-    maxsize: 5242880, // 5MB
-    maxFiles: 5,
+  new MongoDBTransport({
+    level: 'error'
   })
 );
 
 logger.rejections.handle(
-  new winston.transports.File({
-    filename: path.join('src/logs', 'rejections.log'),
-    maxsize: 5242880, // 5MB
-    maxFiles: 5,
+  new MongoDBTransport({
+    level: 'error'
   })
 );
 
 // Helper function to mask sensitive data
 const maskSensitiveData = (data) => {
   if (!data) return data;
-  
+
   const maskedData = { ...data };
-  
+
   // Mask password fields
   if (maskedData.password) {
     maskedData.password = '********';
   }
-  
+
   // Mask credit card numbers
   if (maskedData.card_number) {
     maskedData.card_number = maskedData.card_number.replace(/\d(?=\d{4})/g, '*');
   }
-  
+
   // Mask CVV
   if (maskedData.cvv) {
     maskedData.cvv = '***';
   }
-  
+
   // Mask API keys
   if (maskedData.api_key) {
     maskedData.api_key = '********';
   }
-  
+
   // Mask JWT tokens
   if (maskedData.token) {
     maskedData.token = '********';
   }
-  
+
   return maskedData;
 };
 
