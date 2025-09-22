@@ -430,7 +430,7 @@ const unpayPayin = async (payinData, adminCharge, agentCharge, totalCharges, use
     const result = await response.json();
 
     if (!response.ok) {
-      throw new Error(`Unpay API error: ${result.message || 'Unknown error'}`);
+      throw new Error(`API error: ${result.message || 'Unknown error'}`);
     }
     console.log(result);
     if (result.statuscode == "TXN") {
