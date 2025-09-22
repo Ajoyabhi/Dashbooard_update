@@ -385,8 +385,6 @@ const processPayin = async (data) => {
       error: error.message,
       stack: error.stack
     });
-    throw error;
-    console.log("error throuhout the process", error);
     return {
       success: false,
       message: error.message
