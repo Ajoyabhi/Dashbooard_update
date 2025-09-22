@@ -107,9 +107,9 @@ callbackQueue.process(async function (job) {
       // Ensure all values are numbers with defaults
       const beforeBalance = parseFloat(userTransaction.balance?.before || 0);
       const transactionAmount = parseFloat(amount || 0);
-      const adminCharge = parseFloat(userTransaction.charges?.admin_charge || 0);
-      const platformFee = parseFloat(userTransaction.platform_fee || 0);
-      const gstAmount = parseFloat(userTransaction.gst_amount || 0);
+      const adminCharge = parseFloat(payinTransaction.charges?.admin_charge || 0);
+      const platformFee = parseFloat(payinTransaction.platform_fee || 0);
+      const gstAmount = parseFloat(payinTransaction.gst_amount || 0);
 
       // Calculate new balance
       const newBalance = beforeBalance + transactionAmount - adminCharge - platformFee - gstAmount;
