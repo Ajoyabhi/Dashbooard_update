@@ -386,6 +386,11 @@ const processPayin = async (data) => {
       stack: error.stack
     });
     throw error;
+    console.log("error throuhout the process", error);
+    return {
+      success: false,
+      message: error.message
+    };
   }
 };
 
