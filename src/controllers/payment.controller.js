@@ -223,6 +223,8 @@ const initiatePayment = async (req, res) => {
     });
 
     // Send response
+    console.log("result", result);
+    console.log("result.success", result.success);
     if (result.success) {
       res.status(200).json({
         transaction_id,
