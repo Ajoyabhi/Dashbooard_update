@@ -223,8 +223,8 @@ const initiatePayment = async (req, res) => {
     });
 
     // Send response
-    console.log("result", result);
-    console.log("result.success", result.success);
+
+
     if (result.success) {
       res.status(200).json({
         transaction_id,
@@ -349,13 +349,14 @@ const getTransactionStatus = async (req, res) => {
       });
     }
     const requestBody = {
-      partner_id: "1809", // Get this from merchant details or config
+      partner_id: "4071", // Get this from merchant details or config
       apitxnid: searchTransactionId
     };
-    const aesKey = "brTaJLaVgWvshn3zHM4qt0lI1DqjFeUz";
-    const aesIV = "uBiWATDOnfTvhfJO";
-    const apiKey = "Tn3ybTJGKaDMhhj9jl89aULGf9OI0S8ZPkq0GD42";
+    const aesKey = "XRUhoLqUBgmZFLdWT5PiuNQnGhI9l6Pc";
+    const aesIV = "oR21lVkifQEBNRQS";
+    const apiKey = "QPf0uqDt0EjQqkseizXyr1Ydn21HF9cOiQEFtjrV";
     const encryptedRequestBody = await encryptText(JSON.stringify(requestBody), aesKey, aesIV);
+
 
     // Make API request to Unpay
     const response = await fetch('https://unpay.in/tech/api/next/upi/request/qrstatus', {
@@ -372,8 +373,20 @@ const getTransactionStatus = async (req, res) => {
 
     const result = await response.json();
 
+    // Log the actual response to debug
+    logger.info('Unpay API Response:', { result, status: response.status });
+
     if (!response.ok) {
       throw new Error(`API error: ${result.message || 'Unknown error'}`);
+    }
+
+    // Check if result.data exists
+    if (!result.data) {
+      logger.error('No data property in API response:', { result });
+      return res.status(500).json({
+        success: false,
+        message: 'Invalid response from payment gateway'
+      });
     }
 
     res.status(200).json({
@@ -381,10 +394,10 @@ const getTransactionStatus = async (req, res) => {
       transaction: {
         amount: transaction.amount,
         reference_id: transaction.reference_id,
-        paymentStatus: result.data.paymentStatus,
-        payerVpa: result.data.payerVpa,
-        npciTxnId: result.data.npciTxnId,
-        utr: result.data.rrnNumber
+        paymentStatus: result.data.paymentStatus || 'unknown',
+        payerVpa: result.data.payerVpa || null,
+        npciTxnId: result.data.npciTxnId || null,
+        utr: result.data.rrnNumber || null
       }
     });
 
