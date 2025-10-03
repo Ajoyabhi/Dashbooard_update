@@ -18,8 +18,8 @@ interface DashboardData {
   todayPayin: number;
   totalProfit: number;
   todayProfit: number;
-  totaloutflow?: number;
-  totalinflow?: number;
+  totalOutflow?: number;
+  totalInflow?: number;
   last7DaysData: Array<{
     date: string;
     payout: number;
@@ -42,7 +42,27 @@ interface DashboardData {
   }>;
 }
 
-interface Last5DaysData {
+interface UserWiseData {
+  user_id: number;
+  user_name: string;
+  user_email: string;
+  total_amount: number;
+  total_charges: number;
+  total_gst: number;
+  total_platform_fee: number;
+  transaction_count: number;
+  transactions: Array<{
+    reference_id: string;
+    amount: number;
+    charges: number;
+    gst: number;
+    platform_fee: number;
+    utr: string | null;
+    created_at: string;
+  }>;
+}
+
+interface LastNDaysData {
   date: string;
   payin: {
     total_amount: number;
@@ -50,6 +70,7 @@ interface Last5DaysData {
     total_gst: number;
     total_platform_fee: number;
     transaction_count: number;
+    user_wise: UserWiseData[];
     transactions: Array<{
       reference_id: string;
       amount: number;
@@ -67,6 +88,7 @@ interface Last5DaysData {
     total_gst: number;
     total_platform_fee: number;
     transaction_count: number;
+    user_wise: UserWiseData[];
     transactions: Array<{
       reference_id: string;
       amount: number;
@@ -83,7 +105,8 @@ interface Last5DaysData {
 const AdminDashboard: React.FC = () => {
   const { user } = useAuth();
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
-  const [last5DaysData, setLast5DaysData] = useState<Last5DaysData[]>([]);
+  const [lastNDaysData, setLastNDaysData] = useState<LastNDaysData[]>([]);
+  const [selectedDays, setSelectedDays] = useState(5);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(false);
@@ -91,8 +114,13 @@ const AdminDashboard: React.FC = () => {
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const dashboardResponse = await api.get('/admin/dashboard');
+        const [dashboardResponse, lastNDaysResponse] = await Promise.all([
+          api.get('/admin/dashboard'),
+          api.get(`/admin/lastNdays-transactions?days=${selectedDays}`)
+        ]);
+
         setDashboardData(dashboardResponse.data.data);
+        setLastNDaysData(lastNDaysResponse.data.data);
         setError(null);
       } catch (err) {
         setError('Failed to fetch dashboard data');
@@ -103,7 +131,7 @@ const AdminDashboard: React.FC = () => {
     };
 
     fetchDashboardData();
-  }, []);
+  }, [selectedDays]);
 
   // Transaction columns
   const transactionColumns = [
@@ -341,7 +369,8 @@ const AdminDashboard: React.FC = () => {
           />
           <SummaryCard
             title="InFlow Amount"
-            value={(Number(dashboardData?.totalinflow) || 0)}
+            value={(Number(dashboardData?.totalInflow
+            ) || 0)}
             icon="TrendingUp"
             color="primary"
             darkMode={darkMode}
@@ -412,13 +441,32 @@ const AdminDashboard: React.FC = () => {
           />
         </div>
 
-        {/* Last 5 Days Transaction Details */}
+        {/* Last N Days Transaction Details */}
         <div className="space-y-6">
-          <h2 className={`text-2xl font-bold font-display ${darkMode ? 'text-white' : 'text-neutral-900'}`}>
-            Last 5 Days Transaction Details
-          </h2>
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
+            <h2 className={`text-2xl font-bold font-display ${darkMode ? 'text-white' : 'text-neutral-900'}`}>
+              Last {selectedDays} Days Transaction Details
+            </h2>
+            <div className="mt-4 lg:mt-0">
+              <div className="flex items-center space-x-2">
+                <span className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Period:</span>
+                <select
+                  value={selectedDays}
+                  onChange={(e) => setSelectedDays(parseInt(e.target.value))}
+                  className={`px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${darkMode
+                    ? 'bg-neutral-800 text-white border-neutral-600'
+                    : 'bg-white text-gray-800 border-gray-300'
+                    }`}
+                >
+                  <option value={3}>3 Days</option>
+                  <option value={5}>5 Days</option>
+                  <option value={10}>10 Days</option>
+                </select>
+              </div>
+            </div>
+          </div>
 
-          {last5DaysData.map((dayData, index) => (
+          {lastNDaysData.map((dayData, index) => (
             <div key={index} className={`card-hover p-6 ${darkMode ? 'bg-neutral-900/50 backdrop-blur-md border-neutral-800/50' : 'bg-white/80 backdrop-blur-md border-neutral-200/50'} border rounded-2xl shadow-soft`}>
               <h3 className={`text-lg font-bold font-display mb-6 ${darkMode ? 'text-white' : 'text-neutral-900'}`}>
                 {new Date(dayData.date).toLocaleDateString('en-US', {
@@ -456,20 +504,44 @@ const AdminDashboard: React.FC = () => {
                       <span className={`text-sm ${darkMode ? 'text-blue-200' : 'text-blue-700'}`}>Transaction Count:</span>
                       <span className="font-bold">{dayData.payin.transaction_count}</span>
                     </div>
+                    <div className="flex justify-between">
+                      <span className={`text-sm ${darkMode ? 'text-blue-200' : 'text-blue-700'}`}>Active Users:</span>
+                      <span className="font-bold">{dayData.payin.user_wise?.length || 0}</span>
+                    </div>
                   </div>
 
-                  {dayData.payin.transactions.length > 0 && (
+                  {/* User-wise Breakdown */}
+                  {dayData.payin.user_wise && dayData.payin.user_wise.length > 0 && (
                     <div>
-                      <h5 className={`text-sm font-bold mb-3 ${darkMode ? 'text-blue-200' : 'text-blue-800'}`}>Transaction Details:</h5>
-                      <div className="space-y-3 max-h-40 overflow-y-auto">
-                        {dayData.payin.transactions.map((transaction, tIndex) => (
-                          <div key={tIndex} className={`rounded-xl p-3 text-xs ${darkMode ? 'bg-neutral-800/50 border-neutral-700/50' : 'bg-white/80 border-neutral-200/50'} border backdrop-blur-sm`}>
-                            <div className="flex justify-between items-center mb-1">
-                              <span className="font-bold">{transaction.user_name}</span>
-                              <span className="gradient-text">{formatCurrency(transaction.amount)}</span>
+                      <h5 className={`text-sm font-bold mb-3 ${darkMode ? 'text-blue-200' : 'text-blue-800'}`}>
+                        Users Contributing ({dayData.payin.user_wise.length} user{dayData.payin.user_wise.length > 1 ? 's' : ''}):
+                      </h5>
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {dayData.payin.user_wise.map((userStat, uIndex) => (
+                          <div key={uIndex} className={`rounded-xl p-3 ${darkMode ? 'bg-neutral-800/50 border-neutral-700/50' : 'bg-white/80 border-neutral-200/50'} border backdrop-blur-sm`}>
+                            <div className="flex justify-between items-start mb-2">
+                              <div className="flex-1">
+                                <div className="font-bold text-sm">{userStat.user_name}</div>
+                                <div className={`text-xs ${darkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>{userStat.user_email}</div>
+                              </div>
+                              <div className="text-right ml-3">
+                                <div className="font-bold gradient-text text-base">{formatCurrency(userStat.total_amount)}</div>
+                                <div className={`text-xs ${darkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>{userStat.transaction_count} transaction{userStat.transaction_count > 1 ? 's' : ''}</div>
+                              </div>
                             </div>
-                            <div className={`text-xs ${darkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
-                              Ref: {transaction.reference_id} | Charges: {formatCurrency(transaction.charges)} | GST: {formatCurrency(transaction.gst)}
+                            <div className={`grid grid-cols-3 gap-2 text-xs pt-2 border-t ${darkMode ? 'border-neutral-700' : 'border-neutral-200'}`}>
+                              <div>
+                                <div className={`${darkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>Charges</div>
+                                <div className="font-semibold">{formatCurrency(userStat.total_charges)}</div>
+                              </div>
+                              <div>
+                                <div className={`${darkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>GST</div>
+                                <div className="font-semibold">{formatCurrency(userStat.total_gst)}</div>
+                              </div>
+                              <div>
+                                <div className={`${darkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>Platform Fee</div>
+                                <div className="font-semibold">{formatCurrency(userStat.total_platform_fee)}</div>
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -504,20 +576,44 @@ const AdminDashboard: React.FC = () => {
                       <span className={`text-sm ${darkMode ? 'text-green-200' : 'text-green-700'}`}>Transaction Count:</span>
                       <span className="font-bold">{dayData.payout.transaction_count}</span>
                     </div>
+                    <div className="flex justify-between">
+                      <span className={`text-sm ${darkMode ? 'text-green-200' : 'text-green-700'}`}>Active Users:</span>
+                      <span className="font-bold">{dayData.payout.user_wise?.length || 0}</span>
+                    </div>
                   </div>
 
-                  {dayData.payout.transactions.length > 0 && (
+                  {/* User-wise Breakdown */}
+                  {dayData.payout.user_wise && dayData.payout.user_wise.length > 0 && (
                     <div>
-                      <h5 className={`text-sm font-bold mb-3 ${darkMode ? 'text-green-200' : 'text-green-800'}`}>Transaction Details:</h5>
-                      <div className="space-y-3 max-h-40 overflow-y-auto">
-                        {dayData.payout.transactions.map((transaction, tIndex) => (
-                          <div key={tIndex} className={`rounded-xl p-3 text-xs ${darkMode ? 'bg-neutral-800/50 border-neutral-700/50' : 'bg-white/80 border-neutral-200/50'} border backdrop-blur-sm`}>
-                            <div className="flex justify-between items-center mb-1">
-                              <span className="font-bold">{transaction.user_name}</span>
-                              <span className="gradient-text">{formatCurrency(transaction.amount)}</span>
+                      <h5 className={`text-sm font-bold mb-3 ${darkMode ? 'text-green-200' : 'text-green-800'}`}>
+                        Users Contributing ({dayData.payout.user_wise.length} user{dayData.payout.user_wise.length > 1 ? 's' : ''}):
+                      </h5>
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {dayData.payout.user_wise.map((userStat, uIndex) => (
+                          <div key={uIndex} className={`rounded-xl p-3 ${darkMode ? 'bg-neutral-800/50 border-neutral-700/50' : 'bg-white/80 border-neutral-200/50'} border backdrop-blur-sm`}>
+                            <div className="flex justify-between items-start mb-2">
+                              <div className="flex-1">
+                                <div className="font-bold text-sm">{userStat.user_name}</div>
+                                <div className={`text-xs ${darkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>{userStat.user_email}</div>
+                              </div>
+                              <div className="text-right ml-3">
+                                <div className="font-bold gradient-text text-base">{formatCurrency(userStat.total_amount)}</div>
+                                <div className={`text-xs ${darkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>{userStat.transaction_count} transaction{userStat.transaction_count > 1 ? 's' : ''}</div>
+                              </div>
                             </div>
-                            <div className={`text-xs ${darkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
-                              Ref: {transaction.reference_id} | Charges: {formatCurrency(transaction.charges)} | GST: {formatCurrency(transaction.gst)}
+                            <div className={`grid grid-cols-3 gap-2 text-xs pt-2 border-t ${darkMode ? 'border-neutral-700' : 'border-neutral-200'}`}>
+                              <div>
+                                <div className={`${darkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>Charges</div>
+                                <div className="font-semibold">{formatCurrency(userStat.total_charges)}</div>
+                              </div>
+                              <div>
+                                <div className={`${darkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>GST</div>
+                                <div className="font-semibold">{formatCurrency(userStat.total_gst)}</div>
+                              </div>
+                              <div>
+                                <div className={`${darkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>Platform Fee</div>
+                                <div className="font-semibold">{formatCurrency(userStat.total_platform_fee)}</div>
+                              </div>
                             </div>
                           </div>
                         ))}

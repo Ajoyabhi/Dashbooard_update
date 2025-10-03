@@ -50,7 +50,7 @@ const updateUserProfile = async (req, res) => {
       where: { id: req.user.id },
       returning: true
     });
-    
+
     const updatedUser = await User.findByPk(req.user.id, {
       attributes: { exclude: ['password'] }
     });
@@ -162,14 +162,14 @@ const getUserWalletTransactionHistory = async (req, res) => {
 
     // Build where clause
     const whereClause = { user_id: userId };
-    
+
     // Add search filter
     if (req.query.search) {
       whereClause.remark = {
         [Op.like]: `%${req.query.search}%`
       };
     }
-    
+
     // Add transaction type filter
     if (req.query.type && req.query.type !== 'all') {
       whereClause.transaction_type = req.query.type;
@@ -368,7 +368,7 @@ const downloadUserPayinReports = async (req, res) => {
     });
 
     // Convert to CSV string
-    const csvContent = csvRows.map(row => 
+    const csvContent = csvRows.map(row =>
       row.map(cell => `"${cell}"`).join(',')
     ).join('\n');
 
@@ -543,7 +543,7 @@ const downloadUserPayoutReports = async (req, res) => {
     });
 
     // Convert to CSV string
-    const csvContent = csvRows.map(row => 
+    const csvContent = csvRows.map(row =>
       row.map(cell => `"${cell}"`).join(',')
     ).join('\n');
 
@@ -568,7 +568,7 @@ const createFundRequest = async (req, res) => {
   const transaction = await sequelize.transaction();
 
   try {
-    const {  
+    const {
       amount,
       reference_id,
       from_bank,
@@ -630,65 +630,65 @@ const createFundRequest = async (req, res) => {
 };
 
 const getUserFundRequests = async (req, res) => {
-    try {
-        const { page = 1, pageSize = 10 } = req.query;
-        const offset = (page - 1) * pageSize;
-        const limit = parseInt(pageSize);
+  try {
+    const { page = 1, pageSize = 10 } = req.query;
+    const offset = (page - 1) * pageSize;
+    const limit = parseInt(pageSize);
 
-        // Get total count for the logged-in user
-        const totalCount = await ManageFundRequest.count({
-            where: { user_id: req.user.id }
-        });
+    // Get total count for the logged-in user
+    const totalCount = await ManageFundRequest.count({
+      where: { user_id: req.user.id }
+    });
 
-        // Get paginated fund requests for the logged-in user
-        const fundRequests = await ManageFundRequest.findAll({
-            where: { user_id: req.user.id },
-            order: [['created_at', 'DESC']],
-            offset,
-            limit
-        });
+    // Get paginated fund requests for the logged-in user
+    const fundRequests = await ManageFundRequest.findAll({
+      where: { user_id: req.user.id },
+      order: [['created_at', 'DESC']],
+      offset,
+      limit
+    });
 
-        // Transform data to match frontend table structure
-        const transformedRequests = fundRequests.map(request => ({
-            id: request.id,
-            amount: parseFloat(request.settlement_wallet),
-            walletBalance: parseFloat(request.wallet_balance),
-            referenceId: request.reference_id,
-            fromBank: request.from_bank,
-            toBank: request.to_bank,
-            paymentType: request.payment_type,
-            remarks: request.remarks || '',
-            reason: request.reason,
-            status: request.status,
-            createdAt: request.created_at,
-            updatedAt: request.updated_at
-        }));
+    // Transform data to match frontend table structure
+    const transformedRequests = fundRequests.map(request => ({
+      id: request.id,
+      amount: parseFloat(request.settlement_wallet),
+      walletBalance: parseFloat(request.wallet_balance),
+      referenceId: request.reference_id,
+      fromBank: request.from_bank,
+      toBank: request.to_bank,
+      paymentType: request.payment_type,
+      remarks: request.remarks || '',
+      reason: request.reason,
+      status: request.status,
+      createdAt: request.created_at,
+      updatedAt: request.updated_at
+    }));
 
-        res.json({
-            success: true,
-            data: {
-                fundRequests: transformedRequests,
-                pagination: {
-                    currentPage: parseInt(page),
-                    totalPages: Math.ceil(totalCount / pageSize),
-                    totalItems: totalCount,
-                    pageSize: limit
-                }
-            }
-        });
-    } catch (error) {
-        logger.error('Error fetching user fund requests:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error fetching fund requests'
-        });
-    }
+    res.json({
+      success: true,
+      data: {
+        fundRequests: transformedRequests,
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages: Math.ceil(totalCount / pageSize),
+          totalItems: totalCount,
+          pageSize: limit
+        }
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching user fund requests:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching fund requests'
+    });
+  }
 };
 
 const getUserDashboard = async (req, res) => {
   try {
     const user = await User.findByPk(req.user.id);
-    
+
     // Get financial details
     const financialDetails = await FinancialDetails.findOne({
       where: { user_id: req.user.id }
@@ -722,17 +722,17 @@ const getUserDashboard = async (req, res) => {
     const recentPayins = await PayinTransaction.find({
       'user.user_id': req.user.id.toString()
     })
-    .sort({ createdAt: -1 })
-    .limit(10)
-    .lean();
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
 
     // Get recent payout transactions
     const recentPayouts = await PayoutTransaction.find({
       'user.user_id': req.user.id.toString()
     })
-    .sort({ createdAt: -1 })
-    .limit(10)
-    .lean();
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
 
     // Calculate today's pay-in and payout with charges handling
     const todayPayin = todayTransactions
@@ -742,7 +742,7 @@ const getUserDashboard = async (req, res) => {
         const charges = parseFloat(t.total_charges) || 0;
         const gst = parseFloat(t.gst_amount) || 0;
         const platformFee = parseFloat(t.platform_fee) || 0;
-        
+
         // Case 1: Deduct charges, GST, platform fee from payin
         const netAmount = amount - charges - gst - platformFee;
         return sum + netAmount;
@@ -755,7 +755,7 @@ const getUserDashboard = async (req, res) => {
         const charges = parseFloat(t.total_charges) || 0;
         const gst = parseFloat(t.gst_amount) || 0;
         const platformFee = parseFloat(t.platform_fee) || 0;
-        
+
         // Case 2: Add charges, GST, platform fee to payout
         const totalAmount = amount + charges + gst + platformFee;
         return sum + totalAmount;
@@ -769,7 +769,7 @@ const getUserDashboard = async (req, res) => {
         const charges = parseFloat(t.total_charges) || 0;
         const gst = parseFloat(t.gst_amount) || 0;
         const platformFee = parseFloat(t.platform_fee) || 0;
-        
+
         // Case 1: Deduct charges, GST, platform fee from payin
         const netAmount = amount - charges - gst - platformFee;
         return sum + netAmount;
@@ -782,7 +782,7 @@ const getUserDashboard = async (req, res) => {
         const charges = parseFloat(t.total_charges) || 0;
         const gst = parseFloat(t.gst_amount) || 0;
         const platformFee = parseFloat(t.platform_fee) || 0;
-        
+
         // Case 2: Add charges, GST, platform fee to payout
         const totalAmount = amount + charges + gst + platformFee;
         return sum + totalAmount;
@@ -790,17 +790,17 @@ const getUserDashboard = async (req, res) => {
     // Calculate detailed breakdown for charges
     const calculateChargesBreakdown = (transactions, type) => {
       const filteredTransactions = transactions.filter(t => t.transaction_type === type && t.status === 'completed');
-      
+
       const breakdown = filteredTransactions.reduce((acc, t) => {
         const charges = parseFloat(t.total_charges) || 0;
         const gst = parseFloat(t.gst_amount) || 0;
         const platformFee = parseFloat(t.platform_fee) || 0;
-        
+
         acc.total_charges += charges;
         acc.total_gst += gst;
         acc.total_platform_fee += platformFee;
         acc.total_transactions += 1;
-        
+
         return acc;
       }, {
         total_charges: 0,
@@ -808,7 +808,7 @@ const getUserDashboard = async (req, res) => {
         total_platform_fee: 0,
         total_transactions: 0
       });
-      
+
       return breakdown;
     };
 
@@ -821,15 +821,15 @@ const getUserDashboard = async (req, res) => {
     const dashboardData = {
       settlement_balance: financialDetails ? parseFloat(financialDetails.settlement) : 0,
       wallet_balance: financialDetails ? parseFloat(financialDetails.wallet) : 0,
-      
+
       // Today's transactions with net amounts (after charges)
       today_payin: todayPayin,
       today_payout: todayPayout,
-      
+
       // Total transactions with net amounts (after charges)
       total_payin: totalPayin,
       total_payout: totalPayout,
-      
+
       // Detailed breakdown for today
       today_payin_breakdown: {
         net_amount: todayPayin,
@@ -845,7 +845,7 @@ const getUserDashboard = async (req, res) => {
         total_platform_fee: todayPayoutBreakdown.total_platform_fee,
         total_transactions: todayPayoutBreakdown.total_transactions
       },
-      
+
       // Detailed breakdown for all time
       total_payin_breakdown: {
         net_amount: totalPayin,
@@ -861,13 +861,13 @@ const getUserDashboard = async (req, res) => {
         total_platform_fee: totalPayoutBreakdown.total_platform_fee,
         total_transactions: totalPayoutBreakdown.total_transactions
       },
-      
+
       // Charge calculation explanation
       charge_calculation_note: {
         payin: "For Pay-in transactions: Net Amount = Transaction Amount - Total Charges - GST - Platform Fee",
         payout: "For Payout transactions: Net Amount = Transaction Amount + Total Charges + GST + Platform Fee"
       },
-      
+
       recent_payins: recentPayins.map(payin => ({
         date: payin.createdAt,
         user: payin.beneficiary_details.beneficiary_name,
@@ -890,10 +890,149 @@ const getUserDashboard = async (req, res) => {
       success: true,
       data: dashboardData
     });
-    
+
   } catch (error) {
     logger.error('Error fetching user dashboard:', error);
     res.status(500).json({ success: false, message: 'Error fetching user dashboard' });
+  }
+};
+
+const getLastNDaysTransactions = async (req, res) => {
+  try {
+    const userId = req.user.id; // Get user ID from authenticated user
+    const { days = 5 } = req.query; // Default to 5 days if not specified
+
+    // Validate days parameter
+    const validDays = [3, 5, 10];
+    const selectedDays = validDays.includes(parseInt(days)) ? parseInt(days) : 5;
+
+    const lastNDaysData = [];
+
+    for (let i = selectedDays - 1; i >= 0; i--) {
+      // Get current date and calculate the date range
+      const now = new Date();
+      const targetDate = new Date(now);
+      targetDate.setDate(targetDate.getDate() - i);
+      targetDate.setUTCHours(0, 0, 0, 0); // Start of day in UTC
+
+      // End of day in UTC
+      const endDate = new Date(targetDate);
+      endDate.setUTCHours(23, 59, 59, 999);
+
+      const startDate = targetDate;
+
+      console.log(`Date: ${targetDate.toISOString().split('T')[0]}`);
+      console.log(`UTC Start: ${startDate.toISOString()}`);
+      console.log(`UTC End: ${endDate.toISOString()}`);
+
+      // Get payin transactions for the day for this user
+      const payinTransactions = await TransactionCharges.findAll({
+        where: {
+          user_id: userId,
+          transaction_type: 'payin',
+          status: 'completed',
+          created_at: {
+            [Op.between]: [startDate, endDate]
+          }
+        },
+        attributes: [
+          'transaction_amount',
+          'merchant_charge',
+          'agent_charge',
+          'total_charges',
+          'gst_amount',
+          'platform_fee',
+          'reference_id',
+          'transaction_utr',
+          'created_at'
+        ]
+      });
+
+      // Get payout transactions for the day for this user
+      const payoutTransactions = await TransactionCharges.findAll({
+        where: {
+          user_id: userId,
+          transaction_type: 'payout',
+          status: 'completed',
+          created_at: {
+            [Op.between]: [startDate, endDate]
+          }
+        },
+        attributes: [
+          'transaction_amount',
+          'merchant_charge',
+          'agent_charge',
+          'total_charges',
+          'gst_amount',
+          'platform_fee',
+          'reference_id',
+          'transaction_utr',
+          'created_at'
+        ]
+      });
+
+      // Calculate totals for payin
+      const payinTotal = payinTransactions.reduce((sum, t) => sum + parseFloat(t.transaction_amount || 0), 0);
+      const payinTotalCharges = payinTransactions.reduce((sum, t) => sum + parseFloat(t.total_charges || 0), 0);
+      const payinTotalGST = payinTransactions.reduce((sum, t) => sum + parseFloat(t.gst_amount || 0), 0);
+      const payinTotalPlatformFee = payinTransactions.reduce((sum, t) => sum + parseFloat(t.platform_fee || 0), 0);
+
+      // Calculate totals for payout
+      const payoutTotal = payoutTransactions.reduce((sum, t) => sum + parseFloat(t.transaction_amount || 0), 0);
+      const payoutTotalCharges = payoutTransactions.reduce((sum, t) => sum + parseFloat(t.total_charges || 0), 0);
+      const payoutTotalGST = payoutTransactions.reduce((sum, t) => sum + parseFloat(t.gst_amount || 0), 0);
+      const payoutTotalPlatformFee = payoutTransactions.reduce((sum, t) => sum + parseFloat(t.platform_fee || 0), 0);
+
+      lastNDaysData.push({
+        date: targetDate.toISOString().split('T')[0],
+        payin: {
+          total_amount: payinTotal,
+          total_charges: payinTotalCharges,
+          total_gst: payinTotalGST,
+          total_platform_fee: payinTotalPlatformFee,
+          total_gst_platform: payinTotalGST + payinTotalPlatformFee,
+          transaction_count: payinTransactions.length,
+          transactions: payinTransactions.map(t => ({
+            reference_id: t.reference_id,
+            amount: parseFloat(t.transaction_amount || 0),
+            charges: parseFloat(t.total_charges || 0),
+            gst: parseFloat(t.gst_amount || 0),
+            platform_fee: parseFloat(t.platform_fee || 0),
+            utr: t.transaction_utr || null,
+            created_at: t.created_at
+          }))
+        },
+        payout: {
+          total_amount: payoutTotal,
+          total_charges: payoutTotalCharges,
+          total_gst: payoutTotalGST,
+          total_platform_fee: payoutTotalPlatformFee,
+          transaction_count: payoutTransactions.length,
+          transactions: payoutTransactions.map(t => ({
+            reference_id: t.reference_id,
+            amount: parseFloat(t.transaction_amount || 0),
+            charges: parseFloat(t.total_charges || 0),
+            gst: parseFloat(t.gst_amount || 0),
+            platform_fee: parseFloat(t.platform_fee || 0),
+            utr: t.transaction_utr || null,
+            created_at: t.created_at
+          }))
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      data: lastNDaysData,
+      selectedDays: selectedDays
+    });
+  } catch (error) {
+    console.error('Error fetching user last N days transactions:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching user last N days transactions',
+      error: error.message
+    });
   }
 };
 
@@ -975,10 +1114,10 @@ const getUserSettlementReport = async (req, res) => {
       updated_at: transaction.updated_at
     }));
 
-    logger.info('Settlement report fetched successfully', { 
-      userId, 
-      totalCount, 
-      pageCount: formattedTransactions.length 
+    logger.info('Settlement report fetched successfully', {
+      userId,
+      totalCount,
+      pageCount: formattedTransactions.length
     });
 
     res.json({
@@ -1094,10 +1233,10 @@ const getUserPayoutFailedHistory = async (req, res) => {
       updated_at: record.updated_at
     }));
 
-    logger.info('Payout failed history fetched successfully', { 
-      userId, 
-      totalCount, 
-      pageCount: formattedHistory.length 
+    logger.info('Payout failed history fetched successfully', {
+      userId,
+      totalCount,
+      pageCount: formattedHistory.length
     });
 
     res.json({
@@ -1201,9 +1340,9 @@ const downloadSettlementReport = async (req, res) => {
 
     res.send(csvContent);
 
-    logger.info('Settlement report downloaded successfully', { 
-      userId, 
-      recordCount: transactions.length 
+    logger.info('Settlement report downloaded successfully', {
+      userId,
+      recordCount: transactions.length
     });
 
   } catch (error) {
@@ -1305,9 +1444,9 @@ const downloadPayoutFailedHistory = async (req, res) => {
 
     res.send(csvContent);
 
-    logger.info('Payout failed history downloaded successfully', { 
-      userId, 
-      recordCount: failedHistory.length 
+    logger.info('Payout failed history downloaded successfully', {
+      userId,
+      recordCount: failedHistory.length
     });
 
   } catch (error) {
@@ -1331,6 +1470,7 @@ module.exports = {
   getUserFundRequests,
   createFundRequest,
   getUserDashboard,
+  getLastNDaysTransactions,
   getUserSettlementReport,
   getUserWalletTransactionHistory,
   getUserPayoutFailedHistory,

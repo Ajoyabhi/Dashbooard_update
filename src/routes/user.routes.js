@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { cacheMiddleware } = require('../middleware/cache.middleware');
 const {
   getUserProfile,
   updateUserProfile,
@@ -11,6 +12,7 @@ const {
   getUserFundRequests,
   createFundRequest,
   getUserDashboard,
+  getLastNDaysTransactions,
   getUserSettlementReport,
   getUserWalletTransactionHistory,
   getUserPayoutFailedHistory,
@@ -23,7 +25,33 @@ const { auth, authorize } = require('../middleware/auth.middleware');
 router.use(auth, authorize('payin_payout', 'staff', 'agent', 'payout_only', 'payin_only'));
 
 //dashboard
-router.get('/dashboard', getUserDashboard);
+router.get('/dashboard',
+  cacheMiddleware({
+    ttl: 60, // 3 minutes cache for dashboard data
+    keyPrefix: 'user:dashboard:',
+    generateKey: (req) => {
+      // Cache key based on user ID
+      const userId = req.user.id;
+      return `user:dashboard:${userId}`;
+    }
+  }),
+  getUserDashboard
+);
+
+// Apply cache with 5 minutes TTL for last N days transactions
+router.get('/lastNdays-transactions',
+  cacheMiddleware({
+    ttl: 300, // 5 minutes cache
+    keyPrefix: 'user:lastNdays:',
+    generateKey: (req) => {
+      // Cache key based on user ID and days parameter
+      const userId = req.user.id;
+      const days = req.query.days || '5';
+      return `user:lastNdays:${userId}:${days}`;
+    }
+  }),
+  getLastNDaysTransactions
+);
 
 // User profile routes
 router.get('/profile', getUserProfile);

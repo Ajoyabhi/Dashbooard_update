@@ -41,6 +41,11 @@ export const getMenuItems = (userType: string): MenuItem[] => {
         icon: 'DollarSign'
       },
       {
+        title: 'Settlement Report',
+        path: '/user/settlement-report',
+        icon: 'Receipt'
+      },
+      {
         title: 'Reports',
         icon: 'FileBarChart',
         children: [

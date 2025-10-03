@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { cacheMiddleware } = require('../middleware/cache.middleware');
 const {
   getAllUsers,
   getAllAgents,
@@ -47,7 +48,7 @@ const {
   deleteTrashTransactions,
   getPayoutFailedHistory,
   downloadPayoutFailedHistory,
-  getLast5DaysTransactionDetails
+  getLastNDaysTransactionDetails
 } = require('../controllers/admin.controller');
 const { registerUser } = require('../controllers/auth.controller');
 const { auth, authorize } = require('../middleware/auth.middleware');
@@ -102,8 +103,31 @@ router.post('/platform-charges', addPlatformCharge);
 router.delete('/platform-charges/:charge_id', removePlatformCharge);
 
 // admin dashboard routes
-router.get('/dashboard', getAdminDashboard);
-router.get('/last5days-transactions', getLast5DaysTransactionDetails);
+router.get('/dashboard',
+  cacheMiddleware({
+    ttl: 60, // 1 minute cache for admin dashboard data (fresher than user dashboard)
+    keyPrefix: 'admin:dashboard:',
+    generateKey: (req) => {
+      // Cache key for admin dashboard (same for all admins since it's global data)
+      return 'admin:dashboard:global';
+    }
+  }),
+  getAdminDashboard
+);
+
+// Apply cache with 5 minutes TTL for last 5 days transactions
+router.get('/lastNdays-transactions',
+  cacheMiddleware({
+    ttl: 300, // 5 minutes cache
+    keyPrefix: 'lastNdays:',
+    generateKey: (req) => {
+      // Cache key based on days parameter
+      const days = req.query.days || '5';
+      return `lastNdays:transactions:${days}`;
+    }
+  }),
+  getLastNDaysTransactionDetails
+);
 
 
 // Wallet transactions route with pagination

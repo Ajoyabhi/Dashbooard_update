@@ -5,7 +5,6 @@ import { useAuth } from '../../context/AuthContext';
 import SummaryCard from '../../components/dashboard/SummaryCard';
 import Table from '../../components/dashboard/Table';
 import { FaWallet, FaMoneyBillWave, FaArrowUp, FaArrowDown } from 'react-icons/fa';
-import type { IconType } from 'react-icons';
 import { useNavigate } from 'react-router-dom';
 import api from '../../utils/axios';
 import {
@@ -45,11 +44,22 @@ const Dashboard = () => {
     recent_payins: [],
     recent_payouts: []
   });
+  const [lastNDaysData, setLastNDaysData] = useState([]);
+  const [selectedDays, setSelectedDays] = useState(5);
+  const [weeklyPerformanceData, setWeeklyPerformanceData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [lastNDaysLoading, setLastNDaysLoading] = useState(true);
+  const [weeklyLoading, setWeeklyLoading] = useState(true);
 
   useEffect(() => {
     fetchDashboardData();
+    fetchLastNDaysData();
+    fetchWeeklyPerformanceData();
   }, []);
+
+  useEffect(() => {
+    fetchLastNDaysData();
+  }, [selectedDays]);
 
   const fetchDashboardData = async () => {
     try {
@@ -61,6 +71,41 @@ const Dashboard = () => {
       console.error('Error fetching dashboard data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchLastNDaysData = async () => {
+    try {
+      setLastNDaysLoading(true);
+      const response = await api.get(`/user/lastNdays-transactions?days=${selectedDays}`);
+      if (response.data.success) {
+        setLastNDaysData(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching last N days data:', error);
+    } finally {
+      setLastNDaysLoading(false);
+    }
+  };
+
+  const fetchWeeklyPerformanceData = async () => {
+    try {
+      setWeeklyLoading(true);
+      const response = await api.get('/user/lastNdays-transactions?days=7');
+      if (response.data.success) {
+        // Format data for the performance chart
+        const formattedData = response.data.data.map((day: any, index: number) => ({
+          day: new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' }),
+          payin: day.payin.total_amount,
+          payout: day.payout.total_amount,
+          balance: day.payin.total_amount - day.payout.total_amount // Calculate balance
+        }));
+        setWeeklyPerformanceData(formattedData);
+      }
+    } catch (error) {
+      console.error('Error fetching weekly performance data:', error);
+    } finally {
+      setWeeklyLoading(false);
     }
   };
 
@@ -94,25 +139,25 @@ const Dashboard = () => {
       color: 'secondary'
     },
     {
-      title: "Today's Pay-in",
+      title: "Today's Pay-in (Net)",
       value: `${dashboardData.today_payin || 0}`,
       icon: "DollarSign",
       color: 'success'
     },
     {
-      title: "Today's Payout",
+      title: "Today's Payout (Net)",
       value: `${dashboardData.today_payout || 0}`,
       icon: "TrendingUp",
       color: 'danger'
     },
     {
-      title: 'Total Pay-in',
+      title: 'Total Pay-in (Net)',
       value: `${dashboardData.total_payin || 0}`,
       icon: "ArrowUpRight",
       color: 'success'
     },
     {
-      title: 'Total Payout',
+      title: 'Total Payout (Net)',
       value: `${dashboardData.total_payout || 0}`,
       icon: "ArrowDownLeft",
       color: 'error'
@@ -214,14 +259,15 @@ const Dashboard = () => {
     { metric: 'User Satisfaction', value: 92, fullMark: 100 }
   ];
 
-  const weeklyTrendData = [
-    { day: 'Mon', payin: 12000, payout: 8000, balance: 4000 },
-    { day: 'Tue', payin: 15000, payout: 12000, balance: 3000 },
-    { day: 'Wed', payin: 18000, payout: 14000, balance: 4000 },
-    { day: 'Thu', payin: 22000, payout: 16000, balance: 6000 },
-    { day: 'Fri', payin: 25000, payout: 18000, balance: 7000 },
-    { day: 'Sat', payin: 20000, payout: 15000, balance: 5000 },
-    { day: 'Sun', payin: 16000, payout: 12000, balance: 4000 }
+  // Use real weekly performance data instead of dummy data
+  const weeklyTrendData = weeklyPerformanceData.length > 0 ? weeklyPerformanceData : [
+    { day: 'Mon', payin: 0, payout: 0, balance: 0 },
+    { day: 'Tue', payin: 0, payout: 0, balance: 0 },
+    { day: 'Wed', payin: 0, payout: 0, balance: 0 },
+    { day: 'Thu', payin: 0, payout: 0, balance: 0 },
+    { day: 'Fri', payin: 0, payout: 0, balance: 0 },
+    { day: 'Sat', payin: 0, payout: 0, balance: 0 },
+    { day: 'Sun', payin: 0, payout: 0, balance: 0 }
   ];
 
   const transactionFlowData = [
@@ -233,6 +279,36 @@ const Dashboard = () => {
     { name: 'Jun', payin: 2390, payout: 3800, amt: 2500 },
     { name: 'Jul', payin: 3490, payout: 4300, amt: 2100 }
   ];
+
+  // Format last N days data for charts
+  const lastNDaysChartData = lastNDaysData.map((day: any) => ({
+    date: new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    payin: day.payin.total_amount,
+    payout: day.payout.total_amount,
+    payinCount: day.payin.transaction_count,
+    payoutCount: day.payout.transaction_count,
+    payinCharges: day.payin.total_charges,
+    payoutCharges: day.payout.total_charges
+  }));
+
+  // Calculate totals for last N days
+  const lastNDaysTotals = lastNDaysData.reduce((totals: any, day: any) => ({
+    totalPayin: totals.totalPayin + day.payin.total_amount,
+    totalPayout: totals.totalPayout + day.payout.total_amount,
+    totalPayinCount: totals.totalPayinCount + day.payin.transaction_count,
+    totalPayoutCount: totals.totalPayoutCount + day.payout.transaction_count,
+    totalPayinCharges: totals.totalPayinCharges + day.payin.total_charges,
+    totalPayoutCharges: totals.totalPayoutCharges + day.payout.total_charges,
+    totalPayinGstPlatform: totals.totalPayinGstPlatform + (day.payin.total_gst_platform || 0)
+  }), {
+    totalPayin: 0,
+    totalPayout: 0,
+    totalPayinCount: 0,
+    totalPayoutCount: 0,
+    totalPayinCharges: 0,
+    totalPayoutCharges: 0,
+    totalPayinGstPlatform: 0
+  });
 
   const COLORS = {
     primary: ['#3B82F6', '#1D4ED8', '#1E40AF'],
@@ -322,35 +398,113 @@ const Dashboard = () => {
             </div>
           ))}
         </div>
-
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          {/* Left Column - Charts */}
-          <div className="xl:col-span-2 space-y-8">
-            {/* Performance Overview */}
-            <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-              <div className="bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-4">
+                {/* Last N Days Transaction Overview */}
+                <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+          <div className="bg-gradient-to-r from-indigo-500 to-purple-500 px-6 py-4">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
+              <div>
                 <h3 className="text-xl font-bold text-white flex items-center">
-                  📊 Performance Overview
+                  📊 Last {selectedDays} Days Transaction Overview
                 </h3>
+                <p className="text-indigo-100 text-sm">Your transaction activity over the selected period</p>
               </div>
-              <div className="p-6">
+              <div className="mt-4 lg:mt-0">
+                <div className="flex items-center space-x-2">
+                  <span className="text-white text-sm font-medium">Period:</span>
+                  <select
+                    value={selectedDays}
+                    onChange={(e) => setSelectedDays(parseInt(e.target.value))}
+                    className="bg-white text-gray-800 px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    <option value={3}>3 Days</option>
+                    <option value={5}>5 Days</option>
+                    <option value={10}>10 Days</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="p-6">
+            {lastNDaysLoading ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                  <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                  <p className="text-gray-600">Loading transaction data...</p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Summary Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-blue-600 text-sm font-medium">Total Pay-in</p>
+                        <p className="text-2xl font-bold text-blue-800">₹{lastNDaysTotals.totalPayin.toLocaleString()}</p>
+                        <p className="text-blue-600 text-xs">{lastNDaysTotals.totalPayinCount} transactions</p>
+                      </div>
+                      <FaArrowUp className="text-blue-500 text-2xl" />
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-green-600 text-sm font-medium">Total Payout</p>
+                        <p className="text-2xl font-bold text-green-800">₹{lastNDaysTotals.totalPayout.toLocaleString()}</p>
+                        <p className="text-green-600 text-xs">{lastNDaysTotals.totalPayoutCount} transactions</p>
+                      </div>
+                      <FaArrowDown className="text-green-500 text-2xl" />
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 border border-purple-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-purple-600 text-sm font-medium">Pay-in Charges</p>
+                        <p className="text-2xl font-bold text-purple-800">₹{lastNDaysTotals.totalPayinCharges.toLocaleString()}</p>
+                        <p className="text-purple-600 text-xs">Total fees</p>
+                      </div>
+                      <FaMoneyBillWave className="text-purple-500 text-2xl" />
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 border border-orange-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-orange-600 text-sm font-medium">Payout Charges</p>
+                        <p className="text-2xl font-bold text-orange-800">₹{lastNDaysTotals.totalPayoutCharges.toLocaleString()}</p>
+                        <p className="text-orange-600 text-xs">Total fees</p>
+                      </div>
+                      <FaWallet className="text-orange-500 text-2xl" />
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-teal-50 to-teal-100 rounded-xl p-4 border border-teal-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-teal-600 text-sm font-medium">Payin(GST+Platform)</p>
+                        <p className="text-2xl font-bold text-teal-800">₹{lastNDaysTotals.totalPayinGstPlatform.toLocaleString()}</p>
+                        <p className="text-teal-600 text-xs">GST & Platform fees</p>
+                      </div>
+                      <FaMoneyBillWave className="text-teal-500 text-2xl" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Chart */}
                 <div className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={weeklyTrendData}>
+                    <AreaChart data={lastNDaysChartData}>
                       <defs>
-                        <linearGradient id="payinGradient" x1="0" y1="0" x2="0" y2="1">
+                        <linearGradient id="last5DaysPayinGradient" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.8} />
                           <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.1} />
                         </linearGradient>
-                        <linearGradient id="payoutGradient" x1="0" y1="0" x2="0" y2="1">
+                        <linearGradient id="last5DaysPayoutGradient" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="#10B981" stopOpacity={0.8} />
                           <stop offset="95%" stopColor="#10B981" stopOpacity={0.1} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
                       <XAxis
-                        dataKey="day"
+                        dataKey="date"
                         tick={{ fontSize: 12, fill: '#6B7280' }}
                         axisLine={{ stroke: '#E5E7EB' }}
                       />
@@ -372,7 +526,7 @@ const Dashboard = () => {
                         dataKey="payin"
                         stackId="1"
                         stroke="#3B82F6"
-                        fill="url(#payinGradient)"
+                        fill="url(#last5DaysPayinGradient)"
                         strokeWidth={2}
                         name="Pay-in"
                       />
@@ -381,22 +535,131 @@ const Dashboard = () => {
                         dataKey="payout"
                         stackId="1"
                         stroke="#10B981"
-                        fill="url(#payoutGradient)"
+                        fill="url(#last5DaysPayoutGradient)"
                         strokeWidth={2}
                         name="Payout"
                       />
-                      <Line
-                        type="monotone"
-                        dataKey="balance"
-                        stroke="#F59E0B"
-                        strokeWidth={3}
-                        dot={{ fill: '#F59E0B', strokeWidth: 2, r: 4 }}
-                        activeDot={{ r: 6, stroke: '#F59E0B', strokeWidth: 2 }}
-                        name="Balance"
-                      />
-                    </ComposedChart>
+                    </AreaChart>
                   </ResponsiveContainer>
                 </div>
+
+                {/* Daily Breakdown */}
+                <div className={`grid grid-cols-1 gap-4 ${selectedDays <= 5 ? 'md:grid-cols-5' : selectedDays <= 10 ? 'md:grid-cols-3 lg:grid-cols-5' : 'md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'}`}>
+                  {lastNDaysData.map((day: any, index: number) => (
+                    <div key={index} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                      <h4 className="font-semibold text-gray-800 text-sm mb-3">
+                        {new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </h4>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-blue-600 text-xs">Pay-in:</span>
+                          <span className="text-blue-800 font-medium text-xs">₹{day.payin.total_amount.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-green-600 text-xs">Payout:</span>
+                          <span className="text-green-800 font-medium text-xs">₹{day.payout.total_amount.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-600 text-xs">Transactions:</span>
+                          <span className="text-gray-800 font-medium text-xs">{day.payin.transaction_count + day.payout.transaction_count}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-teal-600 text-xs">Payin(GST+Platform):</span>
+                          <span className="text-teal-800 font-medium text-xs">₹{(day.payin.total_gst_platform || 0).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+          {/* Left Column - Charts */}
+          <div className="xl:col-span-2 space-y-8">
+            {/* Performance Overview */}
+            <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+              <div className="bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-4">
+                <h3 className="text-xl font-bold text-white flex items-center">
+                  📊 Performance Overview (Last 7 Days)
+                </h3>
+                <p className="text-purple-100 text-sm">Your transaction performance over the past week</p>
+              </div>
+              <div className="p-6">
+                {weeklyLoading ? (
+                  <div className="flex items-center justify-center h-80">
+                    <div className="text-center">
+                      <div className="w-8 h-8 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                      <p className="text-gray-600">Loading performance data...</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={weeklyTrendData}>
+                        <defs>
+                          <linearGradient id="payinGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.8} />
+                            <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.1} />
+                          </linearGradient>
+                          <linearGradient id="payoutGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#10B981" stopOpacity={0.8} />
+                            <stop offset="95%" stopColor="#10B981" stopOpacity={0.1} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                        <XAxis
+                          dataKey="day"
+                          tick={{ fontSize: 12, fill: '#6B7280' }}
+                          axisLine={{ stroke: '#E5E7EB' }}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 12, fill: '#6B7280' }}
+                          axisLine={{ stroke: '#E5E7EB' }}
+                          tickFormatter={(value) => `₹${(value / 1000).toFixed(0)}k`}
+                        />
+                        <Tooltip
+                          content={<CustomTooltip />}
+                          wrapperStyle={{ outline: 'none' }}
+                        />
+                        <Legend
+                          wrapperStyle={{ paddingTop: '20px' }}
+                          iconType="circle"
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="payin"
+                          stackId="1"
+                          stroke="#3B82F6"
+                          fill="url(#payinGradient)"
+                          strokeWidth={2}
+                          name="Pay-in"
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="payout"
+                          stackId="1"
+                          stroke="#10B981"
+                          fill="url(#payoutGradient)"
+                          strokeWidth={2}
+                          name="Payout"
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="balance"
+                          stroke="#F59E0B"
+                          strokeWidth={3}
+                          dot={{ fill: '#F59E0B', strokeWidth: 2, r: 4 }}
+                          activeDot={{ r: 6, stroke: '#F59E0B', strokeWidth: 2 }}
+                          name="Balance"
+                        />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -609,8 +872,10 @@ const Dashboard = () => {
           </div>
         </div>
 
+
+
         {/* Monthly Transaction Flow */}
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+        {/* <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
           <div className="bg-gradient-to-r from-pink-500 to-rose-500 px-6 py-4">
             <h3 className="text-xl font-bold text-white flex items-center">
               📈 Monthly Transaction Flow
@@ -665,7 +930,7 @@ const Dashboard = () => {
               </ResponsiveContainer>
             </div>
           </div>
-        </div>
+        </div> */}
 
         {/* Recent Transactions */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

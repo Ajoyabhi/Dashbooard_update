@@ -9,136 +9,136 @@ const UserTransaction = require('../models/userTransaction.model');
 // const User = require('../models/User');
 
 const getAllUsers = async (req, res) => {
-  try {
-    const users = await User.findAll({
-      include: [
-        { 
-          model: UserStatus,
-          attributes: ['status', 'payin_status', 'payout_status']
-        },
-        {
-          model: FinancialDetails,
-          attributes: ['wallet', 'settlement', 'lien', 'rolling_reserve']
-        }
-      ],
-      attributes: [
-        'id',
-        'name',
-        'user_name',
-        'user_type',
-        'mobile',
-        'email',
-        'company_name',
-        'business_type',
-        'created_at',
-        'updated_at'
-      ]
-    });
+    try {
+        const users = await User.findAll({
+            include: [
+                {
+                    model: UserStatus,
+                    attributes: ['status', 'payin_status', 'payout_status']
+                },
+                {
+                    model: FinancialDetails,
+                    attributes: ['wallet', 'settlement', 'lien', 'rolling_reserve']
+                }
+            ],
+            attributes: [
+                'id',
+                'name',
+                'user_name',
+                'user_type',
+                'mobile',
+                'email',
+                'company_name',
+                'business_type',
+                'created_at',
+                'updated_at'
+            ]
+        });
 
-    // Transform the data to match frontend requirements
-    const transformedUsers = users.map(user => {
-      
-      const financialDetails = user.FinancialDetail || {};
-      const status = user.UserStatus?.status == true ? 'active' : 'inactive';
-      const transformed = {
-        id: user.id,
-        name: user.name,
-        userType: user.user_type,
-        username: user.user_name,
-        walletBalance: financialDetails.wallet ? Number(financialDetails.wallet) : 0,
-        settlement: financialDetails.settlement ? Number(financialDetails.settlement) : 0,
-        lien: financialDetails.lien ? Number(financialDetails.lien) : 0,
-        rollingReserve: financialDetails.rolling_reserve ? Number(financialDetails.rolling_reserve) : 0,
-        mobile: user.mobile,
-        payin: user.UserStatus?.payin_status || false,
-        payout: user.UserStatus?.payout_status || false,
-        status: status
-      };
-      return transformed;
-    });
+        // Transform the data to match frontend requirements
+        const transformedUsers = users.map(user => {
 
-    res.json(transformedUsers);
-  } catch (error) {
-    console.error('Error fetching users:', error);
-    res.status(500).json({ error: 'Error fetching users' });
-  }
+            const financialDetails = user.FinancialDetail || {};
+            const status = user.UserStatus?.status == true ? 'active' : 'inactive';
+            const transformed = {
+                id: user.id,
+                name: user.name,
+                userType: user.user_type,
+                username: user.user_name,
+                walletBalance: financialDetails.wallet ? Number(financialDetails.wallet) : 0,
+                settlement: financialDetails.settlement ? Number(financialDetails.settlement) : 0,
+                lien: financialDetails.lien ? Number(financialDetails.lien) : 0,
+                rollingReserve: financialDetails.rolling_reserve ? Number(financialDetails.rolling_reserve) : 0,
+                mobile: user.mobile,
+                payin: user.UserStatus?.payin_status || false,
+                payout: user.UserStatus?.payout_status || false,
+                status: status
+            };
+            return transformed;
+        });
+
+        res.json(transformedUsers);
+    } catch (error) {
+        console.error('Error fetching users:', error);
+        res.status(500).json({ error: 'Error fetching users' });
+    }
 };
 
 const getAllAgents = async (req, res) => {
-  try {
-    const agents = await User.findAll({
-      where: { user_type: 'agent' },
-      include: [
-        { model: UserStatus }
-      ],
-      attributes: { exclude: ['password'] }
-    });
-    res.json(agents);
-  } catch (error) {
-    console.error('Error fetching agents:', error);
-    res.status(500).json({ error: 'Error fetching agents' });
-  }
+    try {
+        const agents = await User.findAll({
+            where: { user_type: 'agent' },
+            include: [
+                { model: UserStatus }
+            ],
+            attributes: { exclude: ['password'] }
+        });
+        res.json(agents);
+    } catch (error) {
+        console.error('Error fetching agents:', error);
+        res.status(500).json({ error: 'Error fetching agents' });
+    }
 };
 
 const getUserDetails = async (req, res) => {
-  try {
-    const user = await User.findOne({
-      where: { id: req.params.userId },
-      include: [
-        { model: UserStatus }
-      ],
-      attributes: { exclude: ['password'] }
-    });
-    
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+    try {
+        const user = await User.findOne({
+            where: { id: req.params.userId },
+            include: [
+                { model: UserStatus }
+            ],
+            attributes: { exclude: ['password'] }
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        res.json(user);
+    } catch (error) {
+        console.error('Error fetching user details:', error);
+        res.status(500).json({ error: 'Error fetching user details' });
     }
-    res.json(user);
-  } catch (error) {
-    console.error('Error fetching user details:', error);
-    res.status(500).json({ error: 'Error fetching user details' });
-  }
 };
 
 const getAgentDetails = async (req, res) => {
-  try {
-    const agent = await User.findOne({
-      where: { 
-        id: req.params.agentId,
-        user_type: 'agent'
-      },
-      include: [
-        { model: UserStatus }
-      ],
-      attributes: { exclude: ['password'] }
-    });
-    
-    if (!agent) {
-      return res.status(404).json({ error: 'Agent not found' });
+    try {
+        const agent = await User.findOne({
+            where: {
+                id: req.params.agentId,
+                user_type: 'agent'
+            },
+            include: [
+                { model: UserStatus }
+            ],
+            attributes: { exclude: ['password'] }
+        });
+
+        if (!agent) {
+            return res.status(404).json({ error: 'Agent not found' });
+        }
+        res.json(agent);
+    } catch (error) {
+        console.error('Error fetching agent details:', error);
+        res.status(500).json({ error: 'Error fetching agent details' });
     }
-    res.json(agent);
-  } catch (error) {
-    console.error('Error fetching agent details:', error);
-    res.status(500).json({ error: 'Error fetching agent details' });
-  }
 };
 
 const getAgentUsers = async (req, res) => {
-  try {
-    const users = await User.findAll({
-      where: { 
-        created_by: req.params.agentId
-      },
-      include: [
-        { model: UserStatus }
-      ],
-      attributes: { exclude: ['password'] }
-    });
-    res.json(users);
-  } catch (error) {
-    console.error('Error fetching agent users:', error);
-    res.status(500).json({ error: 'Error fetching agent users' });
-  }
+    try {
+        const users = await User.findAll({
+            where: {
+                created_by: req.params.agentId
+            },
+            include: [
+                { model: UserStatus }
+            ],
+            attributes: { exclude: ['password'] }
+        });
+        res.json(users);
+    } catch (error) {
+        console.error('Error fetching agent users:', error);
+        res.status(500).json({ error: 'Error fetching agent users' });
+    }
 };
 
 // Merchant Details Management
@@ -375,7 +375,7 @@ const getUserMerchantCharges = async (req, res) => {
 const updateUserMerchantCharges = async (req, res) => {
     try {
         const { user_id } = req.params;
-        const { 
+        const {
             start_amount,
             end_amount,
             admin_payin_charge,
@@ -525,7 +525,7 @@ const updateMerchantCharge = async (req, res) => {
 // Delete a specific merchant charge for a user
 const deleteMerchantCharge = async (req, res) => {
     try {
-        const { user_id, charge_id } = req.params;  
+        const { user_id, charge_id } = req.params;
         const merchantCharge = await MerchantCharges.findOne({
             where: {
                 id: charge_id,
@@ -541,227 +541,227 @@ const deleteMerchantCharge = async (req, res) => {
         await merchantCharge.destroy();
         res.json({
             success: true,
-            message: 'Merchant charge deleted successfully' 
+            message: 'Merchant charge deleted successfully'
         });
     } catch (error) {
         console.error('Error deleting merchant charge:', error);
         res.status(500).json({
             success: false,
-            message: 'Error deleting merchant charge' 
+            message: 'Error deleting merchant charge'
         });
     }
 };
 
 // Update user details
 const updateUserDetails = async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const {
-      name,
-      user_name,
-      email,
-      mobile,
-      company_name,
-      business_type,
-      user_type,
-      payin_status,
-      payout_status,
-      status
-    } = req.body;
+    try {
+        const { userId } = req.params;
+        const {
+            name,
+            user_name,
+            email,
+            mobile,
+            company_name,
+            business_type,
+            user_type,
+            payin_status,
+            payout_status,
+            status
+        } = req.body;
 
-    const user = await User.findByPk(userId);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Update user details
-    await user.update({
-      name,
-      user_name,
-      email,
-      mobile,
-      company_name,
-      business_type,
-      user_type
-    });
-
-    // Convert status string to boolean for DB
-    const statusBoolean = status === 'active' ? true : false;
-
-    // Update user status
-    const [userStatus, created] = await UserStatus.findOrCreate({
-      where: { user_id: userId },
-      defaults: {
-        payin_status: payin_status !== undefined ? payin_status : true,
-        payout_status: payout_status !== undefined ? payout_status : true,
-        status: statusBoolean
-      }
-    });
-
-    if (!created) {
-      await userStatus.update({
-        payin_status: payin_status !== undefined ? payin_status : userStatus.payin_status,
-        payout_status: payout_status !== undefined ? payout_status : userStatus.payout_status,
-        status: statusBoolean
-      });
-    }
-
-    // Convert boolean back to string for frontend
-    const statusString = userStatus.status ? 'active' : 'inactive';
-
-    res.json({
-      success: true,
-      message: 'User details updated successfully',
-      data: {
-        ...user.toJSON(),
-        status: {
-          payin_status: userStatus.payin_status,
-          payout_status: userStatus.payout_status,
-          status: statusString
+        const user = await User.findByPk(userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
         }
-      }
-    });
-  } catch (error) {
-    console.error('Error updating user details:', error);
-    res.status(500).json({ error: 'Error updating user details' });
-  }
+
+        // Update user details
+        await user.update({
+            name,
+            user_name,
+            email,
+            mobile,
+            company_name,
+            business_type,
+            user_type
+        });
+
+        // Convert status string to boolean for DB
+        const statusBoolean = status === 'active' ? true : false;
+
+        // Update user status
+        const [userStatus, created] = await UserStatus.findOrCreate({
+            where: { user_id: userId },
+            defaults: {
+                payin_status: payin_status !== undefined ? payin_status : true,
+                payout_status: payout_status !== undefined ? payout_status : true,
+                status: statusBoolean
+            }
+        });
+
+        if (!created) {
+            await userStatus.update({
+                payin_status: payin_status !== undefined ? payin_status : userStatus.payin_status,
+                payout_status: payout_status !== undefined ? payout_status : userStatus.payout_status,
+                status: statusBoolean
+            });
+        }
+
+        // Convert boolean back to string for frontend
+        const statusString = userStatus.status ? 'active' : 'inactive';
+
+        res.json({
+            success: true,
+            message: 'User details updated successfully',
+            data: {
+                ...user.toJSON(),
+                status: {
+                    payin_status: userStatus.payin_status,
+                    payout_status: userStatus.payout_status,
+                    status: statusString
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error updating user details:', error);
+        res.status(500).json({ error: 'Error updating user details' });
+    }
 };
 
 // Get user callbacks
 const getUserCallbacks = async (req, res) => {
-  try {
-    const { userId } = req.params;
+    try {
+        const { userId } = req.params;
 
-    const user = await User.findByPk(userId);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+        const user = await User.findByPk(userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const merchantDetails = await MerchantDetails.findOne({
+            where: { user_id: userId }
+        });
+
+        res.json({
+            success: true,
+            data: {
+                payin_callback: merchantDetails?.payin_callback || null,
+                payout_callback: merchantDetails?.payout_callback || null,
+                payin_merchant_name: merchantDetails?.payin_merchant_name || null,
+                payout_merchant_name: merchantDetails?.payout_merchant_name || null,
+                last_updated: merchantDetails?.updated_at || null
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching user callbacks:', error);
+        res.status(500).json({ error: 'Error fetching user callbacks' });
     }
-
-    const merchantDetails = await MerchantDetails.findOne({
-      where: { user_id: userId }
-    });
-
-    res.json({
-      success: true,
-      data: {
-        payin_callback: merchantDetails?.payin_callback || null,
-        payout_callback: merchantDetails?.payout_callback || null,
-        payin_merchant_name: merchantDetails?.payin_merchant_name || null,
-        payout_merchant_name: merchantDetails?.payout_merchant_name || null,
-        last_updated: merchantDetails?.updated_at || null
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching user callbacks:', error);
-    res.status(500).json({ error: 'Error fetching user callbacks' });
-  }
 };
 
 // Get user wallet balance
 const getUserWallet = async (req, res) => {
-  try {
-    const { userId } = req.params;
-    console.log('Getting wallet for user:', userId);
+    try {
+        const { userId } = req.params;
+        console.log('Getting wallet for user:', userId);
 
-    const user = await User.findByPk(userId);
-    console.log('User found:', user ? 'yes' : 'no');
-    
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+        const user = await User.findByPk(userId);
+        console.log('User found:', user ? 'yes' : 'no');
+
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Find or create financial details
+        const [financialDetails, created] = await FinancialDetails.findOrCreate({
+            where: { user_id: userId },
+            defaults: {
+                settlement: 0,
+                wallet: 0,
+                lien: 0,
+                rolling_reserve: 0
+            }
+        });
+        console.log('Financial details:', financialDetails ? 'found' : 'not found', 'Created:', created);
+
+        res.json({
+            success: true,
+            data: {
+                wallet_balance: financialDetails.wallet || 0
+            }
+        });
+    } catch (error) {
+        console.error('Error in getUserWallet:', error);
+        res.status(500).json({ error: 'Error fetching wallet balance' });
     }
-
-    // Find or create financial details
-    const [financialDetails, created] = await FinancialDetails.findOrCreate({
-      where: { user_id: userId },
-      defaults: {
-        settlement: 0,
-        wallet: 0,
-        lien: 0,
-        rolling_reserve: 0
-      }
-    });
-    console.log('Financial details:', financialDetails ? 'found' : 'not found', 'Created:', created);
-
-    res.json({
-      success: true,
-      data: {
-        wallet_balance: financialDetails.wallet || 0
-      }
-    });
-  } catch (error) {
-    console.error('Error in getUserWallet:', error);
-    res.status(500).json({ error: 'Error fetching wallet balance' });
-  }
 };
 
 // Update user wallet balance
 const updateUserWallet = async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const { amount, type, remark } = req.body;
+    try {
+        const { userId } = req.params;
+        const { amount, type, remark } = req.body;
 
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ error: 'Invalid amount' });
+        if (!amount || amount <= 0) {
+            return res.status(400).json({ error: 'Invalid amount' });
+        }
+
+        const user = await User.findByPk(userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const financialDetails = await FinancialDetails.findOne({
+            where: { user_id: userId }
+        });
+
+        if (!financialDetails) {
+            return res.status(404).json({ error: 'Financial details not found' });
+        }
+
+        const currentBalance = parseFloat(financialDetails.wallet) || 0;
+        let newBalance;
+
+        if (type === 'credit') {
+            newBalance = currentBalance + parseFloat(amount);
+        } else if (type === 'debit') {
+            if (currentBalance < parseFloat(amount)) {
+                return res.status(400).json({ error: 'Insufficient balance' });
+            }
+            newBalance = currentBalance - parseFloat(amount);
+        } else {
+            return res.status(400).json({ error: 'Invalid transaction type' });
+        }
+
+        await financialDetails.update({
+            wallet: newBalance
+        });
+
+        // Create wallet transaction record
+        await WalletTransaction.create({
+            user_id: userId,
+            transaction_type: type,
+            amount: parseFloat(amount),
+            balance_before: currentBalance,
+            balance_after: newBalance,
+            remark: remark,
+            created_by: req.user.id // Assuming req.user contains the admin user info
+        });
+
+        res.json({
+            success: true,
+            message: 'Wallet balance updated successfully',
+            new_balance: newBalance,
+            data: {
+                previous_balance: currentBalance,
+                new_balance: newBalance,
+                transaction_type: type,
+                amount: parseFloat(amount),
+                remark
+            }
+        });
+    } catch (error) {
+        console.error('Error updating wallet balance:', error);
+        res.status(500).json({ error: 'Error updating wallet balance' });
     }
-
-    const user = await User.findByPk(userId);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    const financialDetails = await FinancialDetails.findOne({
-      where: { user_id: userId }
-    });
-
-    if (!financialDetails) {
-      return res.status(404).json({ error: 'Financial details not found' });
-    }
-
-    const currentBalance = parseFloat(financialDetails.wallet) || 0;
-    let newBalance;
-
-    if (type === 'credit') {
-      newBalance = currentBalance + parseFloat(amount);
-    } else if (type === 'debit') {
-      if (currentBalance < parseFloat(amount)) {
-        return res.status(400).json({ error: 'Insufficient balance' });
-      }
-      newBalance = currentBalance - parseFloat(amount);
-    } else {
-      return res.status(400).json({ error: 'Invalid transaction type' });
-    }
-
-    await financialDetails.update({
-      wallet: newBalance
-    });
-
-    // Create wallet transaction record
-    await WalletTransaction.create({
-      user_id: userId,
-      transaction_type: type,
-      amount: parseFloat(amount),
-      balance_before: currentBalance,
-      balance_after: newBalance,
-      remark: remark,
-      created_by: req.user.id // Assuming req.user contains the admin user info
-    });
-
-    res.json({
-      success: true,
-      message: 'Wallet balance updated successfully',
-      new_balance: newBalance,
-      data: {
-        previous_balance: currentBalance,
-        new_balance: newBalance,
-        transaction_type: type,
-        amount: parseFloat(amount),
-        remark
-      }
-    });
-  } catch (error) {
-    console.error('Error updating wallet balance:', error);
-    res.status(500).json({ error: 'Error updating wallet balance' });
-  }
 };
 
 // user wallet balance transaction history
@@ -780,14 +780,14 @@ const getUserWalletTransactionHistory = async (req, res) => {
 
         // Build where clause
         const whereClause = { user_id: userId };
-        
+
         // Add search filter
         if (req.query.search) {
             whereClause.remark = {
                 [Op.like]: `%${req.query.search}%`
             };
         }
-        
+
         // Add transaction type filter
         if (req.query.type && req.query.type !== 'all') {
             whereClause.transaction_type = req.query.type;
@@ -1004,7 +1004,7 @@ const addPlatformCharge = async (req, res) => {
             // Deactivate all existing platform charges
             await PlatformCharges.update(
                 { is_active: false },
-                { 
+                {
                     where: { is_active: true },
                     transaction: t
                 }
@@ -1221,7 +1221,7 @@ const getAdminDashboard = async (req, res) => {
             const startDate = new Date();
             startDate.setDate(startDate.getDate() - i);
             startDate.setHours(0, 0, 0, 0);
-            
+
             const endDate = new Date(startDate);
             endDate.setHours(23, 59, 59, 999);
 
@@ -1258,6 +1258,20 @@ const getAdminDashboard = async (req, res) => {
             .sort({ createdAt: -1 })
             .limit(10);
 
+        const totalOutflow = await TransactionCharges.sum('transaction_amount', {
+            where: {
+                status: 'completed',
+                transaction_type: 'payout'
+            }
+        });
+
+        const totalInflow = await TransactionCharges.sum('transaction_amount', {
+            where: {
+                status: 'completed',
+                transaction_type: 'payin'
+            }
+        });
+
 
         const dashboardData = {
             totalUsers: totalUsers || 0,
@@ -1269,6 +1283,8 @@ const getAdminDashboard = async (req, res) => {
             totalProfit: totalProfit || 0,
             todayProfit: todayProfit || 0,
             last7DaysData: last7DaysData,
+            totalOutflow: totalOutflow || 0,
+            totalInflow: totalInflow || 0,
             recentPayoutTransactions: recentPayoutTransactions.map(transaction => ({
                 transaction_id: transaction.transaction_id,
                 amount: transaction.amount,
@@ -2108,11 +2124,11 @@ const getSettlementDashboard = async (req, res) => {
             success: true,
             data: userSettlementList
         });
-        
+
     } catch (error) {
         console.error('Error fetching settlement dashboard:', error);
         res.status(500).json({
-            success: false,     
+            success: false,
             message: 'Error fetching settlement dashboard'
         });
     }
@@ -2191,7 +2207,7 @@ const updateManageFundRequest = async (req, res) => {
     try {
         const { id } = req.params;
         const { status } = req.body;
-        
+
         // Start a transaction
         const result = await sequelize.transaction(async (t) => {
             const manageFundRequest = await ManageFundRequest.findByPk(id, {
@@ -2235,7 +2251,7 @@ const updateManageFundRequest = async (req, res) => {
                         fund_request: manageFundRequest
                     }
                 };
-            } 
+            }
             else if (status === 'rejected') {
                 await manageFundRequest.update({
                     status: status
@@ -2356,7 +2372,7 @@ const handleChargebackAction = async (req, res) => {
 const makePayoutFailed = async (req, res) => {
     try {
         const { referenceNumbers } = req.body;
-        
+
         // Validate input
         if (!referenceNumbers || !Array.isArray(referenceNumbers) || referenceNumbers.length === 0) {
             return res.status(400).json({
@@ -2410,7 +2426,7 @@ const makePayoutFailed = async (req, res) => {
         // Update wallet balance for each user
         const walletUpdates = [];
         const processedReferences = new Set(); // Track processed reference numbers
-        
+
         // Process UserTransactions
         for (const transaction of updatedTransactions) {
             if (processedReferences.has(transaction.reference_id)) {
@@ -2431,7 +2447,7 @@ const makePayoutFailed = async (req, res) => {
                     const user = await User.findByPk(transaction.user.user_id);
                     if (user) {
                         console.log("Found user:", user.name);
-                        
+
                         // Find or create financial details for this user
                         const [financialDetails, created] = await FinancialDetails.findOrCreate({
                             where: { user_id: transaction.user.user_id },
@@ -2445,12 +2461,12 @@ const makePayoutFailed = async (req, res) => {
 
                         const currentBalance = parseFloat(financialDetails.wallet) || 0;
                         console.log("Current wallet balance:", currentBalance);
-                        
+
                         // Calculate amount to add to wallet
                         const amount = parseFloat(transaction.amount) || 0;
                         const charges = parseFloat(transaction.charges?.total_charges) || 0;
                         const totalAmount = amount + charges;
-                        
+
                         console.log("Amount calculation:", {
                             amount: amount,
                             charges: charges,
@@ -2460,10 +2476,10 @@ const makePayoutFailed = async (req, res) => {
                         // Calculate new balance
                         const newBalance = currentBalance + totalAmount;
                         console.log("New wallet balance will be:", newBalance);
-                        
+
                         // Store the old balance before updating
                         const oldBalance = currentBalance;
-                        
+
                         await financialDetails.update({
                             wallet: newBalance
                         });
@@ -2498,7 +2514,7 @@ const makePayoutFailed = async (req, res) => {
                             beneficiary_name: updatedTransactionsPayout.map(item => item.beneficiary_details?.beneficiary_name).join(', '),
                             beneficiary_account: updatedTransactionsPayout.map(item => item.beneficiary_details?.account_number).join(', '),
                             beneficiary_ifsc: updatedTransactionsPayout.map(item => item.beneficiary_details?.account_ifsc).join(', '),
-                            bank_name: updatedTransactionsPayout.map(item => item.beneficiary_details?.bank_name).join(', '), 
+                            bank_name: updatedTransactionsPayout.map(item => item.beneficiary_details?.bank_name).join(', '),
                             utr_number: transaction.gateway_response?.utr || null,
                             remark: 'Transaction marked as failed by admin',
                             failed_by: req.user.id,
@@ -2534,7 +2550,7 @@ const makePayoutFailed = async (req, res) => {
                     const user = await User.findByPk(transaction.user.user_id);
                     if (user) {
                         console.log("Found user:", user.name);
-                        
+
                         // Find or create financial details for this user
                         const [financialDetails, created] = await FinancialDetails.findOrCreate({
                             where: { user_id: transaction.user.user_id },
@@ -2548,12 +2564,12 @@ const makePayoutFailed = async (req, res) => {
 
                         const currentBalance = parseFloat(financialDetails.wallet) || 0;
                         console.log("Current wallet balance:", currentBalance);
-                        
+
                         // Calculate amount to add to wallet
                         const amount = parseFloat(transaction.amount) || 0;
                         const charges = parseFloat(transaction.charges?.total_charges) || 0;
                         const totalAmount = amount + charges;
-                        
+
                         console.log("Amount calculation:", {
                             amount: amount,
                             charges: charges,
@@ -2563,10 +2579,10 @@ const makePayoutFailed = async (req, res) => {
                         // Calculate new balance
                         const newBalance = currentBalance + totalAmount;
                         console.log("New wallet balance will be:", newBalance);
-                        
+
                         // Store the old balance before updating
                         const oldBalance = currentBalance;
-                        
+
                         await financialDetails.update({
                             wallet: newBalance
                         });
@@ -2658,40 +2674,40 @@ const getTrashTransactionCount = async (req, res) => {
 
         // Build query based on status
         const statusQuery = status === 'all' ? {} : { status: status };
-        
+
         if (transactionType === 'payin') {
             const PayinTransaction = mongoose.model('PayinTransaction');
             const UserTransaction = mongoose.model('UserTransaction');
-            
+
             // Count from both collections
             const payinCount = await PayinTransaction.countDocuments({
                 'user.user_id': userId,
                 ...statusQuery
             });
-            
+
             const userTransactionCount = await UserTransaction.countDocuments({
                 'user.user_id': userId,
                 transaction_type: 'payin',
                 ...statusQuery
             });
-            
+
             count = payinCount;
         } else if (transactionType === 'payout') {
             const PayoutTransaction = mongoose.model('PayoutTransaction');
             const UserTransaction = mongoose.model('UserTransaction');
-            
+
             // Count from both collections
             const payoutCount = await PayoutTransaction.countDocuments({
                 'user.user_id': userId,
                 ...statusQuery
             });
-            
+
             const userTransactionCount = await UserTransaction.countDocuments({
                 'user.user_id': userId,
                 transaction_type: 'payout',
                 ...statusQuery
             });
-            
+
             count = payoutCount;
         }
 
@@ -2733,37 +2749,37 @@ const deleteTrashTransactions = async (req, res) => {
         if (transactionType === 'payin') {
             const PayinTransaction = mongoose.model('PayinTransaction');
             const UserTransaction = mongoose.model('UserTransaction');
-            
+
             // Delete from both collections
             const payinResult = await PayinTransaction.deleteMany({
                 'user.user_id': userId,
                 ...statusQuery
             });
-            
+
             const userTransactionResult = await UserTransaction.deleteMany({
                 'user.user_id': userId,
                 transaction_type: 'payin',
                 ...statusQuery
             });
-            
+
             deletedCount = payinResult.deletedCount;
         } else if (transactionType === 'payout') {
             const PayoutTransaction = mongoose.model('PayoutTransaction');
             const UserTransaction = mongoose.model('UserTransaction');
-            
+
             // Delete from both collections
             const payoutResult = await PayoutTransaction.deleteMany({
                 'user.user_id': userId,
                 transaction_type: 'payout',
                 ...statusQuery
             });
-            
+
             const userTransactionResult = await UserTransaction.deleteMany({
                 'user.user_id': userId,
                 transaction_type: 'payout',
                 ...statusQuery
             });
-            
+
             deletedCount = payoutResult.deletedCount;
         }
 
@@ -2802,17 +2818,17 @@ const getPayoutFailedHistory = async (req, res) => {
 
         // Build where clause
         const whereClause = {};
-        
+
         // Add user filter
         if (user && user !== '') {
             whereClause.user_id = parseInt(user);
         }
-        
+
         // Add transaction type filter
         if (transactionType && transactionType !== 'all') {
             whereClause.transaction_type = transactionType;
         }
-        
+
         // Add date range filter
         if (startDate || endDate) {
             whereClause.created_at = {};
@@ -2823,7 +2839,7 @@ const getPayoutFailedHistory = async (req, res) => {
                 whereClause.created_at[Op.lte] = new Date(endDate);
             }
         }
-        
+
         // Add search filter
         if (search && search.trim() !== '') {
             whereClause[Op.or] = [
@@ -2896,17 +2912,17 @@ const downloadPayoutFailedHistory = async (req, res) => {
 
         // Build where clause
         const whereClause = {};
-        
+
         // Add user filter
         if (user && user !== '') {
             whereClause.user_id = parseInt(user);
         }
-        
+
         // Add transaction type filter
         if (transactionType && transactionType !== 'all') {
             whereClause.transaction_type = transactionType;
         }
-        
+
         // Add date range filter
         if (startDate || endDate) {
             whereClause.created_at = {};
@@ -2917,7 +2933,7 @@ const downloadPayoutFailedHistory = async (req, res) => {
                 whereClause.created_at[Op.lte] = new Date(endDate);
             }
         }
-        
+
         // Add search filter
         if (search && search.trim() !== '') {
             whereClause[Op.or] = [
@@ -3029,18 +3045,34 @@ const downloadPayoutFailedHistory = async (req, res) => {
 };
 
 // Get last 5 days transaction details with charges breakdown
-const getLast5DaysTransactionDetails = async (req, res) => {
+const { clearCacheKey } = require('../middleware/cache.middleware');
+
+const getLastNDaysTransactionDetails = async (req, res) => {
     try {
+        const { days = 5 } = req.query; // Default to 5 days if not specified
 
-        const last5DaysData = [];
+        // Validate days parameter
+        const validDays = [3, 5, 10];
+        const selectedDays = validDays.includes(parseInt(days)) ? parseInt(days) : 5;
 
-        for (let i = 4; i >= 0; i--) {
-            const startDate = new Date();
-            startDate.setDate(startDate.getDate() - i);
-            startDate.setHours(0, 0, 0, 0);
-            
-            const endDate = new Date(startDate);
-            endDate.setHours(23, 59, 59, 999);
+        const lastNDaysData = [];
+
+        for (let i = selectedDays - 1; i >= 0; i--) {
+            // Get current date and calculate the date range
+            const now = new Date();
+            const targetDate = new Date(now);
+            targetDate.setDate(targetDate.getDate() - i);
+            targetDate.setUTCHours(0, 0, 0, 0); // Start of day in UTC
+
+            // End of day in UTC
+            const endDate = new Date(targetDate);
+            endDate.setUTCHours(23, 59, 59, 999);
+
+            const startDate = targetDate;
+
+            // console.log(`Date: ${targetDate.toISOString().split('T')[0]}`);
+            // console.log(`UTC Start: ${startDate.toISOString()}`);
+            // console.log(`UTC End: ${endDate.toISOString()}`);
 
             // Get payin transactions for the day
             const payinTransactions = await TransactionCharges.findAll({
@@ -3053,9 +3085,10 @@ const getLast5DaysTransactionDetails = async (req, res) => {
                 },
                 include: [{
                     model: User,
-                    attributes: ['name', 'email']
+                    attributes: ['id', 'name', 'email']
                 }],
                 attributes: [
+                    'user_id',
                     'transaction_amount',
                     'merchant_charge',
                     'agent_charge',
@@ -3063,6 +3096,7 @@ const getLast5DaysTransactionDetails = async (req, res) => {
                     'gst_amount',
                     'platform_fee',
                     'reference_id',
+                    'transaction_utr',
                     'created_at'
                 ]
             });
@@ -3078,9 +3112,10 @@ const getLast5DaysTransactionDetails = async (req, res) => {
                 },
                 include: [{
                     model: User,
-                    attributes: ['name', 'email']
+                    attributes: ['id', 'name', 'email']
                 }],
                 attributes: [
+                    'user_id',
                     'transaction_amount',
                     'merchant_charge',
                     'agent_charge',
@@ -3088,6 +3123,7 @@ const getLast5DaysTransactionDetails = async (req, res) => {
                     'gst_amount',
                     'platform_fee',
                     'reference_id',
+                    'transaction_utr',
                     'created_at'
                 ]
             });
@@ -3104,22 +3140,117 @@ const getLast5DaysTransactionDetails = async (req, res) => {
             const payoutTotalGST = payoutTransactions.reduce((sum, t) => sum + parseFloat(t.gst_amount || 0), 0);
             const payoutTotalPlatformFee = payoutTransactions.reduce((sum, t) => sum + parseFloat(t.platform_fee || 0), 0);
 
-            last5DaysData.push({
-                date: startDate.toISOString().split('T')[0],
+            // User-wise aggregation for payin transactions
+            const payinUserWise = {};
+            // console.log(`Processing ${payinTransactions.length} payin transactions for ${startDate.toISOString().split('T')[0]}`);
+
+            payinTransactions.forEach(transaction => {
+                const userId = transaction.user_id;
+                const userName = transaction.User?.name || 'Unknown User';
+                const userEmail = transaction.User?.email || 'No Email';
+
+                // console.log(`Payin Transaction - UserID: ${userId}, Name: ${userName}, Amount: ${transaction.transaction_amount}`);
+
+                if (!payinUserWise[userId]) {
+                    payinUserWise[userId] = {
+                        user_id: userId,
+                        user_name: userName,
+                        user_email: userEmail,
+                        total_amount: 0,
+                        total_charges: 0,
+                        total_gst: 0,
+                        total_platform_fee: 0,
+                        transaction_count: 0,
+                        transactions: []
+                    };
+                }
+
+                payinUserWise[userId].total_amount += parseFloat(transaction.transaction_amount || 0);
+                payinUserWise[userId].total_charges += parseFloat(transaction.total_charges || 0);
+                payinUserWise[userId].total_gst += parseFloat(transaction.gst_amount || 0);
+                payinUserWise[userId].total_platform_fee += parseFloat(transaction.platform_fee || 0);
+                payinUserWise[userId].transaction_count += 1;
+                payinUserWise[userId].transactions.push({
+                    reference_id: transaction.reference_id,
+                    amount: parseFloat(transaction.transaction_amount || 0),
+                    charges: parseFloat(transaction.total_charges || 0),
+                    gst: parseFloat(transaction.gst_amount || 0),
+                    platform_fee: parseFloat(transaction.platform_fee || 0),
+                    utr: transaction.transaction_utr || null,
+                    created_at: transaction.created_at
+                });
+            });
+
+            // console.log(`Payin User Wise Summary:`, Object.keys(payinUserWise).map(uid => ({
+            //     userId: uid,
+            //     name: payinUserWise[uid].user_name,
+            //     count: payinUserWise[uid].transaction_count
+            // })));
+
+            // User-wise aggregation for payout transactions
+            const payoutUserWise = {};
+            console.log(`Processing ${payoutTransactions.length} payout transactions for ${startDate.toISOString().split('T')[0]}`);
+
+            payoutTransactions.forEach(transaction => {
+                const userId = transaction.user_id;
+                const userName = transaction.User?.name || 'Unknown User';
+                const userEmail = transaction.User?.email || 'No Email';
+
+                // console.log(`Payout Transaction - UserID: ${userId}, Name: ${userName}, Amount: ${transaction.transaction_amount}`);
+
+                if (!payoutUserWise[userId]) {
+                    payoutUserWise[userId] = {
+                        user_id: userId,
+                        user_name: userName,
+                        user_email: userEmail,
+                        total_amount: 0,
+                        total_charges: 0,
+                        total_gst: 0,
+                        total_platform_fee: 0,
+                        transaction_count: 0,
+                        transactions: []
+                    };
+                }
+
+                payoutUserWise[userId].total_amount += parseFloat(transaction.transaction_amount || 0);
+                payoutUserWise[userId].total_charges += parseFloat(transaction.total_charges || 0);
+                payoutUserWise[userId].total_gst += parseFloat(transaction.gst_amount || 0);
+                payoutUserWise[userId].total_platform_fee += parseFloat(transaction.platform_fee || 0);
+                payoutUserWise[userId].transaction_count += 1;
+                payoutUserWise[userId].transactions.push({
+                    reference_id: transaction.reference_id,
+                    amount: parseFloat(transaction.transaction_amount || 0),
+                    charges: parseFloat(transaction.total_charges || 0),
+                    gst: parseFloat(transaction.gst_amount || 0),
+                    platform_fee: parseFloat(transaction.platform_fee || 0),
+                    utr: transaction.transaction_utr || null,
+                    created_at: transaction.created_at
+                });
+            });
+
+            // console.log(`Payout User Wise Summary:`, Object.keys(payoutUserWise).map(uid => ({
+            //     userId: uid,
+            //     name: payoutUserWise[uid].user_name,
+            //     count: payoutUserWise[uid].transaction_count
+            // })));
+
+            lastNDaysData.push({
+                date: targetDate.toISOString().split('T')[0],
                 payin: {
                     total_amount: payinTotal,
                     total_charges: payinTotalCharges,
                     total_gst: payinTotalGST,
                     total_platform_fee: payinTotalPlatformFee,
                     transaction_count: payinTransactions.length,
+                    user_wise: Object.values(payinUserWise),
                     transactions: payinTransactions.map(t => ({
                         reference_id: t.reference_id,
                         amount: parseFloat(t.transaction_amount || 0),
                         charges: parseFloat(t.total_charges || 0),
                         gst: parseFloat(t.gst_amount || 0),
                         platform_fee: parseFloat(t.platform_fee || 0),
-                        user_name: t.user?.name || 'N/A',
-                        user_email: t.user?.email || 'N/A',
+                        user_name: t.User?.name || 'N/A',
+                        user_email: t.User?.email || 'N/A',
                         created_at: t.created_at
                     }))
                 },
@@ -3129,14 +3260,15 @@ const getLast5DaysTransactionDetails = async (req, res) => {
                     total_gst: payoutTotalGST,
                     total_platform_fee: payoutTotalPlatformFee,
                     transaction_count: payoutTransactions.length,
+                    user_wise: Object.values(payoutUserWise),
                     transactions: payoutTransactions.map(t => ({
                         reference_id: t.reference_id,
                         amount: parseFloat(t.transaction_amount || 0),
                         charges: parseFloat(t.total_charges || 0),
                         gst: parseFloat(t.gst_amount || 0),
                         platform_fee: parseFloat(t.platform_fee || 0),
-                        user_name: t.user?.name || 'N/A',
-                        user_email: t.user?.email || 'N/A',
+                        user_name: t.User?.name || 'N/A',
+                        user_email: t.User?.email || 'N/A',
                         created_at: t.created_at
                     }))
                 }
@@ -3145,64 +3277,76 @@ const getLast5DaysTransactionDetails = async (req, res) => {
 
         res.json({
             success: true,
-            data: last5DaysData
+            data: lastNDaysData,
+            selectedDays: selectedDays
         });
     } catch (error) {
-        console.error('Error fetching last 5 days transaction details:', error);
+        // console.error('Error fetching last N days transaction details:', error);
         res.status(500).json({
             success: false,
-            message: 'Error fetching last 5 days transaction details',
+            message: 'Error fetching last N days transaction details',
             error: error.message
         });
     }
 };
 
+// Helper function to invalidate last 5 days cache
+const invalidateLast5DaysCache = async () => {
+    try {
+        await clearCacheKey('last5days:transactions');
+        console.log('Last 5 days transaction cache invalidated');
+    } catch (error) {
+        console.error('Error invalidating last 5 days cache:', error);
+    }
+};
+
 module.exports = {
-  getAllUsers,
-  getAllAgents,
-  getUserDetails,
-  getAgentDetails,
-  getAgentUsers,
-  addOrUpdateMerchantDetails,
-  getUserMerchantDetails,
-  addMerchantCharges,
-  updateMerchantCharges,
-  getUserMerchantCharges,
-  updateUserMerchantCharges,
-  updateMerchantCharge,
-  updateUserDetails,
-  getUserCallbacks,
-  updateUserWallet,
-  getUserWallet,
-  getUserIPs,
-  addUserIP,
-  removeUserIP,
-  getPlatformCharges,
-  addPlatformCharge,
-  removePlatformCharge,
-  deleteMerchantCharge,
-  updateUserPayinCallback,
-  updateUserPayoutCallback,
-  getAdminDashboard,
-  getWalletTransactions,
-  settleAmount,
-  getSettlementHistory,
-  getSettlementDashboard,
-  getManageFundRequest,
-  updateManageFundRequest,
-  getChargeback,
-  handleChargebackAction,
-  getPayoutTransactions,
-  getPayinTransactions,
-  getPayinTransactionsDownload,
-  getPayoutTransactionsDownload,
-  getWalletTransactionsDownload,
-  getUsersForDropdown,
-  makePayoutFailed,
-  getTrashTransactionCount,
-  deleteTrashTransactions,
-  getUserWalletTransactionHistory,
-  getPayoutFailedHistory,
-  downloadPayoutFailedHistory,
-  getLast5DaysTransactionDetails
+    getAllUsers,
+    getAllAgents,
+    getUserDetails,
+    getAgentDetails,
+    getAgentUsers,
+    addOrUpdateMerchantDetails,
+    getUserMerchantDetails,
+    addMerchantCharges,
+    updateMerchantCharges,
+    getUserMerchantCharges,
+    updateUserMerchantCharges,
+    updateMerchantCharge,
+    updateUserDetails,
+    getUserCallbacks,
+    updateUserWallet,
+    getUserWallet,
+    getUserIPs,
+    addUserIP,
+    removeUserIP,
+    getPlatformCharges,
+    addPlatformCharge,
+    removePlatformCharge,
+    deleteMerchantCharge,
+    updateUserPayinCallback,
+    updateUserPayoutCallback,
+    getAdminDashboard,
+    getWalletTransactions,
+    settleAmount,
+    getSettlementHistory,
+    getSettlementDashboard,
+    getManageFundRequest,
+    updateManageFundRequest,
+    getChargeback,
+    handleChargebackAction,
+    getPayoutTransactions,
+    getPayinTransactions,
+    getPayinTransactionsDownload,
+    getPayoutTransactionsDownload,
+    getWalletTransactionsDownload,
+    getUsersForDropdown,
+    makePayoutFailed,
+    getTrashTransactionCount,
+    deleteTrashTransactions,
+    getUserWalletTransactionHistory,
+    getPayoutFailedHistory,
+    downloadPayoutFailedHistory,
+    getLastNDaysTransactionDetails,
+    invalidateLast5DaysCache
 };
