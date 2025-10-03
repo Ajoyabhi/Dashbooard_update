@@ -1,11 +1,11 @@
 const Redis = require('ioredis');
-const config = require('../config');
 
 // Create Redis client for caching with proper authentication
+// Use environment variables directly like queue.config.js
 const redis = new Redis({
-    host: config.redis.host,
-    port: parseInt(config.redis.port),
-    password: config.redis.password || undefined, // Only set if password exists
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT) || 6379,
+    password: process.env.REDIS_PASSWORD || undefined, // Only set if password exists
     retryStrategy: (times) => {
         if (times > 10) {
             console.error('Cache Redis client max retries reached');
@@ -31,7 +31,7 @@ const redis = new Redis({
     ...(process.env.REDIS_TLS_ENABLED === 'true' && {
         tls: {
             rejectUnauthorized: false,
-            servername: config.redis.host,
+            servername: process.env.REDIS_HOST || 'localhost',
             minVersion: 'TLSv1.2',
             ciphers: 'HIGH:!aNULL:!eNULL:!EXPORT:!SSLv2:!SSLv3:!TLSv1'
         }
