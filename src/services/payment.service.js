@@ -5,6 +5,26 @@ const UserTransaction = require('../models/userTransaction.model');
 const mongoose = require('mongoose');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
 const axios = require('axios');
+const os = require('os');
+
+/**
+ * Get the server's IP address
+ * @returns {string} The server's IP address
+ */
+const getServerIp = () => {
+  const interfaces = os.networkInterfaces();
+  for (const interfaceName in interfaces) {
+    const addresses = interfaces[interfaceName];
+    for (const address of addresses) {
+      // Skip internal (loopback) and non-IPv4 addresses
+      if (!address.internal && address.family === 'IPv4') {
+        return address.address;
+      }
+    }
+  }
+  // Fallback to localhost if no external IP found
+  return '127.0.0.1';
+};
 
 /**
  * Process a payin request
@@ -275,6 +295,8 @@ const processPayin = async (data) => {
     };
 
     let result;
+    const serverIp = getServerIp();
+    console.log("this is my ip address", serverIp);
     if (user.MerchantDetail.payin_merchant_name == "Unpay") {
       result = await unpayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee);
     } else if (user.MerchantDetail.payin_merchant_name == "Spay") {
