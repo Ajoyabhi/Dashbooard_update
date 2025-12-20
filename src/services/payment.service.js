@@ -6,6 +6,9 @@ const mongoose = require('mongoose');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
 const axios = require('axios');
 const os = require('os');
+const dns = require('dns');
+const http = require('http');
+const https = require('https');
 
 /**
  * Get the server's IP address
@@ -24,6 +27,28 @@ const getServerIp = () => {
   }
   // Fallback to localhost if no external IP found
   return '127.0.0.1';
+};
+
+/**
+ * Create HTTP/HTTPS agents that force IPv4
+ * @returns {Object} Object containing httpAgent and httpsAgent
+ */
+const createIPv4Agents = () => {
+  // Custom lookup function that forces IPv4
+  const lookup = (hostname, options, callback) => {
+    dns.lookup(hostname, { family: 4, ...options }, callback);
+  };
+
+  return {
+    httpAgent: new http.Agent({
+      family: 4,
+      lookup: lookup
+    }),
+    httpsAgent: new https.Agent({
+      family: 4,
+      lookup: lookup
+    })
+  };
 };
 
 /**
@@ -439,22 +464,29 @@ const unpayPayin = async (payinData, adminCharge, agentCharge, totalCharges, use
 
     const encryptedRequestBody = await encryptText(JSON.stringify(requestBody), aesKey, aesIV);
 
-    // Make API request to Unpay
-    const response = await fetch('https://unpay.in/tech/api/next/upi/request/qr', {
-      method: 'POST',
+    // Create IPv4 agents to force IPv4 connection
+    const { httpAgent, httpsAgent } = createIPv4Agents();
+
+    // Make API request to Unpay using axios with IPv4 agents
+    const response = await axios.post(
+      'https://unpay.in/tech/api/next/upi/request/qr',
+      {
+        body: encryptedRequestBody
+      },
+      {
       headers: {
         'accept': 'application/json',
         'api-key': apiKey,
         'content-type': 'application/json'
       },
-      body: JSON.stringify({
-        body: encryptedRequestBody
-      })
-    });
+        httpAgent: httpAgent,
+        httpsAgent: httpsAgent
+      }
+    );
 
-    const result = await response.json();
+    const result = response.data;
 
-    if (!response.ok) {
+    if (response.status !== 200) {
       throw new Error(`upn error: ${result.message || 'Unknown error'}`);
     }
     console.log("this is the result of unpay payin", result);
