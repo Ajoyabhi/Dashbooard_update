@@ -9,8 +9,8 @@ module.exports = {
         host: process.env.DB_HOST || 'localhost',
         port: process.env.DB_PORT || 3306,
         database: process.env.DB_NAME || 'payvex',
-        username: process.env.DB_USER || 'root',
-        password: process.env.DB_PASSWORD || '123456789'
+        username: process.env.DB_USER || 'payvex_user',
+        password: process.env.DB_PASSWORD || 'Payzutech@2025#'
     },
     mongodb: {
         uri: process.env.MONGODB_URI || 'mongodb://paydexadmin:j123KJkslw21Bk34G@10.10.22.98:27017/techturect?authSource=admin'
