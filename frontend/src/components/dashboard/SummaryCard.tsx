@@ -29,40 +29,40 @@ const SummaryCard: React.FC<SummaryCardProps> = ({
   const getColorClasses = () => {
     const colorMap: Record<string, { bg: string; text: string; border: string; gradient: string }> = {
       'primary': {
-        bg: 'bg-gradient-to-br from-primary-50 to-blue-50',
+        bg: 'bg-gradient-to-br from-primary-50 to-primary-100/50',
         text: 'text-primary-700',
-        border: 'border-primary-200',
-        gradient: 'from-primary-500 to-blue-500'
+        border: 'border-primary-200/60',
+        gradient: 'from-primary-600 to-primary-700'
       },
       'secondary': {
-        bg: 'bg-gradient-to-br from-secondary-50 to-purple-50',
+        bg: 'bg-gradient-to-br from-secondary-50 to-secondary-100/50',
         text: 'text-secondary-700',
-        border: 'border-secondary-200',
-        gradient: 'from-secondary-500 to-purple-500'
+        border: 'border-secondary-200/60',
+        gradient: 'from-secondary-600 to-secondary-700'
       },
       'accent': {
-        bg: 'bg-gradient-to-br from-accent-50 to-orange-50',
+        bg: 'bg-gradient-to-br from-accent-50 to-accent-100/50',
         text: 'text-accent-700',
-        border: 'border-accent-200',
-        gradient: 'from-accent-500 to-orange-500'
+        border: 'border-accent-200/60',
+        gradient: 'from-accent-600 to-accent-700'
       },
       'success': {
-        bg: 'bg-gradient-to-br from-success-50 to-emerald-50',
+        bg: 'bg-gradient-to-br from-success-50 to-success-100/50',
         text: 'text-success-700',
-        border: 'border-success-200',
-        gradient: 'from-success-500 to-emerald-500'
+        border: 'border-success-200/60',
+        gradient: 'from-success-600 to-success-700'
       },
       'warning': {
-        bg: 'bg-gradient-to-br from-warning-50 to-yellow-50',
+        bg: 'bg-gradient-to-br from-warning-50 to-warning-100/50',
         text: 'text-warning-700',
-        border: 'border-warning-200',
-        gradient: 'from-warning-500 to-yellow-500'
+        border: 'border-warning-200/60',
+        gradient: 'from-warning-600 to-warning-700'
       },
       'error': {
-        bg: 'bg-gradient-to-br from-error-50 to-red-50',
+        bg: 'bg-gradient-to-br from-error-50 to-error-100/50',
         text: 'text-error-700',
-        border: 'border-error-200',
-        gradient: 'from-error-500 to-red-500'
+        border: 'border-error-200/60',
+        gradient: 'from-error-600 to-error-700'
       },
     };
 
@@ -135,30 +135,30 @@ const SummaryCard: React.FC<SummaryCardProps> = ({
 
   return (
     <div className={`
-      card-hover p-6 border transition-all duration-500 transform hover:scale-[1.02] animate-fade-in
+      card-premium p-5 border transition-all duration-200 hover:scale-[1.01] animate-fade-in relative overflow-hidden
       ${darkMode ? 'bg-neutral-900/50 backdrop-blur-md border-neutral-800/50' : colors.bg}
       ${colors.border}
     `}>
       {/* Background decoration */}
-      <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${colors.gradient} opacity-5 rounded-full -translate-y-16 translate-x-16`}></div>
+      <div className={`absolute top-0 right-0 w-28 h-28 bg-gradient-to-br ${colors.gradient} opacity-5 rounded-full -translate-y-14 translate-x-14`}></div>
 
       <div className="relative z-10">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <h3 className={`text-sm font-semibold ${darkMode ? 'text-neutral-300' : 'text-neutral-600'} uppercase tracking-wide`}>
+        <div className="flex items-center justify-between mb-5">
+          <h3 className={`text-xs font-semibold ${darkMode ? 'text-neutral-300' : 'text-neutral-600'} uppercase tracking-wider`}>
             {title}
           </h3>
           <div className={`
-            p-3 rounded-2xl shadow-soft transform hover:scale-110 transition-all duration-300
+            p-2.5 rounded-lg shadow-banking transition-all duration-200
             bg-gradient-to-br ${colors.gradient} text-white
           `}>
-            <Icon className="h-6 w-6" />
+            <Icon className="h-5 w-5" />
           </div>
         </div>
 
         {/* Value */}
-        <div className="mb-4">
-          <p className={`text-3xl font-bold font-display ${darkMode ? 'text-white' : 'text-neutral-900'}`}>
+        <div className="mb-3">
+          <p className={`text-2xl font-bold font-display ${darkMode ? 'text-white' : 'text-neutral-900'}`}>
             {displayValue}
           </p>
         </div>

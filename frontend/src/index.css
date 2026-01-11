@@ -5,8 +5,10 @@
 
 @layer base {
     body {
-        @apply bg-neutral-50 text-neutral-900 font-sans antialiased;
-        font-feature-settings: "rlig" 1, "calt" 1;
+        @apply bg-gradient-to-br from-neutral-50 via-blue-50/30 to-neutral-50 text-neutral-900 font-sans antialiased;
+        font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
     }
 
     /* Grid pattern background */
@@ -17,22 +19,24 @@
         background-size: 20px 20px;
     }
 
-    /* Custom scrollbar */
+    /* Premium Banking Scrollbar */
     ::-webkit-scrollbar {
         width: 8px;
         height: 8px;
     }
 
     ::-webkit-scrollbar-track {
-        @apply bg-neutral-100 rounded-full;
+        @apply bg-neutral-100/50 rounded-full;
     }
 
     ::-webkit-scrollbar-thumb {
-        @apply bg-neutral-300 rounded-full hover:bg-neutral-400 transition-colors;
+        @apply bg-neutral-300 rounded-full hover:bg-primary-400 transition-all duration-200;
+        border: 2px solid transparent;
+        background-clip: padding-box;
     }
 
     ::-webkit-scrollbar-thumb:hover {
-        @apply bg-neutral-500;
+        @apply bg-primary-500;
     }
 
     /* Input styling */
@@ -44,61 +48,89 @@
         @apply text-neutral-500;
     }
 
-    /* Focus styles */
+    /* Premium Focus styles */
     *:focus-visible {
-        @apply outline-none ring-2 ring-primary-500 ring-offset-2 ring-offset-white;
+        @apply outline-none ring-2 ring-primary-600 ring-offset-2 ring-offset-white;
     }
 
-    /* Selection styles */
+    /* Premium Selection styles */
     ::selection {
-        @apply bg-primary-100 text-primary-900;
+        @apply bg-primary-200/50 text-primary-900;
+    }
+
+    /* Premium Input focus */
+    input:focus,
+    textarea:focus,
+    select:focus {
+        @apply ring-2 ring-primary-500/20 border-primary-500;
     }
 }
 
 @layer components {
 
-    /* Glass morphism effect */
+    /* Premium Glass morphism effect */
     .glass {
-        @apply bg-white/80 backdrop-blur-md border border-white/20;
+        @apply bg-white/90 backdrop-blur-xl border border-white/30 shadow-md;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.04);
     }
 
     .glass-dark {
-        @apply bg-neutral-900/80 backdrop-blur-md border border-neutral-700/20;
+        @apply bg-neutral-900/95 backdrop-blur-xl border border-neutral-700/30 shadow-md;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.04);
     }
 
-    /* Gradient text */
+    .glass-premium {
+        @apply bg-white/95 backdrop-blur-2xl border border-white/40 shadow-lg;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+
+    /* Premium Banking Gradient text */
     .gradient-text {
-        @apply bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent;
+        @apply bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent font-semibold;
     }
 
     .gradient-text-success {
-        @apply bg-gradient-to-r from-success-600 to-emerald-600 bg-clip-text text-transparent;
+        @apply bg-gradient-to-r from-success-600 to-success-700 bg-clip-text text-transparent font-semibold;
     }
 
     .gradient-text-warning {
-        @apply bg-gradient-to-r from-warning-600 to-orange-600 bg-clip-text text-transparent;
+        @apply bg-gradient-to-r from-warning-600 to-warning-700 bg-clip-text text-transparent font-semibold;
     }
 
     .gradient-text-error {
-        @apply bg-gradient-to-r from-error-600 to-red-600 bg-clip-text text-transparent;
+        @apply bg-gradient-to-r from-error-600 to-error-700 bg-clip-text text-transparent font-semibold;
     }
 
-    /* Card styles */
+    .gradient-text-premium {
+        @apply bg-gradient-to-r from-gold-600 to-gold-700 bg-clip-text text-transparent font-semibold;
+    }
+
+    /* Premium Banking Card styles */
     .card {
-        @apply bg-white rounded-2xl shadow-lg border border-neutral-100/50 overflow-hidden;
+        @apply bg-white rounded-xl border border-neutral-200/60 overflow-hidden;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.04);
     }
 
     .card-hover {
-        @apply card hover:shadow-xl hover:scale-[1.02] transition-all duration-300;
+        @apply card hover:scale-[1.01] transition-all duration-300 hover:border-primary-200/50;
+    }
+
+    .card-hover:hover {
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
     }
 
     .card-glass {
-        @apply glass rounded-2xl shadow-lg border border-white/20;
+        @apply glass-premium rounded-xl;
     }
 
-    /* Button styles */
+    .card-premium {
+        @apply bg-gradient-to-br from-white to-neutral-50/50 rounded-xl border border-neutral-200/80 overflow-hidden;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+
+    /* Premium Banking Button styles */
     .btn-primary {
-        @apply bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white font-medium px-6 py-3 rounded-xl shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95;
+        @apply bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white font-semibold px-6 py-3 rounded-xl shadow-medium hover:shadow-lg transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98];
     }
 
     .btn-secondary {
@@ -129,13 +161,17 @@
         @apply text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 font-medium px-6 py-3 rounded-xl transition-all duration-300;
     }
 
-    /* Input styles */
+    /* Premium Banking Input styles */
     .input-primary {
-        @apply w-full px-4 py-3 border border-neutral-200 rounded-xl focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all duration-300 bg-white/50 backdrop-blur-sm;
+        @apply w-full px-4 py-3 border border-neutral-300 rounded-lg focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all duration-200 bg-white text-neutral-900 placeholder:text-neutral-400;
     }
 
     .input-glass {
-        @apply w-full px-4 py-3 border border-white/20 rounded-xl focus:border-white/40 focus:ring-2 focus:ring-white/20 transition-all duration-300 glass;
+        @apply w-full px-4 py-3 border border-neutral-200/60 rounded-lg focus:border-primary-500/60 focus:ring-2 focus:ring-primary-500/20 transition-all duration-200 glass text-neutral-900 placeholder:text-neutral-400;
+    }
+
+    .input-premium {
+        @apply w-full px-4 py-3.5 border-2 border-neutral-200 rounded-lg focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 transition-all duration-200 bg-white text-neutral-900 placeholder:text-neutral-400 font-medium;
     }
 
     /* Badge styles */

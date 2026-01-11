@@ -29,20 +29,20 @@ const Sidebar: React.FC<SidebarProps> = ({ items = [], isOpen, onClose, onToggle
       case 'payin_payout':
         return 'User Portal';
       default:
-        return 'AccuzPay';
+        return 'PayVex';
     }
   };
 
-  // Custom active state logic for NavLink
+  // Premium Banking active state logic for NavLink
   const getActiveClassName = (isActive: boolean) => {
     if (darkMode) {
       return isActive
-        ? 'bg-gradient-to-r from-primary-600/20 to-secondary-600/20 text-white border-l-4 border-accent-400 shadow-glow backdrop-blur-md'
-        : 'text-neutral-300 hover:bg-gradient-to-r hover:from-neutral-800/50 hover:to-neutral-700/50 hover:text-white hover:shadow-soft backdrop-blur-sm';
+        ? 'bg-primary-600/20 text-white border-l-4 border-primary-400 shadow-banking backdrop-blur-sm'
+        : 'text-neutral-300 hover:bg-neutral-800/50 hover:text-white';
     }
     return isActive
-      ? 'bg-gradient-to-r from-primary-100 to-secondary-100 text-primary-800 border-l-4 border-accent-500 shadow-soft'
-      : 'text-neutral-600 hover:bg-gradient-to-r hover:from-primary-50 hover:to-secondary-50 hover:text-primary-700 hover:shadow-soft';
+      ? 'bg-primary-50 text-primary-700 border-l-4 border-primary-600 shadow-soft font-semibold'
+      : 'text-neutral-600 hover:bg-neutral-50 hover:text-primary-600';
   };
 
   // Custom function to determine if a path should be active
@@ -113,30 +113,34 @@ const Sidebar: React.FC<SidebarProps> = ({ items = [], isOpen, onClose, onToggle
         onClick={onClose}
       />
 
-      {/* Sidebar */}
+      {/* Premium Banking Sidebar */}
       <div className={`
         fixed md:relative z-50 h-full
-        transform transition-all duration-700 ease-out
+        transform transition-all duration-300 ease-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-        w-72 ${darkMode ? 'bg-neutral-900/95 backdrop-blur-xl border-neutral-800' : 'bg-white/95 backdrop-blur-xl border-neutral-200'} 
-        border-r shadow-large
+        w-72 ${darkMode 
+          ? 'bg-gradient-to-b from-neutral-900 to-neutral-950/95 backdrop-blur-xl border-neutral-800/50' 
+          : 'bg-white border-neutral-200/80'} 
+        border-r shadow-banking-lg
         flex flex-col
         md:${isOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
-        {/* Logo */}
-        <div className={`p-8 border-b ${darkMode ? 'border-neutral-800 bg-neutral-900/50' : 'border-neutral-200 bg-white/50'} backdrop-blur-sm`}>
-          <div className="flex items-center space-x-4">
-            <div className="h-12 w-12 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-2xl flex items-center justify-center shadow-glow transform hover:scale-105 transition-all duration-300">
-              <div className="h-7 w-7 text-white">
-                {React.createElement(getIconByName('Wallet'), { size: 24 })}
+        {/* Premium Logo Section */}
+        <div className={`p-6 border-b ${darkMode 
+          ? 'border-neutral-800/50 bg-gradient-to-r from-neutral-900/50 to-neutral-800/30' 
+          : 'border-neutral-200/80 bg-gradient-to-r from-white to-neutral-50/50'} backdrop-blur-sm`}>
+          <div className="flex items-center space-x-3">
+            <div className="h-11 w-11 rounded-lg flex items-center justify-center shadow-banking transform hover:scale-105 transition-all duration-200" style={{background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)'}}>
+              <div className="h-6 w-6 text-white">
+                {React.createElement(getIconByName('Wallet'), { size: 20 })}
               </div>
             </div>
             <div className="flex flex-col">
-              <span className={`text-xl font-bold font-display ${darkMode ? 'text-white' : 'text-neutral-900'}`}>
+              <span className={`text-lg font-bold font-display ${darkMode ? 'text-white' : 'text-neutral-900'}`}>
                 {getRoleTitle()}
               </span>
-              <span className={`text-xs ${darkMode ? 'text-neutral-400' : 'text-neutral-600'} font-medium`}>
-                Secure Payment Gateway
+              <span className={`text-xs ${darkMode ? 'text-neutral-400' : 'text-neutral-500'} font-medium`}>
+                Banking Platform
               </span>
             </div>
           </div>
@@ -165,19 +169,18 @@ const Sidebar: React.FC<SidebarProps> = ({ items = [], isOpen, onClose, onToggle
                       to={item.path}
                       onClick={onClose}
                       className={`
-                        flex items-center px-6 py-4 text-sm rounded-2xl mx-2 font-medium
-                        transition-all duration-500 ease-in-out
-                        transform hover:scale-[1.02] active:scale-[0.98]
+                        flex items-center px-4 py-3 text-sm rounded-lg mx-2 font-medium
+                        transition-all duration-200 ease-in-out
                         ${getActiveClassName(active)}
                       `}
                     >
-                      <Icon className={`h-5 w-5 mr-4 transition-all duration-300 ${active
-                        ? darkMode ? 'text-accent-300' : 'text-accent-600'
+                      <Icon className={`h-5 w-5 mr-3 transition-all duration-200 ${active
+                        ? darkMode ? 'text-primary-300' : 'text-primary-600'
                         : darkMode ? 'text-neutral-400' : 'text-neutral-500'
                         }`} />
-                      <span className="font-semibold flex-1">{item.title}</span>
+                      <span className="flex-1">{item.title}</span>
                       {item.badge && (
-                        <span className="ml-auto bg-gradient-to-r from-accent-500 to-pink-500 text-white text-xs px-3 py-1 rounded-full font-bold shadow-soft">
+                        <span className="ml-auto bg-primary-600 text-white text-xs px-2.5 py-1 rounded-full font-semibold">
                           {item.badge}
                         </span>
                       )}
@@ -185,17 +188,16 @@ const Sidebar: React.FC<SidebarProps> = ({ items = [], isOpen, onClose, onToggle
                   ) : (
                     <div
                       className={`
-                        flex items-center px-6 py-4 text-sm rounded-2xl mx-2 font-medium
-                        transition-all duration-500 ease-in-out
-                        transform hover:scale-[1.02] active:scale-[0.98]
+                        flex items-center px-4 py-3 text-sm rounded-lg mx-2 font-medium cursor-pointer
+                        transition-all duration-200 ease-in-out
                         ${item.children
-                          ? `cursor-pointer ${hasActiveChildPath || isExpanded
+                          ? `${hasActiveChildPath || isExpanded
                             ? darkMode
-                              ? 'bg-gradient-to-r from-primary-600/20 to-secondary-600/20 text-white border-l-4 border-accent-400 shadow-glow backdrop-blur-md'
-                              : 'bg-gradient-to-r from-primary-100 to-secondary-100 text-primary-800 border-l-4 border-accent-500 shadow-soft'
+                              ? 'bg-primary-600/20 text-white border-l-4 border-primary-400'
+                              : 'bg-primary-50 text-primary-700 border-l-4 border-primary-600 font-semibold'
                             : darkMode
-                              ? 'text-neutral-300 hover:bg-gradient-to-r hover:from-neutral-800/50 hover:to-neutral-700/50 hover:text-white hover:shadow-soft backdrop-blur-sm'
-                              : 'text-neutral-600 hover:bg-gradient-to-r hover:from-primary-50 hover:to-secondary-50 hover:text-primary-700 hover:shadow-soft'
+                              ? 'text-neutral-300 hover:bg-neutral-800/50 hover:text-white'
+                              : 'text-neutral-600 hover:bg-neutral-50 hover:text-primary-600'
                           }`
                           : getActiveClassName(active)
                         }
@@ -206,24 +208,24 @@ const Sidebar: React.FC<SidebarProps> = ({ items = [], isOpen, onClose, onToggle
                         }
                       }}
                     >
-                      <Icon className={`h-5 w-5 mr-4 transition-all duration-300 ${active || hasActiveChildPath || isExpanded
-                        ? darkMode ? 'text-accent-300' : 'text-accent-600'
+                      <Icon className={`h-5 w-5 mr-3 transition-all duration-200 ${active || hasActiveChildPath || isExpanded
+                        ? darkMode ? 'text-primary-300' : 'text-primary-600'
                         : darkMode ? 'text-neutral-400' : 'text-neutral-500'
                         }`} />
-                      <span className="font-semibold flex-1">{item.title}</span>
+                      <span className="flex-1">{item.title}</span>
 
                       {item.children && (
                         <ChevronDown
-                          className={`h-4 w-4 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''
+                          className={`h-4 w-4 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''
                             } ${hasActiveChildPath || isExpanded
-                              ? darkMode ? 'text-accent-300' : 'text-accent-600'
+                              ? darkMode ? 'text-primary-300' : 'text-primary-600'
                               : darkMode ? 'text-neutral-400' : 'text-neutral-500'
                             }`}
                         />
                       )}
 
                       {item.badge && (
-                        <span className="ml-auto bg-gradient-to-r from-accent-500 to-pink-500 text-white text-xs px-3 py-1 rounded-full font-bold shadow-soft">
+                        <span className="ml-auto bg-primary-600 text-white text-xs px-2.5 py-1 rounded-full font-semibold">
                           {item.badge}
                         </span>
                       )}
@@ -247,19 +249,18 @@ const Sidebar: React.FC<SidebarProps> = ({ items = [], isOpen, onClose, onToggle
                                 to={child.path || '#'}
                                 onClick={onClose}
                                 className={`
-                                  flex items-center px-4 py-3 text-sm rounded-xl font-medium
-                                  transition-all duration-300 ease-in-out
-                                  transform hover:scale-[1.02] active:scale-[0.98]
+                                  flex items-center px-4 py-2.5 text-sm rounded-lg font-medium ml-2
+                                  transition-all duration-200 ease-in-out
                                   ${getActiveClassName(childActive)}
                                 `}
                               >
-                                <ChildIcon className={`h-4 w-4 mr-3 transition-all duration-300 ${childActive
-                                  ? darkMode ? 'text-accent-300' : 'text-accent-600'
+                                <ChildIcon className={`h-4 w-4 mr-3 transition-all duration-200 ${childActive
+                                  ? darkMode ? 'text-primary-300' : 'text-primary-600'
                                   : darkMode ? 'text-neutral-400' : 'text-neutral-500'
                                   }`} />
-                                <span className="font-medium">{child.title}</span>
+                                <span>{child.title}</span>
                                 {child.badge && (
-                                  <span className="ml-auto bg-gradient-to-r from-accent-500 to-pink-500 text-white text-xs px-2 py-1 rounded-full font-bold shadow-soft">
+                                  <span className="ml-auto bg-primary-600 text-white text-xs px-2 py-0.5 rounded-full font-semibold">
                                     {child.badge}
                                   </span>
                                 )}
@@ -276,19 +277,21 @@ const Sidebar: React.FC<SidebarProps> = ({ items = [], isOpen, onClose, onToggle
           </ul>
         </nav>
 
-        {/* Footer */}
-        <div className={`p-6 border-t ${darkMode ? 'border-neutral-800 bg-neutral-900/30' : 'border-neutral-200 bg-white/30'} backdrop-blur-sm`}>
+        {/* Premium Footer */}
+        <div className={`p-4 border-t ${darkMode 
+          ? 'border-neutral-800/50 bg-neutral-900/30' 
+          : 'border-neutral-200/80 bg-neutral-50/50'} backdrop-blur-sm mt-auto`}>
           <div className="text-center space-y-2">
-            <div className={`w-12 h-12 mx-auto rounded-2xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center shadow-glow`}>
-              <div className="h-6 w-6 text-white">
-                {React.createElement(getIconByName('Wallet'), { size: 20 })}
+            <div className={`w-10 h-10 mx-auto rounded-lg flex items-center justify-center shadow-banking`} style={{background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)'}}>
+              <div className="h-5 w-5 text-white">
+                {React.createElement(getIconByName('Wallet'), { size: 16 })}
               </div>
             </div>
-            <p className={`text-xs font-bold ${darkMode ? 'text-neutral-300' : 'text-neutral-700'}`}>
-              AccuzPay &copy; {new Date().getFullYear()}
+            <p className={`text-xs font-semibold ${darkMode ? 'text-neutral-300' : 'text-neutral-700'}`}>
+              PayVex &copy; {new Date().getFullYear()}
             </p>
             <p className={`text-xs ${darkMode ? 'text-neutral-500' : 'text-neutral-500'}`}>
-              Powered by Advanced Technology
+              Premium Banking Platform
             </p>
           </div>
         </div>

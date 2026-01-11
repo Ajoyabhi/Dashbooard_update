@@ -45,21 +45,21 @@ const StatCard: React.FC<StatCardProps> = ({
 
   return (
     <div className={`
-      card-hover p-6 border transition-all duration-500 transform hover:scale-[1.02] animate-fade-in
-      ${darkMode ? 'bg-neutral-900/50 backdrop-blur-md border-neutral-800/50' : 'bg-white/80 backdrop-blur-md border-neutral-200/50'}
+      card-premium p-5 border transition-all duration-200 hover:scale-[1.01] animate-fade-in relative overflow-hidden
+      ${darkMode ? 'bg-neutral-900/50 backdrop-blur-md border-neutral-800/50' : 'bg-white border-neutral-200/60'}
     `}>
       {/* Background decoration */}
-      <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-primary-500/5 to-secondary-500/5 rounded-full -translate-y-20 translate-x-20"></div>
+      <div className="absolute top-0 right-0 w-36 h-36 bg-gradient-to-br from-primary-500/5 to-primary-600/5 rounded-full -translate-y-18 translate-x-18"></div>
 
       <div className="relative z-10">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
-          <h3 className={`text-lg font-bold font-display ${darkMode ? 'text-white' : 'text-neutral-900'}`}>
+          <h3 className={`text-base font-bold font-display ${darkMode ? 'text-white' : 'text-neutral-900'}`}>
             {title}
           </h3>
           {trendValue !== undefined && (
             <div className={`
-              flex items-center space-x-2 px-3 py-2 rounded-xl text-sm font-semibold shadow-soft
+              flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold shadow-soft
               ${getTrendBgColor()}
             `}>
               {getTrendIcon()}
@@ -76,8 +76,8 @@ const StatCard: React.FC<StatCardProps> = ({
         </div>
 
         {/* Value */}
-        <div className="mb-6">
-          <p className={`text-3xl font-bold font-display ${darkMode ? 'text-white' : 'text-neutral-900'}`}>
+        <div className="mb-5">
+          <p className={`text-2xl font-bold font-display ${darkMode ? 'text-white' : 'text-neutral-900'}`}>
             {value}
           </p>
         </div>

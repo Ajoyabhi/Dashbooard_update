@@ -44,10 +44,10 @@ export default function DevelopmentDocs() {
       <div className="space-y-8">
         <div className="text-center space-y-4">
           <h1 className="text-4xl font-bold font-display text-neutral-900">
-            AccuzPay API Documentation
+            PayVex API Documentation
           </h1>
           <p className="text-lg text-neutral-600 max-w-3xl mx-auto">
-            Use AccuzPay APIs to create payin and payout transactions and to track their status. This guide covers authentication,
+            Use PayVex APIs to create payin and payout transactions and to track their status. This guide covers authentication,
             endpoints, request/response formats, and best practices for integrating with our payment gateway.
           </p>
         </div>

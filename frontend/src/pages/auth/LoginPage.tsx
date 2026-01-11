@@ -5,17 +5,11 @@ import {
   Lock,
   Eye,
   EyeOff,
-  CheckCircle,
-  Shield,
-  CreditCard,
-  TrendingUp,
-  Globe,
-  Banknote,
   ArrowRight,
-  Star,
-  Award,
-  Zap,
-  ShieldCheck
+  Sparkles,
+  TrendingUp,
+  Shield,
+  Zap
 } from 'lucide-react';
 
 const LoginPage: React.FC = () => {
@@ -46,19 +40,15 @@ const LoginPage: React.FC = () => {
       } else {
         console.log('LoginPage: Login successful, navigation will be handled by AuthContext');
       }
-      // If successful, the AuthContext will handle navigation automatically
     } catch (err: any) {
       console.error('LoginPage: Login error:', err);
 
       if (err.response) {
-        // Server responded with error
         const errorMessage = err.response.data?.message || err.response.data?.error || 'Server error occurred';
         setError(`Login failed: ${errorMessage}`);
       } else if (err.request) {
-        // Network error
         setError('Network error. Please check your internet connection and try again.');
       } else {
-        // Other error
         setError('An unexpected error occurred. Please try again.');
       }
     } finally {
@@ -67,201 +57,79 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex bg-gray-50">
-      {/* Left Side - Image Section */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
-        {/* Background Image */}
-        <div
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{
-            backgroundImage: `url('/images/landing.png')`
-          }}
-        >
-          {/* Overlay */}
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-900/80 via-indigo-900/70 to-purple-900/80"></div>
-        </div>
-
-        {/* Floating Elements */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-20 left-20 w-16 h-16 text-white/20 animate-float">
-            <CreditCard className="w-full h-full" />
-          </div>
-          <div className="absolute top-40 right-32 w-12 h-12 text-white/15 animate-float animation-delay-200">
-            <TrendingUp className="w-full h-full" />
-          </div>
-          <div className="absolute bottom-32 left-32 w-14 h-14 text-white/15 animate-float animation-delay-400">
-            <Banknote className="w-full h-full" />
-          </div>
-
-          {/* Gradient Orbs */}
-          <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-gradient-to-r from-blue-400/10 to-purple-400/10 rounded-full blur-3xl animate-pulse-slow"></div>
-          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-gradient-to-r from-indigo-400/10 to-pink-400/10 rounded-full blur-3xl animate-pulse-slow animation-delay-500"></div>
-        </div>
-
-        {/* Content Overlay */}
-        <div className="relative z-10 flex flex-col justify-center p-12 text-white">
-          <div className="max-w-lg">
-            {/* Logo */}
-            <div className="relative mb-8 flex justify-center">
-              <div className="w-32 h-32 bg-white rounded-2xl flex items-center justify-center shadow-2xl mb-6 transform hover:scale-105 transition-all duration-500 p-2">
-                <img
-                  src="/images/AccuzPay_logo.png"
-                  alt="AccuzPay Logo"
-                  className="w-full h-full object-contain"
-                />
-              </div>
-              <div className="absolute -top-2 -right-2 w-8 h-8 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full flex items-center justify-center shadow-lg">
-                <CheckCircle className="w-5 h-5 text-white" />
-              </div>
-            </div>
-
-            {/* Brand Content */}
-            <div className="space-y-6 mb-8">
-              {/* <h1 className="text-4xl font-bold font-display leading-tight">
-                AccuzPay
-              </h1> */}
-              <p className="text-xl text-blue-100 font-medium">
-                Premium Banking & Payment Solutions
-              </p>
-              <p className="text-base text-gray-300 leading-relaxed">
-                Experience the future of financial technology with our secure, lightning-fast payment gateway designed for modern businesses.
-              </p>
-            </div>
-
-            {/* Premium Features */}
-            <div className="space-y-4">
-              <div className="flex items-center space-x-4 p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 hover:bg-white/15 transition-all duration-300">
-                <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl flex items-center justify-center">
-                  <Shield className="w-6 h-6 text-white" />
-                </div>
-                <div className="text-left">
-                  <h3 className="font-semibold text-white">Bank-Grade Security</h3>
-                  <p className="text-sm text-blue-100">256-bit encryption & fraud protection</p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-4 p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 hover:bg-white/15 transition-all duration-300">
-                <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center">
-                  <Zap className="w-6 h-6 text-white" />
-                </div>
-                <div className="text-left">
-                  <h3 className="font-semibold text-white">Lightning Fast</h3>
-                  <p className="text-sm text-blue-100">Process payments in milliseconds</p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-4 p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 hover:bg-white/15 transition-all duration-300">
-                <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
-                  <Globe className="w-6 h-6 text-white" />
-                </div>
-                <div className="text-left">
-                  <h3 className="font-semibold text-white">Global Reach</h3>
-                  <p className="text-sm text-blue-100">Accept payments worldwide</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Trust Badges */}
-            <div className="mt-8 p-6 bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10">
-              <p className="text-sm text-gray-300 mb-4 text-center">Trusted by 50,000+ businesses globally</p>
-              <div className="flex justify-center space-x-4">
-                <div className="flex items-center space-x-2 px-3 py-2 bg-white/10 rounded-lg">
-                  <Award className="w-4 h-4 text-yellow-400" />
-                  <span className="text-xs text-white font-medium">PCI DSS</span>
-                </div>
-                <div className="flex items-center space-x-2 px-3 py-2 bg-white/10 rounded-lg">
-                  <ShieldCheck className="w-4 h-4 text-green-400" />
-                  <span className="text-xs text-white font-medium">SSL</span>
-                </div>
-                <div className="flex items-center space-x-2 px-3 py-2 bg-white/10 rounded-lg">
-                  <Star className="w-4 h-4 text-blue-400" />
-                  <span className="text-xs text-white font-medium">ISO 27001</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-neutral-50 via-blue-50/40 to-neutral-100 relative overflow-hidden">
+      {/* Animated Background Elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {/* Geometric Shapes */}
+        <div className="absolute top-20 left-10 w-72 h-72 bg-primary-200/20 rounded-full blur-3xl animate-pulse-slow"></div>
+        <div className="absolute bottom-20 right-10 w-96 h-96 bg-primary-300/20 rounded-full blur-3xl animate-pulse-slow animation-delay-500"></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-primary-100/30 rounded-full blur-3xl animate-pulse-slow animation-delay-1000"></div>
+        
+        {/* Grid Pattern */}
+        <div className="absolute inset-0 opacity-[0.03]" style={{
+          backgroundImage: `linear-gradient(to right, #2563eb 1px, transparent 1px), linear-gradient(to bottom, #2563eb 1px, transparent 1px)`,
+          backgroundSize: '50px 50px'
+        }}></div>
       </div>
 
-      {/* Right Side - Login Form */}
-      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 lg:p-8 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 relative overflow-hidden">
-        {/* Mobile Background Pattern */}
-        <div className="absolute inset-0 opacity-30">
-          <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-blue-600/5 via-indigo-600/5 to-purple-600/5"></div>
-          <div className="absolute top-1/4 right-1/4 w-64 h-64 bg-gradient-to-r from-blue-400/10 to-indigo-400/10 rounded-full blur-3xl animate-pulse"></div>
-          <div className="absolute bottom-1/4 left-1/4 w-48 h-48 bg-gradient-to-r from-indigo-400/10 to-purple-400/10 rounded-full blur-3xl animate-pulse animation-delay-1000"></div>
-          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-32 h-32 bg-gradient-to-r from-blue-300/5 to-indigo-300/5 rounded-full blur-2xl animate-pulse animation-delay-500"></div>
+      {/* Main Content */}
+      <div className="w-full max-w-[480px] relative z-10">
+        {/* Logo/Brand Section */}
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center w-40 h-40 bg-gradient-to-br from-primary-600 to-primary-800 rounded-2xl shadow-xl mb-6 transform hover:scale-105 transition-transform duration-300">
+            <img
+              src="/images/payvex_logo_.png"
+              alt="PayVex"
+              className="w-40 h-40 p-1.5"
+            />
+          </div>
+          <h1 className="text-4xl font-bold font-display text-neutral-900 mb-2 bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">
+            PayVex
+          </h1>
+          <p className="text-neutral-600 font-medium">Welcome back to your dashboard</p>
         </div>
 
-        {/* Floating Banking Icons for Mobile */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none lg:hidden">
-          <div className="absolute top-20 left-8 w-8 h-8 text-blue-400/20 animate-bounce">
-            <CreditCard className="w-full h-full" />
-          </div>
-          <div className="absolute top-32 right-12 w-6 h-6 text-indigo-400/20 animate-bounce animation-delay-300">
-            <Shield className="w-full h-full" />
-          </div>
-          <div className="absolute bottom-40 left-12 w-7 h-7 text-purple-400/20 animate-bounce animation-delay-700">
-            <Banknote className="w-full h-full" />
-          </div>
-          <div className="absolute bottom-20 right-8 w-6 h-6 text-blue-400/20 animate-bounce animation-delay-1000">
-            <TrendingUp className="w-full h-full" />
-          </div>
-        </div>
-        <div className="w-full max-w-md relative z-10">
-          {/* Mobile Logo */}
-          <div className="lg:hidden mb-6 sm:mb-8 text-center">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto bg-white/90 backdrop-blur-sm rounded-2xl flex items-center justify-center shadow-2xl mb-3 sm:mb-4 p-2 sm:p-3 border border-white/20">
-              <img
-                src="/images/AccuzPay_logo.png"
-                alt="AccuzPay Logo"
-                className="w-full h-full object-contain"
-              />
-            </div>
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-800 mb-1 sm:mb-2">AccuzPay</h1>
-            <p className="text-xs sm:text-sm text-gray-600 font-medium">Secure Banking Platform</p>
-          </div>
+        {/* Login Card */}
+        <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-neutral-200/60 p-8 sm:p-10 relative overflow-hidden">
+          {/* Decorative Corner Elements */}
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary-500/10 to-transparent rounded-bl-full"></div>
+          <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-primary-500/10 to-transparent rounded-tr-full"></div>
 
-          {/* Form Container */}
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-6 lg:p-8 border border-white/20 relative overflow-hidden">
-            {/* Subtle pattern overlay */}
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 via-transparent to-indigo-50/50 pointer-events-none"></div>
-            {/* Form Header */}
-            <div className="text-center mb-6 sm:mb-8 relative z-10">
-              <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1 sm:mb-2">
-                Welcome Back
-              </h2>
-              <p className="text-sm sm:text-base text-gray-600">
-                Sign in to your AccuzPay account
-              </p>
+          <div className="relative z-10">
+            {/* Header */}
+            <div className="mb-8">
+              <h2 className="text-2xl font-bold text-neutral-900 mb-2">Sign In</h2>
+              <p className="text-sm text-neutral-600">Enter your credentials to access your account</p>
             </div>
 
             {/* Error Message */}
             {error && (
-              <div className="mb-6 p-4 bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 rounded-2xl flex items-center space-x-3 relative z-10">
-                <div className="w-8 h-8 bg-gradient-to-r from-red-500 to-pink-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm">!</span>
+              <div className="mb-6 p-4 bg-error-50 border-l-4 border-error-500 rounded-lg flex items-start gap-3 animate-slide-down">
+                <div className="w-5 h-5 bg-error-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="text-white text-xs font-bold">!</span>
                 </div>
-                <p className="text-red-700 text-sm font-medium">{error}</p>
+                <p className="text-error-700 text-sm flex-1">{error}</p>
               </div>
             )}
 
             {/* Login Form */}
-            <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6 relative z-10">
+            <form onSubmit={handleSubmit} className="space-y-6">
               {/* Username Field */}
               <div className="space-y-2">
-                <label className="block text-sm font-semibold text-gray-700">
+                <label className="block text-sm font-semibold text-neutral-700">
                   Username
                 </label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <User className="h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+                    <User className={`h-5 w-5 transition-colors ${
+                      user_name ? 'text-primary-600' : 'text-neutral-400 group-focus-within:text-primary-600'
+                    }`} />
                   </div>
                   <input
                     type="text"
                     value={user_name}
                     onChange={(e) => setUserName(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 sm:py-4 bg-gray-50 border border-gray-200 rounded-xl sm:rounded-2xl text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-300 text-sm sm:text-base"
+                    className="w-full pl-12 pr-4 py-3.5 bg-neutral-50 border-2 border-neutral-200 rounded-xl text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-primary-500 focus:bg-white focus:ring-4 focus:ring-primary-500/10 transition-all duration-200 font-medium"
                     placeholder="Enter your username"
                     required
                   />
@@ -270,25 +138,27 @@ const LoginPage: React.FC = () => {
 
               {/* Password Field */}
               <div className="space-y-2">
-                <label className="block text-sm font-semibold text-gray-700">
+                <label className="block text-sm font-semibold text-neutral-700">
                   Password
                 </label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Lock className="h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+                    <Lock className={`h-5 w-5 transition-colors ${
+                      password ? 'text-primary-600' : 'text-neutral-400 group-focus-within:text-primary-600'
+                    }`} />
                   </div>
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-12 pr-12 py-3 sm:py-4 bg-gray-50 border border-gray-200 rounded-xl sm:rounded-2xl text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all duration-300 text-sm sm:text-base"
+                    className="w-full pl-12 pr-12 py-3.5 bg-neutral-50 border-2 border-neutral-200 rounded-xl text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-primary-500 focus:bg-white focus:ring-4 focus:ring-primary-500/10 transition-all duration-200 font-medium"
                     placeholder="Enter your password"
                     required
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-neutral-400 hover:text-neutral-600 transition-colors"
                   >
                     {showPassword ? (
                       <EyeOff className="h-5 w-5" />
@@ -301,18 +171,18 @@ const LoginPage: React.FC = () => {
 
               {/* Remember Me & Forgot Password */}
               <div className="flex items-center justify-between">
-                <label className="flex items-center space-x-2">
+                <label className="flex items-center gap-2 cursor-pointer group">
                   <input
                     type="checkbox"
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    className="w-4 h-4 text-primary-600 border-neutral-300 rounded focus:ring-primary-500 focus:ring-2 cursor-pointer"
                   />
-                  <span className="text-sm text-gray-600">Remember me</span>
+                  <span className="text-sm text-neutral-600 group-hover:text-neutral-900 transition-colors">Remember me</span>
                 </label>
                 <button
                   type="button"
-                  className="text-sm font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+                  className="text-sm font-semibold text-primary-600 hover:text-primary-700 transition-colors"
                 >
-                  Forgot Password?
+                  Forgot password?
                 </button>
               </div>
 
@@ -320,10 +190,11 @@ const LoginPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className={`w-full py-3 sm:py-4 px-6 rounded-xl sm:rounded-2xl font-semibold text-white transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg text-sm sm:text-base ${loading
-                  ? 'bg-gradient-to-r from-gray-400 to-gray-500 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 shadow-xl'
-                  } flex items-center justify-center space-x-2`}
+                className={`w-full py-4 px-6 rounded-xl font-semibold text-white transition-all duration-200 flex items-center justify-center gap-2 ${
+                  loading
+                    ? 'bg-neutral-400 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]'
+                }`}
               >
                 {loading ? (
                   <>
@@ -339,34 +210,47 @@ const LoginPage: React.FC = () => {
               </button>
             </form>
 
-            {/* Form Footer */}
-            <div className="mt-6 sm:mt-8 text-center relative z-10">
-              <p className="text-xs sm:text-sm text-gray-600">
-                Don't have an account?{' '}
-                <button className="font-semibold text-blue-600 hover:text-blue-700 transition-colors">
-                  Contact Sales
-                </button>
-              </p>
+            {/* Divider */}
+            <div className="my-8 flex items-center">
+              <div className="flex-1 border-t border-neutral-200"></div>
+              <span className="px-4 text-sm text-neutral-500 font-medium">Quick Access</span>
+              <div className="flex-1 border-t border-neutral-200"></div>
             </div>
-          </div>
 
-          {/* Additional Info */}
-          <div className="mt-4 sm:mt-6 text-center relative z-10">
-            <div className="flex justify-center space-x-3 sm:space-x-6 text-xs text-gray-600">
-              <div className="flex items-center space-x-1 px-2 sm:px-3 py-1.5 sm:py-2 bg-white/60 backdrop-blur-sm rounded-lg border border-white/30">
-                <Shield className="w-3 h-3 sm:w-4 sm:h-4 text-blue-600" />
-                <span className="font-medium text-xs sm:text-sm">Secure</span>
+            {/* Feature Pills */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="flex flex-col items-center p-3 rounded-xl bg-neutral-50 hover:bg-primary-50 transition-colors cursor-pointer group">
+                <Shield className="w-5 h-5 text-neutral-400 group-hover:text-primary-600 mb-1.5 transition-colors" />
+                <span className="text-xs font-medium text-neutral-600 group-hover:text-primary-700">Secure</span>
               </div>
-              <div className="flex items-center space-x-1 px-2 sm:px-3 py-1.5 sm:py-2 bg-white/60 backdrop-blur-sm rounded-lg border border-white/30">
-                <Zap className="w-3 h-3 sm:w-4 sm:h-4 text-indigo-600" />
-                <span className="font-medium text-xs sm:text-sm">Fast</span>
+              <div className="flex flex-col items-center p-3 rounded-xl bg-neutral-50 hover:bg-primary-50 transition-colors cursor-pointer group">
+                <Zap className="w-5 h-5 text-neutral-400 group-hover:text-primary-600 mb-1.5 transition-colors" />
+                <span className="text-xs font-medium text-neutral-600 group-hover:text-primary-700">Fast</span>
               </div>
-              <div className="flex items-center space-x-1 px-2 sm:px-3 py-1.5 sm:py-2 bg-white/60 backdrop-blur-sm rounded-lg border border-white/30">
-                <Globe className="w-3 h-3 sm:w-4 sm:h-4 text-purple-600" />
-                <span className="font-medium text-xs sm:text-sm">Global</span>
+              <div className="flex flex-col items-center p-3 rounded-xl bg-neutral-50 hover:bg-primary-50 transition-colors cursor-pointer group">
+                <TrendingUp className="w-5 h-5 text-neutral-400 group-hover:text-primary-600 mb-1.5 transition-colors" />
+                <span className="text-xs font-medium text-neutral-600 group-hover:text-primary-700">Reliable</span>
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Footer */}
+        <div className="mt-8 text-center">
+          <p className="text-sm text-neutral-600">
+            Don't have an account?{' '}
+            <button className="font-semibold text-primary-600 hover:text-primary-700 transition-colors">
+              Contact Support
+            </button>
+          </p>
+        </div>
+
+        {/* Floating Decorations */}
+        <div className="absolute -top-10 -right-10 w-20 h-20 text-primary-200/30 animate-float pointer-events-none hidden lg:block">
+          <Sparkles className="w-full h-full" />
+        </div>
+        <div className="absolute -bottom-10 -left-10 w-16 h-16 text-primary-200/30 animate-float animation-delay-500 pointer-events-none hidden lg:block">
+          <Sparkles className="w-full h-full" />
         </div>
       </div>
     </div>

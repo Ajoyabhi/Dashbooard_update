@@ -98,29 +98,29 @@ const Table: React.FC<TableProps> = ({
 
   return (
     <div className={`
-      card-hover overflow-hidden border transition-all duration-500 animate-fade-in
-      ${darkMode ? 'bg-neutral-900/50 backdrop-blur-md border-neutral-800/50' : 'bg-white/80 backdrop-blur-md border-neutral-200/50'}
+      card-premium overflow-hidden border transition-all duration-200 animate-fade-in
+      ${darkMode ? 'bg-neutral-900/50 backdrop-blur-md border-neutral-800/50' : 'bg-white border-neutral-200/60'}
     `}>
-      {/* Header */}
+      {/* Premium Header */}
       {(title || searchable || filterable) && (
-        <div className={`p-6 border-b ${darkMode ? 'border-neutral-800 bg-neutral-900/30' : 'border-neutral-200 bg-neutral-50/50'} flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4`}>
+        <div className={`p-5 border-b ${darkMode ? 'border-neutral-800/50 bg-neutral-900/30' : 'border-neutral-200/80 bg-neutral-50/50'} flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4`}>
           {title && (
             <div>
-              <h2 className={`text-xl font-bold font-display ${darkMode ? 'text-white' : 'text-neutral-900'}`}>
+              <h2 className={`text-lg font-bold font-display ${darkMode ? 'text-white' : 'text-neutral-900'}`}>
                 {title}
               </h2>
               {description && (
-                <p className={`text-sm ${darkMode ? 'text-neutral-400' : 'text-neutral-600'} mt-1`}>
+                <p className={`text-sm ${darkMode ? 'text-neutral-400' : 'text-neutral-500'} mt-1`}>
                   {description}
                 </p>
               )}
             </div>
           )}
 
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2">
             {searchable && (
               <div className="relative">
-                <div className={`absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none ${darkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                <div className={`absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none ${darkMode ? 'text-neutral-400' : 'text-neutral-400'}`}>
                   <Search className="h-4 w-4" />
                 </div>
                 <input
@@ -128,13 +128,13 @@ const Table: React.FC<TableProps> = ({
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className={`
-                    block w-full pl-12 pr-4 py-3 rounded-xl shadow-soft text-sm transition-all duration-300
+                    block w-full pl-10 pr-4 py-2.5 rounded-lg text-sm transition-all duration-200
                     ${darkMode
                       ? 'bg-neutral-800/50 border-neutral-700 text-white placeholder-neutral-400 focus:border-primary-500 focus:ring-primary-500/20'
-                      : 'bg-white/50 border-neutral-200 text-neutral-900 placeholder-neutral-500 focus:border-primary-500 focus:ring-primary-500/20'
-                    } border backdrop-blur-sm
+                      : 'bg-white border-neutral-300 text-neutral-900 placeholder-neutral-400 focus:border-primary-500 focus:ring-primary-500/20'
+                    } border
                   `}
-                  placeholder="Search transactions..."
+                  placeholder="Search..."
                 />
               </div>
             )}
@@ -143,11 +143,11 @@ const Table: React.FC<TableProps> = ({
               <button
                 type="button"
                 className={`
-                  inline-flex items-center px-4 py-3 rounded-xl text-sm font-semibold shadow-soft transition-all duration-300 transform hover:scale-105 active:scale-95
+                  inline-flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200
                   ${darkMode
-                    ? 'bg-neutral-800/50 border-neutral-700 text-neutral-300 hover:bg-neutral-700/50 hover:text-white'
-                    : 'bg-white/50 border-neutral-200 text-neutral-700 hover:bg-neutral-100/50 hover:text-neutral-900'
-                  } border backdrop-blur-sm
+                    ? 'bg-neutral-800 border-neutral-700 text-neutral-300 hover:bg-neutral-700 hover:text-white'
+                    : 'bg-white border-neutral-300 text-neutral-700 hover:bg-neutral-50 hover:text-neutral-900'
+                  } border shadow-soft
                 `}
               >
                 <Filter className="h-4 w-4 mr-2" />
@@ -157,10 +157,7 @@ const Table: React.FC<TableProps> = ({
 
             <button
               type="button"
-              className={`
-                inline-flex items-center px-4 py-3 rounded-xl text-sm font-semibold shadow-soft transition-all duration-300 transform hover:scale-105 active:scale-95
-                bg-gradient-to-r from-primary-500 to-secondary-500 text-white hover:from-primary-600 hover:to-secondary-600
-              `}
+              className="inline-flex items-center px-3 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 text-white hover:opacity-90 shadow-banking" style={{background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)'}}
             >
               <Download className="h-4 w-4 mr-2" />
               Export
@@ -169,7 +166,7 @@ const Table: React.FC<TableProps> = ({
         </div>
       )}
 
-      {/* Table */}
+      {/* Premium Table */}
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-neutral-200">
           <thead className={darkMode ? 'bg-neutral-900/30' : 'bg-neutral-50/50'}>
@@ -179,7 +176,7 @@ const Table: React.FC<TableProps> = ({
                   key={index}
                   scope="col"
                   className={`
-                    px-6 py-4 text-left text-xs font-bold uppercase tracking-wider
+                    px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider
                     ${darkMode ? 'text-neutral-300' : 'text-neutral-600'}
                     ${column.className || ''}
                   `}
@@ -189,7 +186,7 @@ const Table: React.FC<TableProps> = ({
               ))}
             </tr>
           </thead>
-          <tbody className={`divide-y ${darkMode ? 'divide-neutral-800 bg-neutral-900/20' : 'divide-neutral-200 bg-white/50'}`}>
+          <tbody className={`divide-y ${darkMode ? 'divide-neutral-800/50 bg-neutral-900/20' : 'divide-neutral-200 bg-white'}`}>
             {loading ? (
               <tr>
                 <td
@@ -222,10 +219,10 @@ const Table: React.FC<TableProps> = ({
                 <tr
                   key={rowIndex}
                   className={`
-                    transition-all duration-300 hover:scale-[1.01]
+                    transition-all duration-200
                     ${darkMode
-                      ? 'hover:bg-neutral-800/30 hover:shadow-glow'
-                      : 'hover:bg-neutral-50/50 hover:shadow-soft'
+                      ? 'hover:bg-neutral-800/30'
+                      : 'hover:bg-neutral-50/80'
                     }
                   `}
                 >
@@ -233,7 +230,7 @@ const Table: React.FC<TableProps> = ({
                     <td
                       key={colIndex}
                       className={`
-                        px-6 py-4 whitespace-nowrap text-sm font-medium
+                        px-5 py-3.5 whitespace-nowrap text-sm font-medium
                         ${darkMode ? 'text-neutral-300' : 'text-neutral-700'}
                         ${column.className || ''}
                       `}
@@ -250,11 +247,11 @@ const Table: React.FC<TableProps> = ({
         </table>
       </div>
 
-      {/* Pagination */}
+      {/* Premium Pagination */}
       {pagination && (
         <div className={`
-          flex items-center justify-between px-6 py-4 border-t
-          ${darkMode ? 'border-neutral-800 bg-neutral-900/30' : 'border-neutral-200 bg-neutral-50/50'}
+          flex items-center justify-between px-5 py-4 border-t
+          ${darkMode ? 'border-neutral-800/50 bg-neutral-900/30' : 'border-neutral-200/80 bg-neutral-50/50'}
         `}>
           <div className="flex justify-between flex-1 lg:hidden">
             <button
@@ -299,11 +296,11 @@ const Table: React.FC<TableProps> = ({
                 value={pageSize}
                 onChange={(e) => handlePageSizeChange(Number(e.target.value))}
                 className={`
-                  block rounded-xl shadow-soft text-sm font-semibold transition-all duration-300
+                  block rounded-lg shadow-soft text-sm font-medium transition-all duration-200
                   ${darkMode
                     ? 'bg-neutral-800/50 border-neutral-700 text-neutral-300 focus:border-primary-500 focus:ring-primary-500/20'
-                    : 'bg-white/50 border-neutral-200 text-neutral-700 focus:border-primary-500 focus:ring-primary-500/20'
-                  } border backdrop-blur-sm
+                    : 'bg-white border-neutral-300 text-neutral-700 focus:border-primary-500 focus:ring-primary-500/20'
+                  } border
                 `}
               >
                 <option value={10}>10 per page</option>
@@ -381,14 +378,15 @@ const Table: React.FC<TableProps> = ({
                         <button
                           onClick={() => handlePageChange(page as number)}
                           className={`
-                            relative inline-flex items-center px-4 py-2 border text-sm font-semibold transition-all duration-300
+                            relative inline-flex items-center px-3.5 py-2 border text-sm font-medium transition-all duration-200
                             ${page === currentPage
-                              ? 'z-10 bg-gradient-to-r from-primary-500 to-secondary-500 border-primary-500 text-white shadow-glow'
+                              ? 'z-10 border-primary-600 text-white shadow-banking'
                               : darkMode
                                 ? 'bg-neutral-800/50 border-neutral-700 text-neutral-400 hover:bg-neutral-700/50 hover:text-white'
-                                : 'bg-white/50 border-neutral-200 text-neutral-600 hover:bg-neutral-100/50 hover:text-neutral-900'
-                            } backdrop-blur-sm
+                                : 'bg-white border-neutral-300 text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900'
+                            }
                           `}
+                          style={page === currentPage ? {background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)'} : {}}
                         >
                           {page}
                         </button>
