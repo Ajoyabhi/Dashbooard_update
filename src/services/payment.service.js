@@ -452,7 +452,7 @@ const unpayPayin = async (payinData, adminCharge, agentCharge, totalCharges, use
     const aesIV = "oR21lVkifQEBNRQS";
     const apiKey = "QPf0uqDt0EjQqkseizXyr1Ydn21HF9cOiQEFtjrV";
     const partnerId = "4071";
-    const webhookUrl = "https://dashboard.accuzpay.in/api/payments/unpay/callback";
+    const webhookUrl = "https://payvex.in/api/payments/unpay/callback";
     console.log("webhookUrl", webhookUrl);
     // Prepare request body
     const requestBody = {

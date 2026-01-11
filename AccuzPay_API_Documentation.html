@@ -244,7 +244,7 @@
 
     <h2 id="base-url">Base URL</h2>
     <p>All API endpoints are hosted at:</p>
-    <div class="endpoint">https://dashboard.accuzpay.in</div>
+    <div class="endpoint">https://payvex.in</div>
 
     <h2 id="authentication">Authentication</h2>
     <p>All API requests require authentication using JWT tokens. Include the token in the Authorization header of your
@@ -254,7 +254,7 @@
     <pre><code>Authorization: YOUR_JWT_TOKEN</code></pre>
 
     <h3>Example</h3>
-    <pre><code>curl --location 'https://dashboard.accuzpay.in/api/payments/payin' \
+    <pre><code>curl --location 'https://payvex.in/api/payments/payin' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: YOUR_JWT_TOKEN' \
 --data '{...}'</code></pre>
@@ -267,7 +267,7 @@
     <p>Create a new payin transaction to accept payments from customers.</p>
 
     <h3>Endpoint</h3>
-    <div class="endpoint">POST https://dashboard.accuzpay.in/api/payments/payin</div>
+    <div class="endpoint">POST https://payvex.in/api/payments/payin</div>
 
     <h3>Request Body</h3>
     <pre><code>{
@@ -323,7 +323,7 @@
     </table>
 
     <h3>cURL Example</h3>
-    <pre><code>curl --location 'https://dashboard.accuzpay.in/api/payments/payin' \
+    <pre><code>curl --location 'https://payvex.in/api/payments/payin' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: YOUR_JWT_TOKEN' \
 --data '{
@@ -339,7 +339,7 @@
   "success": true,
   "data": {
     "transaction_id": "TXN_123456789",
-    "payment_url": "https://dashboard.accuzpay.in/pay/TXN_123456789",
+    "payment_url": "https://payvex.in/pay/TXN_123456789",
     "status": "pending",
     "amount": 1000,
     "reference_id": "TXN123456"
@@ -350,7 +350,7 @@
     <p>Create a new payout transaction to transfer money to beneficiaries.</p>
 
     <h3>Endpoint</h3>
-    <div class="endpoint">POST https://dashboard.accuzpay.in/api/payments/payout/</div>
+    <div class="endpoint">POST https://payvex.in/api/payments/payout/</div>
 
     <h3>Request Body</h3>
     <pre><code>{
@@ -406,7 +406,7 @@
     </table>
 
     <h3>cURL Example</h3>
-    <pre><code>curl --location 'https://dashboard.accuzpay.in/api/payments/payout/' \
+    <pre><code>curl --location 'https://payvex.in/api/payments/payout/' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: YOUR_JWT_TOKEN' \
 --data '{
@@ -435,10 +435,10 @@
     <h3>Payin Status</h3>
 
     <h4>Endpoint</h4>
-    <div class="endpoint">GET https://dashboard.accuzpay.in/api/payments/payin/transaction/{transaction_id}</div>
+    <div class="endpoint">GET https://payvex.in/api/payments/payin/transaction/{transaction_id}</div>
 
     <h4>cURL Example</h4>
-    <pre><code>curl --location 'https://dashboard.accuzpay.in/api/payments/payin/transaction/TXN_123456789' \
+    <pre><code>curl --location 'https://payvex.in/api/payments/payin/transaction/TXN_123456789' \
 --header 'Authorization: YOUR_JWT_TOKEN'</code></pre>
 
     <h4>Response Example</h4>
@@ -458,10 +458,10 @@
     <h3>Payout Status</h3>
 
     <h4>Endpoint</h4>
-    <div class="endpoint">GET https://dashboard.accuzpay.in/api/payments/payout/transaction/{transaction_id}</div>
+    <div class="endpoint">GET https://payvex.in/api/payments/payout/transaction/{transaction_id}</div>
 
     <h4>cURL Example</h4>
-    <pre><code>curl --location 'https://dashboard.accuzpay.in/api/payments/payout/transaction/PAYOUT_123456789' \
+    <pre><code>curl --location 'https://payvex.in/api/payments/payout/transaction/PAYOUT_123456789' \
 --header 'Authorization: YOUR_JWT_TOKEN'</code></pre>
 
     <h4>Response Example</h4>
@@ -493,10 +493,10 @@
     <p>Check your current account balance and transaction limits.</p>
 
     <h3>Endpoint</h3>
-    <div class="endpoint">GET https://dashboard.accuzpay.in/api/payments/balanceCheck</div>
+    <div class="endpoint">GET https://payvex.in/api/payments/balanceCheck</div>
 
     <h3>cURL Example</h3>
-    <pre><code>curl --location 'https://dashboard.accuzpay.in/api/payments/balanceCheck' \
+    <pre><code>curl --location 'https://payvex.in/api/payments/balanceCheck' \
 --header 'Authorization: YOUR_JWT_TOKEN'</code></pre>
 
     <h3>Response Example</h3>
