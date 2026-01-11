@@ -1,8 +1,8 @@
 import axios from 'axios';
 
 const api = axios.create({
-    // baseURL: 'https://dashboard.accuzpay.in/api',
-    baseURL: 'http://localhost:3004/api',
+    baseURL: 'https://payvex.in/api',
+    // baseURL: 'http://localhost:3004/api',
     headers: {
         'Content-Type': 'application/json',
     },
