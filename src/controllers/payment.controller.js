@@ -513,6 +513,18 @@ const handlePhilpayPayoutCallback = async (req, res) => {
   }
 };
 
+const handleBipspayCallback = async (req, res) => {
+  try {
+    const callbackData = req.method === 'GET' ? req.query : req.body;
+    logger.info('Received Bipspay callback', {
+      method: req.method,
+      data: callbackData
+    });
+  } catch (error) {
+    logger.error('Error processing Bipspay callback', { error: error.message });
+    res.status(500).json({ success: false, message: 'Error processing callback' });
+  }
+};
 module.exports = {
   initiatePayment,
   handleUnpayCallback,
@@ -522,7 +534,8 @@ module.exports = {
   validatePaymentRequestpayin,
   handleSpayCallback,
   handleSpayPayoutCallback,
-  handlePhilpayPayoutCallback
+  handlePhilpayPayoutCallback,
+  handleBipspayCallback
 };
 
 

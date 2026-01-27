@@ -215,6 +215,7 @@ export default function UserCallbacks() {
                   <option value="Unpay">Unpay</option>
                   <option value="Spay">Spay</option>
                   <option value="Philpay">Philpay</option>
+                  <option value="Bipspay">Bipspay</option>
                 </select>
               </div>
               <button
@@ -249,6 +250,7 @@ export default function UserCallbacks() {
                   <option value="Unpay">Unpay</option>
                   <option value="Spay">Spay</option>
                   <option value="Philpay">Philpay</option>
+                  <option value="Bipspay">Bipspay</option>
                 </select>
               </div>
               <button

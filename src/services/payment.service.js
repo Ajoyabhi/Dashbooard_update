@@ -329,6 +329,9 @@ const processPayin = async (data) => {
     } else if (user.MerchantDetail.payin_merchant_name == "SpayIcici") {
       result = await spayPayinIcici(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee);
     }
+    else if (user.MerchantDetail.payin_merchant_name == "Bipspay") {
+      result = await bipspayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee);
+    }
     else {
       throw new Error('Invalid merchant name');
     }
@@ -610,7 +613,129 @@ const spayPayinIcici = async (payinData, adminCharge, agentCharge, totalCharges,
   }
 };
 
+// BipsPay Token Cache
+let cachedBipspayToken = null;
+let tokenExpiry = null;
+
+const getBipspayToken = async () => {
+  const now = Date.now();
+  if (cachedBipspayToken && tokenExpiry && now < tokenExpiry) {
+    return cachedBipspayToken;
+  }
+
+  try {
+    const response = await axios.post('https://gateway.bipspay.com/auth/token', {
+      user_name: "Velocis",
+      password: "Velocis_2026@"
+    }, {
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.data && response.data.token) {
+      cachedBipspayToken = response.data.token;
+      // Expire 2 minutes early to be safe (28 minutes)
+      tokenExpiry = now + (28 * 60 * 1000);
+      return cachedBipspayToken;
+    } else {
+      throw new Error('Failed to get BipsPay token');
+    }
+  } catch (error) {
+    logger.error('BipsPay Token Generation Error:', error.message);
+    throw error;
+  }
+};
+
+const bipspayPayin = async (payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee) => {
+  try {
+    // Validate required fields
+    if (!payinData.reference_id || !payinData.order_amount) {
+      throw new Error('Missing required fields: reference_id or order_amount');
+    }
+
+    const token = await getBipspayToken();
+
+    const requestBody = {
+      collection_refid: payinData.reference_id,
+      collection_amount: payinData.order_amount
+    };
+
+    const response = await axios.post('https://gateway.bipspay.com/api/v6/createorder', requestBody, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    if (response.data.statuscode === 'TXNS') {
+      return {
+        success: true,
+        data: response.data
+      };
+    } else {
+      throw new Error(response.data.message || 'Payment initiation failed');
+    } 
+  } catch (error) {
+    logger.error('Error processing BipsPay payin request', {
+      error: error.message,
+      stack: error.stack
+    });
+    throw error;
+  }
+};
+
+const bipspayPayout = async (payoutData) => {
+  try {
+    const token = await getBipspayToken();
+
+    const requestBody = {
+      reference: payoutData.reference_id,
+      account_number: payoutData.beneficiary_details.account_number,
+      beneficiary_name: payoutData.beneficiary_details.beneficiary_name,
+      requesttype: payoutData.request_type,
+      amount: payoutData.amount.toString(),
+      account_ifsc: payoutData.beneficiary_details.account_ifsc,
+      bankname: payoutData.beneficiary_details.bank_name
+    };
+
+    const response = await axios.post('https://gateway.bipspay.com/api/v6/withdraw', requestBody, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    if (response.data.statuscode === 'TXNS') {
+      return {
+        success: true,
+        status: 200,
+        data: response.data
+      };
+    } else {
+      return {
+        success: false,
+        status: 400,
+        data: response.data,
+        message: response.data.message || 'Payout processing failed'
+      };
+    }
+  } catch (error) {
+    logger.error('Error processing BipsPay payout request', {
+      error: error.message,
+      stack: error.stack
+    });
+    return {
+      success: false,
+      status: error.response ? error.response.status : 500,
+      message: error.message,
+      data: error.response ? error.response.data : null
+    };
+  }
+};
 
 module.exports = {
-  processPayin
+  processPayin,
+  bipspayPayout
 }; 

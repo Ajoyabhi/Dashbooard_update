@@ -9,6 +9,7 @@ const PayoutTransaction = require('../models/payoutTransaction.model');
 const UserTransaction = require('../models/userTransaction.model');
 const { Op } = require('sequelize');
 const { unpayPayout, spayPayout, philpayPayout } = require('../merchant_payin_payout/merchant_payout_request');
+const { bipspayPayout } = require('../services/payment.service');
 const getClientIp = require('../utils/getClientIp');
 const mongoose = require('mongoose');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
@@ -452,6 +453,79 @@ const initiatePayout = async (req, res) => {
             success: false,
             message: result.data.message || 'Payout processing failed',
             reference_id: result.data.apitxnid
+          });
+        }
+      }
+      else if (user.MerchantDetail.payout_merchant_name === 'Bipspay') {
+        const payoutData = {
+          reference_id,
+          user_id,
+          amount,
+          amountToDeduct,
+          request_type,
+          beneficiary_details: {
+            account_number,
+            account_ifsc,
+            bank_name,
+            beneficiary_name
+          }
+        };
+        result = await bipspayPayout(payoutData);
+        console.log("this is result of bipspay payout", result)
+        if (result.success) {
+          await payoutTransaction.updateOne(
+            { reference_id: reference_id },
+            { $set: { status: "completed", gateway_response: { reference_id, status: "completed", message: result.data.message, merchant_response: result.data.apitxnid } } }
+          );
+          await userTransaction.updateOne(
+            { reference_id: reference_id },
+            { $set: { status: "completed", gateway_response: { reference_id, status: "completed", message: result.data.message, merchant_response: result.data.apitxnid } } }
+          );
+          await TransactionCharges.update(
+            {
+              status: 'completed',
+              merchant_response: result.data.apitxnid
+            },
+            { where: { reference_id: reference_id } }
+          );
+          return res.status(200).json({
+            success: true,
+            result: result.data.message,
+            utr: result.data.utr,
+            reference_id: result.data.apitxnid
+          });
+        } else {
+          await payoutTransaction.updateOne(
+            { reference_id: reference_id },
+            { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result.message || 'Unknown error' } } }
+          );
+          await userTransaction.updateOne(
+            { reference_id: reference_id },
+            { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result.message || 'Unknown error' } } }
+          );
+          await TransactionCharges.update(
+            {
+              status: 'failed',
+              merchant_response: result.data?.apitxnid
+            },
+            { where: { reference_id: reference_id } }
+          );
+
+          // Revert balance
+          const userFinancial = await FinancialDetails.findOne({ where: { user_id: user_id } });
+          if (userFinancial) {
+            const newSettlement = parseFloat(userFinancial.settlement) + parseFloat(amountToDeduct);
+            await FinancialDetails.update(
+              { settlement: newSettlement },
+              { where: { user_id: user_id } }
+            );
+          }
+
+          return res.status(400).json({
+            success: false,
+            message: 'Payout processing failed',
+            error: result.message || 'Unknown error',
+            reference_id: result.data?.apitxnid
           });
         }
       }
