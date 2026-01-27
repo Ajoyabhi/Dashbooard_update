@@ -520,8 +520,47 @@ const handleBipspayCallback = async (req, res) => {
       method: req.method,
       data: callbackData
     });
+    console.log("this is callback data of bipspay callback", callbackData);
+    const job = await callbackQueue.add(callbackData, {
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 5000
+      }
+    });
+    res.status(200).json({
+      success: true,
+      message: 'Callback processed successfully',
+      job_id: job.id
+    });
   } catch (error) {
     logger.error('Error processing Bipspay callback', { error: error.message });
+    res.status(500).json({ success: false, message: 'Error processing callback' });
+  }
+};
+
+const handleBipspayPayoutCallback = async (req, res) => {
+  try {
+    const callbackData = req.method === 'GET' ? req.query : req.body;
+    logger.info('Received Bipspay payout callback', {
+      method: req.method,
+      data: callbackData
+    });
+    console.log("this is callback data of bipspay payout", callbackData);
+    const job = await bipspayPayoutQueue.add(callbackData, {
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 5000
+      }
+    });
+    res.status(200).json({
+      success: true,
+      message: 'Callback processed successfully',
+      job_id: job.id
+    });
+  } catch (error) {
+    logger.error('Error processing Bipspay payout callback', { error: error.message });
     res.status(500).json({ success: false, message: 'Error processing callback' });
   }
 };
@@ -535,7 +574,8 @@ module.exports = {
   handleSpayCallback,
   handleSpayPayoutCallback,
   handlePhilpayPayoutCallback,
-  handleBipspayCallback
+  handleBipspayCallback,
+  handleBipspayPayoutCallback
 };
 
 

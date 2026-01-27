@@ -3,7 +3,7 @@ const router = express.Router();
 const { auth } = require('../middleware/auth.middleware');
 const { checkRole } = require('../middleware/role.middleware');
 const { initiatePayment, getTransactionStatus, handleUnpayCallback, handleSpayCallback, 
-  handleSpayPayoutCallback, handlePhilpayPayoutCallback, handleBipspayCallback } = require('../controllers/payment.controller');
+  handleSpayPayoutCallback, handlePhilpayPayoutCallback, handleBipspayCallback, handleBipspayPayoutCallback } = require('../controllers/payment.controller');
 const { initiatePayout , getPayoutTransactionStatus, handleBalanceCheck} = require('../controllers/payment.payout');
 
 
@@ -56,6 +56,10 @@ router.post('/philpay/payout/callback', handlePhilpayPayoutCallback);
 // Bipspay callback route - no authentication needed as it's called by Bipspay
 router.get('/bipspay/payin/callback', handleBipspayCallback);
 router.post('/bipspay/payin/callback', handleBipspayCallback);
+
+// Bipspay payout callback route - no authentication needed as it's called by Bipspay
+router.get('/bipspay/payout/callback', handleBipspayPayoutCallback);
+router.post('/bipspay/payout/callback', handleBipspayPayoutCallback);
 
 router.get('/balanceCheck', 
   auth, 
