@@ -400,6 +400,126 @@ bipspayCallbackQueue.process(async function (job) {
       throw new Error('Transaction records not found');
     }
 
+    // After verifying records, ensure callback amount matches original requested amount
+    const requestedAmount = parseFloat(payinTransaction.amount || 0);
+    const callbackAmount = parseFloat(amount || 0);
+
+    if (!isNaN(requestedAmount) && !isNaN(callbackAmount) && requestedAmount !== callbackAmount) {
+      const mismatchMessage = `Callback amount ${callbackAmount} does not match requested amount ${requestedAmount}`;
+      logger.warn('BipsPay: Amount mismatch detected', {
+        jobId: job.id,
+        apitxnid,
+        requestedAmount,
+        callbackAmount
+      });
+
+      const mismatchStatus = 'failed';
+      const mismatchUpdateData = {
+        status: mismatchStatus,
+        gateway_response: {
+          utr,
+          status: mismatchStatus,
+          message: mismatchMessage,
+          raw_response: job.data
+        }
+      };
+
+      // Update all transaction records to failed due to mismatch
+      const session = await mongoose.startSession();
+      try {
+        await session.withTransaction(async () => {
+          await Promise.all([
+            PayinTransaction.updateOne(
+              { reference_id: apitxnid },
+              { $set: mismatchUpdateData }
+            ),
+            UserTransaction.updateOne(
+              { reference_id: apitxnid },
+              { $set: mismatchUpdateData }
+            ),
+            TransactionCharges.update(
+              {
+                status: mismatchStatus,
+                transaction_utr: utr
+              },
+              {
+                where: { reference_id: apitxnid },
+                returning: true
+              }
+            )
+          ]);
+        });
+      } finally {
+        await session.endSession();
+      }
+
+      // Fetch merchant details to notify them of the mismatch
+      const userIdForMismatch = payinTransaction.user.user_id;
+      const merchantDetailsMismatch = await MerchantDetails.findOne({
+        where: {
+          user_id: parseInt(userIdForMismatch, 10)
+        }
+      });
+
+      if (merchantDetailsMismatch?.payin_callback) {
+        const callbackData = {
+          reference_id: apitxnid,
+          amount: callbackAmount,
+          status: mismatchStatus,
+          utr: utr,
+          message: mismatchMessage,
+          timestamp: new Date().toISOString()
+        };
+
+        console.log("this is callback data of bipspay amount mismatch callback", callbackData);
+
+        try {
+          const response = await axios.post(merchantDetailsMismatch.payin_callback, callbackData, {
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            timeout: 5000
+          });
+
+          logger.info('BipsPay: Amount mismatch callback sent to merchant', {
+            reference_id: apitxnid,
+            callback_url: merchantDetailsMismatch.payin_callback,
+            response_status: response.status
+          });
+        } catch (cbError) {
+          logger.error('BipsPay: Failed to send amount mismatch callback to merchant', {
+            reference_id: apitxnid,
+            callback_url: merchantDetailsMismatch.payin_callback,
+            error: cbError.message
+          });
+        }
+      } else {
+        logger.warn('BipsPay: No callback URL found for merchant on amount mismatch', {
+          reference_id: apitxnid,
+          user_id: userIdForMismatch
+        });
+      }
+
+      // No wallet update should happen on mismatch; finalize job here
+      const processingTime = Date.now() - startTime;
+      logger.info('BipsPay: Callback processed with amount mismatch', {
+        reference_id: apitxnid,
+        status: mismatchStatus,
+        utr,
+        processingTimeMs: processingTime
+      });
+
+      return {
+        success: false,
+        reference_id: apitxnid,
+        status: mismatchStatus,
+        reason: 'amount_mismatch'
+      };
+    }
+
+    //  till this part buddy once we have verified the user payinTransaction and userTransaction could you please add here one check if the 
+    // callback amount is not same as in the payinTransaction amount then cancel this trancsaction by saying the requested amount is not same as asked and send the same to call url as well
+
     const userId = payinTransaction.user.user_id;
     const updateData = {
       status: mappedStatus,
