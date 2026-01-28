@@ -336,6 +336,9 @@ callbackQueue.process(async function (job) {
 // Process BipsPay payin callback jobs
 bipspayCallbackQueue.process(async function (job) {
   const startTime = Date.now();
+  console.log("================================================");
+  console.log("this is the job data of bipspay callback", job.data);
+  console.log("================================================");
   try {
     logger.info('Processing BipsPay callback job', {
       jobId: job.id,
