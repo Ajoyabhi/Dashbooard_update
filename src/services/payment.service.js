@@ -671,14 +671,26 @@ const bipspayPayin = async (payinData, adminCharge, agentCharge, totalCharges, u
 
     console.log("this is the response of bipspay payin", response.data);
 
-    if (response.data.statuscode === 'TXNS') {
+    const result = response.data;
+    const isSuccess =
+      result &&
+      result.status === true &&
+      result.data &&
+      (result.data.status === 'SUCCESS' || result.responseCode === 200);
+
+    if (isSuccess) {
       return {
         success: true,
-        data: response.data
+        data: {
+          statuscode: 'TXNS',
+          qrString: result.data.PaymentProcessUrl || result.data.payment_link,
+          message: result.message || 'SUCCESS',
+          apitxnid: result.data.ReferenceId || payinData.reference_id
+        }
       };
     } else {
-      throw new Error(response.data.message || 'Payment initiation failed');
-    } 
+      throw new Error(result?.message || 'Payment initiation failed');
+    }
   } catch (error) {
     logger.error('Error processing BipsPay payin request', {
       error: error.message,
