@@ -2,7 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
 const { logger } = require('../utils/logger');
 const { processPayin } = require('../services/payment.service');
-const { callbackQueue, philpayPayoutQueue, createRedisClient } = require('../config/queue.config');
+const { callbackQueue, philpayPayoutQueue, createRedisClient, bipspayCallbackQueue, bipspayPayoutCallbackQueue } = require('../config/queue.config');
 const PayinTransaction = require('../models/payinTransaction.model');
 const { UserTransaction } = require('../models/userTransaction.model');
 const { MerchantDetails } = require('../models');
@@ -521,7 +521,7 @@ const handleBipspayCallback = async (req, res) => {
       data: callbackData
     });
     console.log("this is callback data of bipspay callback", callbackData);
-    const job = await callbackQueue.add(callbackData, {
+    const job = await bipspayCallbackQueue.add(callbackData, {
       attempts: 3,
       backoff: {
         type: 'exponential',
@@ -547,7 +547,7 @@ const handleBipspayPayoutCallback = async (req, res) => {
       data: callbackData
     });
     console.log("this is callback data of bipspay payout", callbackData);
-    const job = await bipspayPayoutQueue.add(callbackData, {
+    const job = await bipspayPayoutCallbackQueue.add(callbackData, {
       attempts: 3,
       backoff: {
         type: 'exponential',

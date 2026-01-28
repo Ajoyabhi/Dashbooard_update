@@ -9,7 +9,7 @@ const os = require('os');
 const dns = require('dns');
 const http = require('http');
 const https = require('https');
-
+// const { bipspayCallbackQueue, bipspayPayoutCallbackQueue } = require('../config/queue.config');
 /**
  * Get the server's IP address
  * @returns {string} The server's IP address
@@ -668,9 +668,6 @@ const bipspayPayin = async (payinData, adminCharge, agentCharge, totalCharges, u
         'Authorization': `Bearer ${token}`
       }
     });
-
-    console.log("this is the response of bipspay payin", response.data);
-
     const result = response.data;
     const isSuccess =
       result &&

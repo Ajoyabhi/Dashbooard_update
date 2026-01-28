@@ -99,14 +99,92 @@ const queueOptions = {
   }
 };
 
+
+
+// Create bipspay callback queue
+const bipspayCallbackQueue = new Bull('bipspayPayinCallback', queueOptions);
+logger.info("Bipspay callback queue created with proper Redis configuration");
+
+bipspayCallbackQueue.on('ready', () => {
+  logger.info('Bipspay callback queue is ready and connected to Redis');
+});
+
+bipspayCallbackQueue.on('active', (job) => {
+  logger.info('Bipspay callback job started processing', {
+    jobId: job.id,
+    timestamp: new Date().toISOString()
+  });
+});
+
+bipspayCallbackQueue.on('completed', (job) => {
+  logger.info('Bipspay callback job completed', {
+    jobId: job.id,
+    timestamp: new Date().toISOString()
+  });
+});
+
+bipspayCallbackQueue.on('failed', (job, error) => {
+  logger.error('Bipspay callback job failed', {
+    jobId: job.id,
+    error: error.message,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Handle bipspay callback queue events
+bipspayCallbackQueue.on('error', (error) => {
+  logger.error('Bipspay callback queue error:', error);
+  // Attempt to recover from connection errors
+  if (error.message.includes('Connection is closed')) {
+    logger.info('Attempting to recover from connection error...');
+    bipspayCallbackQueue.resume();
+  }
+});
+
+
+// Create bipspay payout callback queue
+const bipspayPayoutCallbackQueue = new Bull('bipspayPayoutCallback', queueOptions);
+logger.info("Bipspay payout callback queue created with proper Redis configuration");
+
+bipspayPayoutCallbackQueue.on('ready', () => {
+  logger.info('Bipspay payout callback queue is ready and connected to Redis');
+});
+
+bipspayPayoutCallbackQueue.on('active', (job) => {
+  logger.info('Bipspay payout callback job started processing', {
+    jobId: job.id,
+    timestamp: new Date().toISOString()
+  });
+});
+
+bipspayPayoutCallbackQueue.on('completed', (job) => {
+  logger.info('Bipspay payout callback job completed', {
+    jobId: job.id,
+    timestamp: new Date().toISOString()
+  });
+});
+
+bipspayPayoutCallbackQueue.on('failed', (job, error) => {
+  logger.error('Bipspay payout callback job failed', {
+    jobId: job.id,
+    error: error.message,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Handle bipspay payout callback queue events
+bipspayPayoutCallbackQueue.on('error', (error) => {
+  logger.error('Bipspay payout callback queue error:', error);
+  // Attempt to recover from connection errors
+  if (error.message.includes('Connection is closed')) {
+    logger.info('Attempting to recover from connection error...');
+    bipspayPayoutCallbackQueue.resume();
+  }
+});
+
 // Create callback queue
 const callbackQueue = new Bull('callback_accuzpay', queueOptions);
 logger.info("Callback queue created with proper Redis configuration");
-
-// Create payin queue
-const payinQueue = new Bull('payin_accuzpay', queueOptions);
-logger.info("Payin queue created with proper Redis configuration");
-
 // Handle callback queue events
 callbackQueue.on('error', (error) => {
   logger.error('Callback queue error:', error);
@@ -143,6 +221,9 @@ callbackQueue.on('failed', (job, error) => {
   });
 });
 
+// Create payin queue
+const payinQueue = new Bull('payin_accuzpay', queueOptions);
+logger.info("Payin queue created with proper Redis configuration");
 // Handle payin queue events
 payinQueue.on('error', (error) => {
   logger.error('Payin queue error:', error);
@@ -273,5 +354,7 @@ module.exports = {
   callbackQueue,
   philpayPayoutQueue,
   payinQueue,
-  createRedisClient
+  createRedisClient,
+  bipspayCallbackQueue,
+  bipspayPayoutCallbackQueue
 }; 
