@@ -1,4 +1,4 @@
-const { callbackQueue, philpayPayoutQueue } = require('../config/queue.config');
+const { callbackQueue, philpayPayoutQueue, bipspayCallbackQueue } = require('../config/queue.config');
 const { logger } = require('../utils/logger');
 const PayinTransaction = require('../models/payinTransaction.model');
 const UserTransaction = require('../models/userTransaction.model');
@@ -29,7 +29,7 @@ mongoose.connect(config.mongodb.uri, {
     process.exit(1);
   });
 
-// Process callback jobs
+// Process generic callback jobs (Unpay / others using common format)
 callbackQueue.process(async function (job) {
   const startTime = Date.now();
   try {
@@ -323,6 +323,320 @@ callbackQueue.process(async function (job) {
 
     if (job.attemptsMade >= 3) {
       logger.error('Job failed permanently after max retries', {
+        jobId: job.id,
+        attempts: job.attemptsMade
+      });
+      return { success: false, error: 'Max retries exceeded' };
+    }
+
+    throw error;
+  }
+});
+
+// Process BipsPay payin callback jobs
+bipspayCallbackQueue.process(async function (job) {
+  const startTime = Date.now();
+  try {
+    logger.info('Processing BipsPay callback job', {
+      jobId: job.id,
+      data: job.data,
+      attempts: job.attemptsMade
+    });
+
+    // Set job timeout - increased to 5 minutes to handle slow operations
+    const timeout = setTimeout(() => {
+      logger.error('BipsPay job processing timeout - taking too long', {
+        jobId: job.id,
+        attempts: job.attemptsMade,
+        data: job.data
+      });
+      throw new Error('BipsPay job processing timeout');
+    }, 300000);
+
+    const { event, status, data } = job.data || {};
+
+    const statuscode =
+      status === 'SUCCESS' || data?.status === 'SUCCESS'
+        ? 'SUCCESS'
+        : status || data?.status || 'FAILED';
+
+    const amount = data?.amount;
+    const apitxnid = data?.reference || data?.order_id; // Our reference_id in DB
+    const txnid = data?.order_id;
+    const utr = data?.UTR;
+    const message = data?.remarks || status || data?.status || 'Transaction processed';
+
+    // Map BipsPay status to our status format
+    const mappedStatus = (statuscode === 'TXN' || statuscode === 'SUCCESS') ? 'completed' : 'failed';
+
+    // Find transactions once - use Promise.all for parallel execution
+    logger.info('BipsPay: Starting database lookups', { jobId: job.id, apitxnid });
+    const [payinTransaction, userTransaction] = await Promise.all([
+      PayinTransaction.findOne({ reference_id: apitxnid }),
+      UserTransaction.findOne({ reference_id: apitxnid })
+    ]);
+    logger.info('BipsPay: Database lookups completed', { jobId: job.id, apitxnid });
+
+    logger.info('BipsPay: Transaction lookup results', {
+      jobId: job.id,
+      apitxnid,
+      payinTransactionFound: !!payinTransaction,
+      userTransactionFound: !!userTransaction,
+      payinTransactionId: payinTransaction?._id,
+      userTransactionId: userTransaction?._id
+    });
+
+    if (!payinTransaction || !userTransaction) {
+      logger.error('BipsPay: Transaction records not found', {
+        jobId: job.id,
+        apitxnid,
+        payinTransactionFound: !!payinTransaction,
+        userTransactionFound: !!userTransaction,
+        jobData: job.data
+      });
+      throw new Error('Transaction records not found');
+    }
+
+    const userId = payinTransaction.user.user_id;
+    const updateData = {
+      status: mappedStatus,
+      gateway_response: {
+        utr,
+        status: mappedStatus,
+        message: message || 'Transaction processed',
+        raw_response: job.data
+      }
+    };
+
+    // Handle completed transaction
+    if (mappedStatus === 'completed') {
+      // Ensure all values are numbers with defaults
+      const beforeBalance = parseFloat(userTransaction.balance?.before || 0);
+      const transactionAmount = parseFloat(amount || 0);
+      const adminCharge = parseFloat(payinTransaction.charges?.admin_charge || 0);
+      const platformFee = parseFloat(payinTransaction.platform_fee || 0);
+      const gstAmount = parseFloat(payinTransaction.gst_amount || 0);
+
+      // Calculate new balance
+      const newBalance = beforeBalance + transactionAmount - adminCharge - platformFee - gstAmount;
+
+      // Update user transaction balance
+      await UserTransaction.updateOne(
+        { reference_id: apitxnid },
+        {
+          $set: {
+            'balance.after': newBalance
+          }
+        }
+      );
+
+      // Update financial details
+      const financialDetails = await FinancialDetails.findOne({
+        where: { user_id: userId }
+      });
+
+      const amountToAdd = transactionAmount - adminCharge - platformFee - gstAmount;
+
+      if (financialDetails) {
+        await financialDetails.increment('wallet', {
+          by: amountToAdd
+        });
+      } else {
+        await FinancialDetails.create({
+          user_id: userId,
+          wallet: amountToAdd,
+          settlement: 0,
+          lien: 0,
+          rolling_reserve: 0
+        });
+      }
+
+      logger.info('BipsPay: Updated wallet balance in FinancialDetails', {
+        user_id: userId,
+        amount: amount,
+        reference_id: apitxnid,
+        action: financialDetails ? 'incremented' : 'created'
+      });
+    }
+
+    // Update all transaction records in a single session
+    logger.info('BipsPay: Starting transaction updates', { jobId: job.id, apitxnid });
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        await Promise.all([
+          PayinTransaction.updateOne(
+            { reference_id: apitxnid },
+            { $set: updateData }
+          ),
+          UserTransaction.updateOne(
+            { reference_id: apitxnid },
+            { $set: updateData }
+          ),
+          TransactionCharges.update(
+            {
+              status: mappedStatus,
+              transaction_utr: utr
+            },
+            {
+              where: { reference_id: apitxnid },
+              returning: true
+            }
+          )
+        ]);
+      });
+    } finally {
+      await session.endSession();
+    }
+    logger.info('BipsPay: Transaction updates completed', { jobId: job.id, apitxnid });
+
+    // Get merchant details early for potential parallel processing
+    logger.info('BipsPay: Starting merchant details lookup', { jobId: job.id, userId });
+    const merchantDetails = await MerchantDetails.findOne({
+      where: {
+        user_id: parseInt(userId, 10)
+      }
+    });
+    logger.info('BipsPay: Merchant details lookup completed', {
+      jobId: job.id,
+      userId,
+      hasCallback: !!merchantDetails?.payin_callback
+    });
+
+    if (merchantDetails?.payin_callback) {
+      logger.info('BipsPay: Starting merchant callback process', {
+        jobId: job.id,
+        callbackUrl: merchantDetails.payin_callback
+      });
+      // Retry configuration - optimized for faster processing
+      const maxRetries = 2; // Reduced from 3 to 2
+      const baseDelay = 1000; // Reduced from 2 seconds to 1 second
+      let lastError;
+
+      // Add a timeout for the entire callback process (30 seconds max)
+      const callbackTimeout = setTimeout(() => {
+        logger.warn('BipsPay: Merchant callback process timeout - skipping callback', {
+          jobId: job.id,
+          apitxnid,
+          callbackUrl: merchantDetails.payin_callback
+        });
+      }, 30000); // 30 seconds max for entire callback process
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          logger.info(`BipsPay: Starting callback attempt ${attempt}/${maxRetries}`, {
+            jobId: job.id,
+            apitxnid
+          });
+
+          let callbackData;
+          if (statuscode === 'SUCCESS') {
+            callbackData = {
+              reference_id: apitxnid,
+              amount: amount,
+              status: mappedStatus,
+              utr: utr,
+              message: message || 'Transaction processed',
+              timestamp: new Date().toISOString()
+            };
+          } else {
+            callbackData = {
+              reference_id: apitxnid,
+              transaction_id: txnid,
+              amount: amount,
+              status: mappedStatus,
+              utr: utr,
+              message: message || 'Transaction processed',
+              timestamp: new Date().toISOString()
+            };
+          }
+
+          console.log("this is callback data of bipspay callback", callbackData);
+
+          const response = await axios.post(merchantDetails.payin_callback, callbackData, {
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            timeout: 5000 // Reduced from 10 seconds to 5 seconds
+          });
+
+          logger.info('BipsPay: Callback sent successfully to merchant', {
+            reference_id: apitxnid,
+            callback_url: merchantDetails.payin_callback,
+            response_status: response.status,
+            attempt: attempt
+          });
+
+          // Clear callback timeout and break out of retry loop
+          clearTimeout(callbackTimeout);
+          break;
+
+        } catch (error) {
+          lastError = error;
+
+          logger.warn('BipsPay: Callback attempt failed', {
+            reference_id: apitxnid,
+            callback_url: merchantDetails.payin_callback,
+            error: error.message,
+            attempt: attempt,
+            maxRetries: maxRetries
+          });
+
+          // If this is the last attempt, log the final error
+          if (attempt === maxRetries) {
+            logger.error('BipsPay: Failed to send callback to merchant after all retries', {
+              reference_id: apitxnid,
+              callback_url: merchantDetails.payin_callback,
+              error: error.message,
+              totalAttempts: maxRetries
+            });
+            // Clear callback timeout on final failure
+            clearTimeout(callbackTimeout);
+          } else {
+            // Wait before retrying with exponential backoff
+            const delay = baseDelay * Math.pow(2, attempt - 1);
+            logger.info(`BipsPay: Retrying callback in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`, {
+              reference_id: apitxnid
+            });
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+        }
+      }
+    } else {
+      logger.warn('BipsPay: No callback URL found for merchant', {
+        reference_id: apitxnid,
+        user_id: userId
+      });
+    }
+
+    // Clear timeout on successful completion
+    clearTimeout(timeout);
+
+    const processingTime = Date.now() - startTime;
+    logger.info('BipsPay: Callback processed successfully', {
+      reference_id: apitxnid,
+      status: mappedStatus,
+      utr,
+      processingTimeMs: processingTime
+    });
+
+    return {
+      success: true,
+      reference_id: apitxnid,
+      status: mappedStatus
+    };
+
+  } catch (error) {
+    // Clear timeout in case of error
+    logger.error('Error processing BipsPay callback', {
+      jobId: job.id,
+      error: error.message,
+      stack: error.stack,
+      attempts: job.attemptsMade
+    });
+
+    if (job.attemptsMade >= 3) {
+      logger.error('BipsPay job failed permanently after max retries', {
         jobId: job.id,
         attempts: job.attemptsMade
       });
