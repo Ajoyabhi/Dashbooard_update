@@ -669,6 +669,8 @@ const bipspayPayin = async (payinData, adminCharge, agentCharge, totalCharges, u
       }
     });
 
+    console.log("this is the response of bipspay payin", response.data);
+
     if (response.data.statuscode === 'TXNS') {
       return {
         success: true,
