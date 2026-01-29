@@ -616,7 +616,29 @@ const getPayoutTransactionStatus = async (req, res) => {
 
     // Check if result exists
     if(result && result.status){
-      // Return the result with appropriate HTTP status
+      // Handle BipsPay response structure - transaction data is nested in result.data.response
+      if(merchantName === 'Bipspay' && result.data && result.data.response){
+        const transactionResponse = result.data.response;
+        const transactionStatus = transactionResponse.status || 'unknown';
+        const isSuccess = transactionStatus === 'SUCCESS';
+        
+        return res.status(200).json({
+          success: isSuccess,
+          message: isSuccess 
+            ? 'Transaction status retrieved successfully' 
+            : (transactionResponse.remark || 'Transaction status check failed'),
+          result: {
+            amount: transactionResponse.amount || transaction.amount,
+            reference_id: transaction.reference_id,
+            payout_ref: transactionResponse.payout_ref || null,
+            bank_ref: transactionResponse.bank_ref || null,
+            status: transactionStatus,
+            remark: transactionResponse.remark || null
+          }
+        });
+      }
+      
+      // Handle other merchants (Unpay, SPay, Philpay) - return as-is
       const httpStatus = result.status === 200 ? 200 : (result.status >= 400 && result.status < 600 ? result.status : 400);
       return res.status(httpStatus).json({
         success: result.status === 200,

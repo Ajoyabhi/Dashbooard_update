@@ -156,10 +156,15 @@ const getBipspayPayoutTransactionStatus = async (transactionId) => {
 
     logger.info('BipsPay Payout Status Response:', { result, status: response.status });
 
-    if (response.status !== 200 || (result.status && result.status !== 200)) {
-      // Return error response in same format as other status check functions
+    // BipsPay response structure can be:
+    // Option 1: { "result": { "status": "SUCCESS", ... }, "status": 200 }
+    // Option 2: { "status": "SUCCESS", "payout_ref": "...", ... }
+    // Option 3: Direct transaction data
+    
+    // Check if HTTP response is successful
+    if (response.status !== 200) {
       return {
-        status: response.status || result.status || 500,
+        status: response.status,
         data: {
           status: 'error',
           response: result,
@@ -168,10 +173,21 @@ const getBipspayPayoutTransactionStatus = async (transactionId) => {
       };
     }
 
+    // Extract actual transaction data - check different possible structures
+    const transactionData = result.result || result;
+    const transactionStatus = transactionData.status || 'unknown';
+    
+    // Check if transaction status indicates success (SUCCESS) or failure
+    const isSuccess = typeof transactionStatus === 'string' && transactionStatus.toUpperCase() === 'SUCCESS';
+    
     // Return in the same format as other status check functions
     return {
       status: response.status,
-      data: result
+      data: {
+        status: isSuccess ? 'success' : 'error',
+        response: transactionData,
+        message: transactionData.remark || transactionData.message || (isSuccess ? 'Transaction successful' : 'Transaction failed')
+      }
     };
   } catch (error) {
     logger.error('Error getting BipsPay payout transaction status', {

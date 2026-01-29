@@ -453,7 +453,27 @@ const getBipspayTransactionStatus = async (searchTransactionId, transaction, res
     throw new Error(`API error: ${result.message || 'Unknown error'}`);
   }
 
-  const transactionData = result.result || {};
+  // BipsPay response structure:
+  // {
+  //   "result": {
+  //     "amount": 10000,
+  //     "bank_ref": "698284651729",
+  //     "payin_ref": "IN4868314166622485",
+  //     "status": "SUCCESS"
+  //   },
+  //   "status": 200,
+  //   "timestamp": "2026-01-29T10:35:16.795Z"
+  // }
+
+  // Extract transaction data - handle both possible structures
+  const transactionData = result.result || result.data || {};
+  
+  // Debug log to verify data extraction
+  console.log('BipsPay - Full result:', JSON.stringify(result, null, 2));
+  console.log('BipsPay - transactionData:', JSON.stringify(transactionData, null, 2));
+  console.log('BipsPay - transactionData.status:', transactionData.status);
+  console.log('BipsPay - transactionData.amount:', transactionData.amount);
+  console.log('BipsPay - transactionData.bank_ref:', transactionData.bank_ref);
 
   return res.status(200).json({
     success: true,
