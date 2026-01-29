@@ -123,7 +123,7 @@ router.get('/lastNdays-transactions',
     generateKey: (req) => {
       // Cache key based on days parameter
       const days = req.query.days || '5';
-      return `lastNdays:transactions:${days}`;
+      return `lastNdays:transactions:v2:${days}`;
     }
   }),
   getLastNDaysTransactionDetails
