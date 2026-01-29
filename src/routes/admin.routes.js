@@ -109,7 +109,7 @@ router.get('/dashboard',
     keyPrefix: 'admin:dashboard:',
     generateKey: (req) => {
       // Cache key for admin dashboard (same for all admins since it's global data)
-      return 'admin:dashboard:global';
+      return 'admin:dashboard:stats:v2';
     }
   }),
   getAdminDashboard

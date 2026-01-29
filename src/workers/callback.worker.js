@@ -311,8 +311,10 @@ callbackQueue.process(async function (job) {
     };
 
   } catch (error) {
-    // Clear timeout in case of error
-    clearTimeout(timeout);
+    // Clear timeout in case of error (if it was set)
+    if (typeof timeout !== 'undefined') {
+      clearTimeout(timeout);
+    }
 
     logger.error('Error processing callback', {
       jobId: job.id,
