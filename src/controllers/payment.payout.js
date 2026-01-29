@@ -472,27 +472,68 @@ const initiatePayout = async (req, res) => {
         };
         result = await bipspayPayout(payoutData);
         console.log("this is result of bipspay payout", result)
+            
         if (result.success) {
+          const transactionData = result.data.data || result.data;
+          const transactionStatus = transactionData.status || 'SUCCESS';
+          const isQueued = transactionStatus === 'SUCCESS' && (transactionData.remark?.includes('Queue') || transactionData.remark?.includes('process'));
+          
+          // Determine database status: 'pending' for queued, 'completed' for immediate success
+          const dbStatus = isQueued ? 'pending' : 'completed';
+          const gatewayStatus = isQueued ? 'pending' : 'completed';
+          
+          // Extract reference IDs
+          const payoutRef = transactionData.payout_ref || transactionData.payout_id || reference_id;
+          const utr = transactionData.rrn || transactionData.bank_ref || null;
+          
           await payoutTransaction.updateOne(
             { reference_id: reference_id },
-            { $set: { status: "completed", gateway_response: { reference_id, status: "completed", message: result.data.message, merchant_response: result.data.apitxnid } } }
+            { 
+              $set: { 
+                status: dbStatus, 
+                gateway_response: { 
+                  reference_id, 
+                  status: gatewayStatus, 
+                  message: result.message || transactionData.remark || 'Payout request processed',
+                  merchant_response: payoutRef,
+                  utr: utr
+                } 
+              } 
+            }
           );
           await userTransaction.updateOne(
             { reference_id: reference_id },
-            { $set: { status: "completed", gateway_response: { reference_id, status: "completed", message: result.data.message, merchant_response: result.data.apitxnid } } }
+            { 
+              $set: { 
+                status: dbStatus, 
+                gateway_response: { 
+                  reference_id, 
+                  status: gatewayStatus, 
+                  message: result.message || transactionData.remark || 'Payout request processed',
+                  merchant_response: payoutRef,
+                  utr: utr
+                } 
+              } 
+            }
           );
           await TransactionCharges.update(
             {
-              status: 'completed',
-              merchant_response: result.data.apitxnid
+              status: dbStatus,
+              transaction_utr: utr,
+              merchant_response: payoutRef
             },
             { where: { reference_id: reference_id } }
           );
+          
           return res.status(200).json({
             success: true,
-            result: result.data.message,
-            utr: result.data.utr,
-            reference_id: result.data.apitxnid
+            message: result.message || transactionData.remark || 'Payout request processed successfully',
+            payout_ref: payoutRef,
+            payout_id: transactionData.payout_id || null,
+            utr: utr,
+            reference_id: reference_id,
+            status: transactionStatus,
+            remark: transactionData.remark || null
           });
         } else {
           await payoutTransaction.updateOne(
@@ -506,7 +547,7 @@ const initiatePayout = async (req, res) => {
           await TransactionCharges.update(
             {
               status: 'failed',
-              merchant_response: result.data?.apitxnid
+              merchant_response: result.data?.payout_ref || result.data?.payout_id
             },
             { where: { reference_id: reference_id } }
           );
@@ -525,7 +566,7 @@ const initiatePayout = async (req, res) => {
             success: false,
             message: 'Payout processing failed',
             error: result.message || 'Unknown error',
-            reference_id: result.data?.apitxnid
+            reference_id: reference_id
           });
         }
       }

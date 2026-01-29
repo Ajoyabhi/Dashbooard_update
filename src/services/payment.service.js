@@ -718,18 +718,25 @@ const bipspayPayout = async (payoutData) => {
       }
     });
 
-    if (response.data.statuscode === 'TXNS') {
+    const result = response.data;
+
+    const isSuccess = (result.status === true && result.error === false) || 
+                      (result.data && result.data.status === 'SUCCESS') ||
+                      result.statuscode === 'TXNS';
+
+    if (isSuccess) {
       return {
         success: true,
         status: 200,
-        data: response.data
+        data: result.data || result,
+        message: result.message || 'Payout request processed successfully'
       };
     } else {
       return {
         success: false,
         status: 400,
-        data: response.data,
-        message: response.data.message || 'Payout processing failed'
+        data: result.data || result,
+        message: result.message || 'Payout processing failed'
       };
     }
   } catch (error) {
