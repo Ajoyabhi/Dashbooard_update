@@ -3,7 +3,7 @@ const { logger } = require('../utils/logger');
 const PayinTransaction = require('../models/payinTransaction.model');
 const UserTransaction = require('../models/userTransaction.model');
 const PayoutTransaction = require('../models/payoutTransaction.model');
-const { TransactionCharges, FinancialDetails, MerchantDetails } = require('../models');
+const { TransactionCharges, FinancialDetails, MerchantDetails, MerchantCharges, PlatformCharges } = require('../models');
 const mongoose = require('mongoose');
 const config = require('../config/index');
 const axios = require('axios');
@@ -406,54 +406,168 @@ bipspayCallbackQueue.process(async function (job) {
 
     if (!isNaN(requestedAmount) && !isNaN(callbackAmount) && requestedAmount !== callbackAmount) {
       const mismatchMessage = `Callback amount ${callbackAmount} does not match requested amount ${requestedAmount}`;
-      logger.warn('BipsPay: Amount mismatch detected, normalizing stored amounts to callback amount', {
+      logger.warn('BipsPay: Amount mismatch detected, recalculating charges based on callback amount', {
         jobId: job.id,
         apitxnid,
         requestedAmount,
         callbackAmount
       });
 
-      // Update stored amounts to match the actual credited amount from callback,
-      // but do NOT fail the transaction. We let the rest of the flow proceed normally.
-      const session = await mongoose.startSession();
-      try {
-        await session.withTransaction(async () => {
-          await Promise.all([
-            PayinTransaction.updateOne(
-              { reference_id: apitxnid },
-              {
-                $set: {
-                  amount: callbackAmount
-                }
-              }
-            ),
-            UserTransaction.updateOne(
-              { reference_id: apitxnid },
-              {
-                $set: {
-                  amount: callbackAmount
-                }
-              }
-            ),
-            TransactionCharges.update(
-              {
-                transaction_amount: callbackAmount
-              },
-              {
-                where: { reference_id: apitxnid },
-                returning: true
-              }
-            )
-          ]);
+      const userId = payinTransaction.user.user_id;
+
+      // Find applicable charge bracket for the new callback amount
+      const chargeBrackets = await MerchantCharges.findAll({
+        where: { user_id: userId },
+        order: [['start_amount', 'ASC']]
+      });
+
+      if (!chargeBrackets || chargeBrackets.length === 0) {
+        logger.error('BipsPay: No charge brackets found for user during amount mismatch recalculation', {
+          user_id: userId,
+          reference_id: apitxnid
         });
-      } finally {
-        await session.endSession();
+        // Continue with existing charges if brackets not found
+      } else {
+        // Find applicable charge bracket
+        const applicableBracket = chargeBrackets.find(bracket => {
+          const startAmount = parseFloat(bracket.start_amount);
+          const endAmount = parseFloat(bracket.end_amount);
+          return callbackAmount >= startAmount && callbackAmount <= endAmount;
+        });
+
+        if (applicableBracket) {
+          // Recalculate charges based on new amount
+          let newAdminCharge = 0;
+          let newAgentCharge = 0;
+          let newGstAmount = 0;
+          let newPlatformFee = 0;
+
+          if (applicableBracket.admin_payin_charge_type === 'percentage') {
+            newAdminCharge = (callbackAmount * parseFloat(applicableBracket.admin_payin_charge)) / 100;
+          } else {
+            newAdminCharge = parseFloat(applicableBracket.admin_payin_charge);
+          }
+
+          if (applicableBracket.agent_payin_charge_type === 'percentage') {
+            newAgentCharge = (callbackAmount * parseFloat(applicableBracket.agent_payin_charge)) / 100;
+          } else {
+            newAgentCharge = parseFloat(applicableBracket.agent_payin_charge);
+          }
+
+          const newTotalCharges = parseFloat(newAdminCharge);
+
+          // Fetch platform charges from database
+          const platformCharges = await PlatformCharges.findOne({
+            where: { is_active: true }
+          });
+
+          if (platformCharges?.charge) {
+            newPlatformFee = (newTotalCharges * parseFloat(platformCharges.charge)) / 100;
+          }
+
+          if (platformCharges?.gst) {
+            newGstAmount = (newTotalCharges * parseFloat(platformCharges.gst)) / 100;
+          }
+
+          // Update all collections with new amount and recalculated charges
+          const session = await mongoose.startSession();
+          try {
+            await session.withTransaction(async () => {
+              await Promise.all([
+                PayinTransaction.updateOne(
+                  { reference_id: apitxnid },
+                  {
+                    $set: {
+                      amount: callbackAmount,
+                      charges: {
+                        admin_charge: newAdminCharge,
+                        agent_charge: newAgentCharge,
+                        total_charges: newTotalCharges
+                      },
+                      gst_amount: parseFloat(newGstAmount),
+                      platform_fee: parseFloat(newPlatformFee)
+                    }
+                  }
+                ),
+                UserTransaction.updateOne(
+                  { reference_id: apitxnid },
+                  {
+                    $set: {
+                      amount: callbackAmount,
+                      charges: {
+                        admin_charge: newAdminCharge,
+                        agent_charge: newAgentCharge,
+                        total_charges: newTotalCharges
+                      },
+                      gst_amount: parseFloat(newGstAmount),
+                      platform_fee: parseFloat(newPlatformFee)
+                    }
+                  }
+                ),
+                TransactionCharges.update(
+                  {
+                    transaction_amount: callbackAmount,
+                    merchant_charge: parseFloat(newAdminCharge),
+                    agent_charge: parseFloat(newAgentCharge),
+                    total_charges: parseFloat(newTotalCharges),
+                    gst_amount: parseFloat(newGstAmount),
+                    platform_fee: parseFloat(newPlatformFee)
+                  },
+                  {
+                    where: { reference_id: apitxnid },
+                    returning: true
+                  }
+                )
+              ]);
+            });
+          } finally {
+            await session.endSession();
+          }
+
+          logger.info('BipsPay: Amount and charges recalculated and updated', {
+            reference_id: apitxnid,
+            callbackAmount,
+            newAdminCharge,
+            newAgentCharge,
+            newTotalCharges,
+            newGstAmount,
+            newPlatformFee
+          });
+        } else {
+          logger.warn('BipsPay: No applicable charge bracket found for callback amount, updating amount only', {
+            reference_id: apitxnid,
+            callbackAmount
+          });
+          // Update amount only if no bracket found
+          const session = await mongoose.startSession();
+          try {
+            await session.withTransaction(async () => {
+              await Promise.all([
+                PayinTransaction.updateOne(
+                  { reference_id: apitxnid },
+                  { $set: { amount: callbackAmount } }
+                ),
+                UserTransaction.updateOne(
+                  { reference_id: apitxnid },
+                  { $set: { amount: callbackAmount } }
+                ),
+                TransactionCharges.update(
+                  { transaction_amount: callbackAmount },
+                  { where: { reference_id: apitxnid }, returning: true }
+                )
+              ]);
+            });
+          } finally {
+            await session.endSession();
+          }
+        }
       }
 
-      logger.info('BipsPay: Amount fields normalized to callback amount', {
-        reference_id: apitxnid,
-        callbackAmount
-      });
+      // Refetch payinTransaction to get updated charges for wallet calculation
+      const updatedPayinTransaction = await PayinTransaction.findOne({ reference_id: apitxnid });
+      if (updatedPayinTransaction) {
+        payinTransaction = updatedPayinTransaction;
+      }
     }
 
     //  till this part buddy once we have verified the user payinTransaction and userTransaction could you please add here one check if the 
