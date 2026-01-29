@@ -275,20 +275,49 @@ const handleUnpayCallback = async (req, res) => {
 
     // Add callback to queue
     const transactionInDb = await PayinTransaction.findOne({ reference_id: callbackData.apitxnid });
-    console.log("transactionInDb", transactionInDb);
+    
+    logger.info('Checking if transaction exists in database', {
+      apitxnid: callbackData.apitxnid,
+      transactionFound: !!transactionInDb
+    });
 
     if (!transactionInDb) {
-      console.log("transactionInDb not found");
-      console.log("callbackData is sending to payzutech");
-      const response = await axios.post('https://dashboard.payzutech.in/api/payments/unpay/callback', {
-        callbackData
+      logger.warn('Transaction not found in database - forwarding to payzutech', {
+        apitxnid: callbackData.apitxnid,
+        amount: callbackData.amount,
+        status: callbackData.status
       });
-      res.status(200).json({
-        success: true,
-        message: 'Callback processed successfully',
-        response: response.jo
-      });
+      
+      try {
+        const response = await axios.post('https://dashboard.payzutech.in/api/payments/unpay/callback', {
+          callbackData
+        });
+        logger.info('Callback forwarded to payzutech successfully', {
+          apitxnid: callbackData.apitxnid,
+          payzutechResponseStatus: response.status
+        });
+        res.status(200).json({
+          success: true,
+          message: 'Callback processed successfully',
+          response: response.data
+        });
+      } catch (error) {
+        logger.error('Error forwarding callback to payzutech', {
+          apitxnid: callbackData.apitxnid,
+          error: error.message,
+          stack: error.stack
+        });
+        res.status(500).json({
+          success: false,
+          message: 'Error forwarding callback to payzutech'
+        });
+      }
     } else {
+      logger.info('Transaction found in database - adding to callback queue', {
+        apitxnid: callbackData.apitxnid,
+        transactionId: transactionInDb._id
+      });
+      
       const job = await callbackQueue.add(callbackData, {
         attempts: 3,
         backoff: {
@@ -296,6 +325,12 @@ const handleUnpayCallback = async (req, res) => {
           delay: 5000
         }
       });
+      
+      logger.info('Callback queued for processing', {
+        apitxnid: callbackData.apitxnid,
+        jobId: job.id
+      });
+      
       res.status(200).json({
         success: true,
         message: 'Callback queued for processing',

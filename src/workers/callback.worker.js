@@ -32,6 +32,7 @@ mongoose.connect(config.mongodb.uri, {
 // Process callback jobs
 callbackQueue.process(async function (job) {
   const startTime = Date.now();
+  let timeout = null; // Declare timeout at function scope
   try {
     logger.info('Processing callback job', {
       jobId: job.id,
@@ -40,7 +41,7 @@ callbackQueue.process(async function (job) {
     });
 
     // Set job timeout - increased to 5 minutes to handle slow operations
-    const timeout = setTimeout(() => {
+    timeout = setTimeout(() => {
       logger.error('Job processing timeout - taking too long', {
         jobId: job.id,
         attempts: job.attemptsMade,
@@ -294,7 +295,9 @@ callbackQueue.process(async function (job) {
     }
 
     // Clear timeout on successful completion
-    clearTimeout(timeout);
+    if (timeout) {
+      clearTimeout(timeout);
+    }
 
     const processingTime = Date.now() - startTime;
     logger.info('Callback processed successfully', {
@@ -312,7 +315,9 @@ callbackQueue.process(async function (job) {
 
   } catch (error) {
     // Clear timeout in case of error
-    clearTimeout(timeout);
+    if (timeout) {
+      clearTimeout(timeout);
+    }
 
     logger.error('Error processing callback', {
       jobId: job.id,
