@@ -529,7 +529,6 @@ const initiatePayout = async (req, res) => {
             success: true,
             message: result.message || transactionData.remark || 'Payout request processed successfully',
             payout_ref: payoutRef,
-            payout_id: transactionData.payout_id || null,
             utr: utr,
             reference_id: reference_id,
             status: transactionStatus,

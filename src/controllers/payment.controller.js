@@ -604,6 +604,9 @@ const handleBipspayCallback = async (req, res) => {
 
 const handleBipspayPayoutCallback = async (req, res) => {
   try {
+    console.log("================================================");
+    console.log("this is the request of bipspay payout callback");
+    console.log("================================================");
     const callbackData = req.method === 'GET' ? req.query : req.body;
     logger.info('Received Bipspay payout callback', {
       method: req.method,
