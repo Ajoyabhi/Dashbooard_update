@@ -453,17 +453,15 @@ const getBipspayTransactionStatus = async (searchTransactionId, transaction, res
     throw new Error(`API error: ${result.message || 'Unknown error'}`);
   }
 
-  const data = result.data || {};
+  const transactionData = result.result || {};
 
   return res.status(200).json({
     success: true,
     transaction: {
-      amount: transaction.amount,
+      amount: transactionData.amount || transaction.amount,
       reference_id: transaction.reference_id,
-      paymentStatus: data.status || result.status || 'unknown',
-      payerVpa: data.payer_UPIID || null,
-      npciTxnId: data.npciTxnId || data.transactionId || null,
-      utr: data.UTR || null
+      paymentStatus: transactionData.status || 'unknown',
+      utr: transactionData.bank_ref || null
     }
   });
 };

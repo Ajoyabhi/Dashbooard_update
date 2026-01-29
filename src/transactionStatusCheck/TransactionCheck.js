@@ -1,6 +1,8 @@
 const axios = require('axios');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
 const crypto = require('crypto');
+const { logger } = require('../utils/logger');
+const { getBipspayToken } = require('../services/payment.service');
 
 
 const unpayTransactionStatus = async (transaction_id) => {
@@ -133,8 +135,50 @@ const philpayTransactionStatus = async (transaction_id) => {
 }   
 
 
+const getBipspayPayoutTransactionStatus = async (transactionId) => {
+  try {
+    const token = await getBipspayToken();
+
+    const response = await axios.post(
+      'https://gateway.bipspay.com/api/v6/payoutOrderStatus',
+      {
+        referenceNumber: transactionId
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      }
+    );
+
+    const result = response.data;
+
+    logger.info('BipsPay Payout Status Response:', { result, status: response.status });
+
+    if (response.status !== 200 || (result.status && result.status !== 200)) {
+      throw new Error(`API error: ${result.message || 'Unknown error'}`);
+    }
+
+    // Return in the same format as other status check functions
+    return {
+      status: response.status,
+      data: result
+    };
+  } catch (error) {
+    logger.error('Error getting BipsPay payout transaction status', {
+      error: error.message,
+      transactionId
+    });
+    throw error;
+  }
+};
+
+
+
 module.exports = {
   unpayTransactionStatus,
   spayTransactionStatus,
-  philpayTransactionStatus
+  philpayTransactionStatus,
+  getBipspayPayoutTransactionStatus
 }

@@ -14,7 +14,7 @@ const getClientIp = require('../utils/getClientIp');
 const mongoose = require('mongoose');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
 const axios = require('axios');
-const { unpayTransactionStatus, spayTransactionStatus, philpayTransactionStatus } = require('../transactionStatusCheck/TransactionCheck');
+const { unpayTransactionStatus, spayTransactionStatus, philpayTransactionStatus, getBipspayPayoutTransactionStatus } = require('../transactionStatusCheck/TransactionCheck');
 
 /**
  * Initiate a payout
@@ -584,6 +584,9 @@ const getPayoutTransactionStatus = async (req, res) => {
         result = { ...result, data: { ...result.data, response: { ...sanitized, amount: adjustedAmount } } };
       }
       // console.log("this is result of philpay payout", result)
+    }else if(user.MerchantDetail.payout_merchant_name === 'Bipspay'){
+      result = await getBipspayPayoutTransactionStatus(transaction_id);
+      console.log("this is result of bipspay payout", result)
     }
     if(result.status === 200){
       return res.status(200).json({
