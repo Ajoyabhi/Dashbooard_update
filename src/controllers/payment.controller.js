@@ -579,11 +579,10 @@ const handlePhilpayPayoutCallback = async (req, res) => {
 const handleBipspayCallback = async (req, res) => {
   try {
     const callbackData = req.method === 'GET' ? req.query : req.body;
-    logger.info('Received Bipspay callback', {
+    logger.info('Received Bipspay Payin callback', {
       method: req.method,
       data: callbackData
     });
-    console.log("this is callback data of bipspay callback", callbackData);
     const job = await bipspayCallbackQueue.add(callbackData, {
       attempts: 3,
       backoff: {
@@ -597,22 +596,18 @@ const handleBipspayCallback = async (req, res) => {
       job_id: job.id
     });
   } catch (error) {
-    logger.error('Error processing Bipspay callback', { error: error.message });
+    logger.error('Error processing Bipspay Payin callback', { error: error.message });
     res.status(500).json({ success: false, message: 'Error processing callback' });
   }
 };
 
 const handleBipspayPayoutCallback = async (req, res) => {
   try {
-    console.log("================================================");
-    console.log("this is the request of bipspay payout callback");
-    console.log("================================================");
     const callbackData = req.method === 'GET' ? req.query : req.body;
-    logger.info('Received Bipspay payout callback', {
+    logger.info('Received Bipspay Payout callback', {
       method: req.method,
       data: callbackData
     });
-    console.log("this is callback data of bipspay payout", callbackData);
     const job = await bipspayPayoutCallbackQueue.add(callbackData, {
       attempts: 3,
       backoff: {
@@ -626,7 +621,7 @@ const handleBipspayPayoutCallback = async (req, res) => {
       job_id: job.id
     });
   } catch (error) {
-    logger.error('Error processing Bipspay payout callback', { error: error.message });
+    logger.error('Error processing Bipspay Payout callback', { error: error.message });
     res.status(500).json({ success: false, message: 'Error processing callback' });
   }
 };
