@@ -338,6 +338,7 @@ callbackQueue.process(async function (job) {
 // Process BipsPay payin callback jobs
 bipspayCallbackQueue.process(async function (job) {
   const startTime = Date.now();
+  let timeout = null;
   console.log("================================================");
   console.log("this is the job data of bipspay callback", job.data);
   console.log("================================================");
@@ -349,7 +350,7 @@ bipspayCallbackQueue.process(async function (job) {
     });
 
     // Set job timeout - increased to 5 minutes to handle slow operations
-    const timeout = setTimeout(() => {
+    timeout = setTimeout(() => {
       logger.error('BipsPay job processing timeout - taking too long', {
         jobId: job.id,
         attempts: job.attemptsMade,
@@ -805,7 +806,11 @@ bipspayCallbackQueue.process(async function (job) {
     };
 
   } catch (error) {
-    // Clear timeout in case of error
+    // Clear timeout in case of error (if it was set)
+    if (timeout !== null) {
+      clearTimeout(timeout);
+    }
+
     logger.error('Error processing BipsPay callback', {
       jobId: job.id,
       error: error.message,
