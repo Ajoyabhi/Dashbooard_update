@@ -568,37 +568,69 @@ const getPayoutTransactionStatus = async (req, res) => {
       });
     }
     let result;
-    if(user.MerchantDetail.payout_merchant_name === 'Unpay'){
-      result = await unpayTransactionStatus(transaction_id);
-      console.log("this is result of unpay payout", result)
-    }else if(user.MerchantDetail.payout_merchant_name === 'SPay'){
-      result = await spayTransactionStatus(transaction_id);
-      console.log("this is result of spay payout", result)
-    }else if(user.MerchantDetail.payout_merchant_name === 'Philpay'){
-      result = await philpayTransactionStatus(transaction_id);
-      console.log("this is result of philpay payout", result)
-      if (result && result.data && result.data.response && typeof result.data.response === 'object') {
-        const { metadata, id, vpa, fees, amount, ...sanitized } = result.data.response;
-        // Divide amount by 100 if it exists
-        const adjustedAmount = amount ? amount / 100 : amount;
-        result = { ...result, data: { ...result.data, response: { ...sanitized, amount: adjustedAmount } } };
+    const merchantName = user.MerchantDetail.payout_merchant_name;
+    
+    try {
+      if(merchantName === 'Unpay'){
+        result = await unpayTransactionStatus(transaction_id);
+        console.log("this is result of unpay payout", result)
+      }else if(merchantName === 'SPay'){
+        result = await spayTransactionStatus(transaction_id);
+        console.log("this is result of spay payout", result)
+      }else if(merchantName === 'Philpay'){
+        result = await philpayTransactionStatus(transaction_id);
+        console.log("this is result of philpay payout", result)
+        if (result && result.data && result.data.response && typeof result.data.response === 'object') {
+          const { metadata, id, vpa, fees, amount, ...sanitized } = result.data.response;
+          // Divide amount by 100 if it exists
+          const adjustedAmount = amount ? amount / 100 : amount;
+          result = { ...result, data: { ...result.data, response: { ...sanitized, amount: adjustedAmount } } };
+        }
+        // console.log("this is result of philpay payout", result)
+      }else if(merchantName === 'Bipspay'){
+        result = await getBipspayPayoutTransactionStatus(transaction_id);
+        console.log("this is result of bipspay payout", result)
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: `Transaction status check not configured for merchant: ${merchantName}`
+        });
       }
-      // console.log("this is result of philpay payout", result)
-    }else if(user.MerchantDetail.payout_merchant_name === 'Bipspay'){
-      result = await getBipspayPayoutTransactionStatus(transaction_id);
-      console.log("this is result of bipspay payout", result)
+    } catch (statusError) {
+      logger.error('Error fetching transaction status from gateway', {
+        error: statusError.message,
+        merchantName,
+        transaction_id
+      });
+      // If it's an axios error with response, return that status
+      if (statusError.response) {
+        return res.status(statusError.response.status || 500).json({
+          success: false,
+          message: 'Error retrieving transaction status from payment gateway',
+          error: statusError.response.data?.message || statusError.message
+        });
+      }
+      // Re-throw to be caught by outer catch block
+      throw statusError;
     }
-    if(result.status === 200){
-      return res.status(200).json({
-        success: true,
-        message: 'Transaction status retrieved successfully',
+
+    // Check if result exists
+    if(result && result.status){
+      // Return the result with appropriate HTTP status
+      const httpStatus = result.status === 200 ? 200 : (result.status >= 400 && result.status < 600 ? result.status : 400);
+      return res.status(httpStatus).json({
+        success: result.status === 200,
+        message: result.status === 200 
+          ? 'Transaction status retrieved successfully' 
+          : (result.data?.message || 'Transaction status check failed'),
         result: result
       });
     }
     else{
       return res.status(400).json({
         success: false,
-        message: 'Transaction status not found'
+        message: 'Transaction status not found',
+        result: result || null
       });
     }
   } catch (error) {

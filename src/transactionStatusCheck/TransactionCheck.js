@@ -157,7 +157,15 @@ const getBipspayPayoutTransactionStatus = async (transactionId) => {
     logger.info('BipsPay Payout Status Response:', { result, status: response.status });
 
     if (response.status !== 200 || (result.status && result.status !== 200)) {
-      throw new Error(`API error: ${result.message || 'Unknown error'}`);
+      // Return error response in same format as other status check functions
+      return {
+        status: response.status || result.status || 500,
+        data: {
+          status: 'error',
+          response: result,
+          message: result.message || 'Unknown error'
+        }
+      };
     }
 
     // Return in the same format as other status check functions
@@ -168,9 +176,23 @@ const getBipspayPayoutTransactionStatus = async (transactionId) => {
   } catch (error) {
     logger.error('Error getting BipsPay payout transaction status', {
       error: error.message,
-      transactionId
+      transactionId,
+      responseStatus: error.response?.status,
+      responseData: error.response?.data
     });
-    throw error;
+    
+    // Return error response instead of throwing, consistent with philpayTransactionStatus
+    const statusCode = error.response?.status || 500;
+    const result = error.response ? error.response.data : { message: error.message };
+    
+    return {
+      status: statusCode,
+      data: {
+        status: 'error',
+        response: result,
+        message: result.message || error.message
+      }
+    };
   }
 };
 
