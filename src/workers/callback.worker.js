@@ -718,7 +718,6 @@ bipspayPayoutCallbackQueue.process(async function (job) {
       data: job.data,
       attempts: job.attemptsMade
     });
-    console.log("this is bipspay payout job data", job.data);
 
     const callbackData = job.data.data || {};
     const transactionStatus = callbackData.status || job.data.status || 'unknown';
@@ -737,9 +736,6 @@ bipspayPayoutCallbackQueue.process(async function (job) {
           }
         }
       );
-      logger.info('Transaction charges updated', { reference: callbackData.reference });
-
-      // Update user transaction
       await UserTransaction.updateOne(
         { reference_id: callbackData.reference },
         {
