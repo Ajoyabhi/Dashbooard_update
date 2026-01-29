@@ -1,4 +1,4 @@
-const { callbackQueue, philpayPayoutQueue, bipspayCallbackQueue } = require('../config/queue.config');
+const { callbackQueue, philpayPayoutQueue, bipspayCallbackQueue, bipspayPayoutCallbackQueue } = require('../config/queue.config');
 const { logger } = require('../utils/logger');
 const PayinTransaction = require('../models/payinTransaction.model');
 const UserTransaction = require('../models/userTransaction.model');
@@ -709,6 +709,288 @@ bipspayCallbackQueue.process(async function (job) {
   }
 });
 
+
+// Process BipsPay payout callback jobs
+bipspayPayoutCallbackQueue.process(async function (job) {
+  try {
+    logger.info('Processing BipsPay payout callback job', {
+      jobId: job.id,
+      data: job.data,
+      attempts: job.attemptsMade
+    });
+    console.log("this is bipspay payout job data", job.data);
+
+    const callbackData = job.data.data || {};
+    const transactionStatus = callbackData.status || job.data.status || 'unknown';
+    const isSuccess = transactionStatus === 'SUCCESS';
+
+    if (isSuccess) {
+      // Update transaction charges
+      await TransactionCharges.update(
+        {
+          status: 'completed',
+          transaction_utr: callbackData.UTR || null
+        },
+        {
+          where: {
+            reference_id: callbackData.reference
+          }
+        }
+      );
+      logger.info('Transaction charges updated', { reference: callbackData.reference });
+
+      // Update user transaction
+      await UserTransaction.updateOne(
+        { reference_id: callbackData.reference },
+        {
+          $set: {
+            status: 'completed',
+            gateway_response: {
+              merchant_response: callbackData.reference,
+              status: 'completed',
+              message: callbackData.message || callbackData.remarks || 'Transaction processed',
+              utr: callbackData.UTR || null
+            }
+          }
+        }
+      );
+      logger.info('User transaction updated', { reference: callbackData.reference });
+
+      // Update payout transaction
+      await PayoutTransaction.updateOne(
+        { reference_id: callbackData.reference },
+        {
+          $set: {
+            status: 'completed',
+            gateway_response: {
+              merchant_response: callbackData.reference,
+              status: 'completed',
+              message: callbackData.message || callbackData.remarks || 'Transaction processed',
+              utr: callbackData.UTR || null
+            }
+          }
+        }
+      );
+      logger.info('Payout transaction updated', { reference: callbackData.reference });
+    } else {
+      logger.info('BipsPay payout job failed', {
+        jobId: job.id,
+        status: transactionStatus,
+        message: callbackData.message || callbackData.remarks || 'Transaction failed',
+        attempts: job.attemptsMade
+      });
+
+      await TransactionCharges.update(
+        {
+          status: 'failed',
+          transaction_utr: callbackData.UTR || null
+        },
+        {
+          where: {
+            reference_id: callbackData.reference
+          }
+        }
+      );
+      logger.info('Transaction charges updated', { reference: callbackData.reference });
+
+      // Update user transaction
+      await UserTransaction.updateOne(
+        { reference_id: callbackData.reference },
+        {
+          $set: {
+            status: 'failed',
+            gateway_response: {
+              merchant_response: callbackData.reference,
+              status: 'failed',
+              message: callbackData.message || callbackData.remarks || 'Transaction failed',
+              utr: callbackData.UTR || null
+            }
+          }
+        }
+      );
+      logger.info('User transaction updated', { reference: callbackData.reference });
+
+      // Update payout transaction
+      await PayoutTransaction.updateOne(
+        { reference_id: callbackData.reference },
+        {
+          $set: {
+            status: 'failed',
+            gateway_response: {
+              merchant_response: callbackData.reference,
+              status: 'failed',
+              message: callbackData.message || callbackData.remarks || 'Transaction failed',
+              utr: callbackData.UTR || null
+            }
+          }
+        }
+      );
+      logger.info('Payout transaction updated', { reference: callbackData.reference });
+    }
+
+    const payoutTransaction = await PayoutTransaction.findOne({ reference_id: callbackData.reference });
+    const userTransaction = await UserTransaction.findOne({ reference_id: callbackData.reference });
+
+    if (!payoutTransaction || !userTransaction) {
+      throw new Error('Transaction records not found');
+    }
+
+    const userId = payoutTransaction.user.user_id;
+    const settlement_amount = payoutTransaction.amount;
+    const chargesAmount = payoutTransaction.charges.total_charges;
+
+    // Only update settlement wallet if payout failed (refund the money)
+    if (!isSuccess) {
+      const userCurrentBalance = await FinancialDetails.findOne({
+        where: {
+          user_id: parseInt(userId, 10)
+        }
+      });
+
+      if (userCurrentBalance) {
+        // Ensure all values are properly parsed as numbers and handle potential null/undefined values
+        const currentSettlement = parseFloat(userCurrentBalance.settlement || 0);
+        const settlementAmount = parseFloat(settlement_amount || 0);
+        const chargesAmountParsed = parseFloat(chargesAmount || 0);
+
+        const newSettlement = currentSettlement + settlementAmount + chargesAmountParsed;
+
+        // Ensure the result is a valid number and round to 2 decimal places
+        userCurrentBalance.settlement = parseFloat(newSettlement.toFixed(2));
+        await userCurrentBalance.save();
+
+        logger.info('Settlement wallet refunded for failed payout', {
+          reference_id: callbackData.reference,
+          user_id: userId,
+          amount_refunded: settlementAmount + chargesAmountParsed,
+          new_settlement_balance: userCurrentBalance.settlement
+        });
+      }
+    } else {
+      logger.info('Payout successful - no settlement refund needed', {
+        reference_id: callbackData.reference,
+        user_id: userId
+      });
+    }
+
+    const merchantDetails = await MerchantDetails.findOne({
+      where: {
+        user_id: parseInt(userId, 10)
+      }
+    });
+
+    if (merchantDetails?.payout_callback) {
+      // Retry configuration
+      const maxRetries = 3;
+      const baseDelay = 2000; // 2 seconds
+      let lastError;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          let callbackDataToMerchant;
+          if (isSuccess) {
+            callbackDataToMerchant = {
+              reference_id: callbackData.reference,
+              amount: callbackData.amount,
+              status: 'completed',
+              utr: callbackData.UTR,
+              message: callbackData.message || callbackData.remarks || 'Transaction processed',
+              timestamp: new Date().toISOString()
+            };
+          } else {
+            callbackDataToMerchant = {
+              reference_id: callbackData.reference,
+              transaction_id: callbackData.reference,
+              amount: callbackData.amount,
+              status: 'failed',
+              utr: callbackData.UTR,
+              message: callbackData.message || callbackData.remarks || 'Transaction failed',
+              timestamp: new Date().toISOString()
+            };
+          }
+
+          console.log("this is callback data of bipspay payout", callbackDataToMerchant);
+
+          const response = await axios.post(merchantDetails.payout_callback, callbackDataToMerchant, {
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            timeout: 10000
+          });
+
+          logger.info('Callback sent successfully to merchant', {
+            reference_id: callbackData.reference,
+            callback_url: merchantDetails.payout_callback,
+            response_status: response.status,
+            attempt: attempt
+          });
+
+          // Success - break out of retry loop
+          break;
+
+        } catch (error) {
+          lastError = error;
+
+          logger.warn('Callback attempt failed', {
+            reference_id: callbackData.reference,
+            callback_url: merchantDetails.payout_callback,
+            error: error.message,
+            attempt: attempt,
+            maxRetries: maxRetries
+          });
+
+          // If this is the last attempt, log the final error
+          if (attempt === maxRetries) {
+            logger.error('Failed to send callback to merchant after all retries', {
+              reference_id: callbackData.reference,
+              callback_url: merchantDetails.payout_callback,
+              error: error.message,
+              totalAttempts: maxRetries
+            });
+          } else {
+            // Wait before retrying with exponential backoff
+            const delay = baseDelay * Math.pow(2, attempt - 1);
+            logger.info(`Retrying callback in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`, {
+              reference_id: callbackData.reference
+            });
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+        }
+      }
+    } else {
+      logger.warn('No callback URL found for merchant', {
+        reference_id: callbackData.reference,
+        user_id: userId
+      });
+    }
+
+    return { success: true, jobId: job.id };
+  } catch (error) {
+    logger.error('Error processing BipsPay payout callback job', {
+      jobId: job.id,
+      error: error.message,
+      stack: error.stack,
+      attempts: job.attemptsMade
+    });
+    return { success: false, error: `Error is ${error}`, jobId: job.id };
+  }
+});
+
+bipspayPayoutCallbackQueue.on('completed', (job, result) => {
+  logger.info('BipsPay payout callback job completed successfully', {
+    jobId: job.id,
+    result
+  });
+});
+
+bipspayPayoutCallbackQueue.on('failed', (job, error) => {
+  logger.error('BipsPay payout callback job failed', {
+    jobId: job.id,
+    error: error.message,
+    stack: error.stack,
+    attempts: job.attemptsMade
+  });
+});
 // Handle job events
 callbackQueue.on('completed', (job, result) => {
   logger.info('Callback job completed successfully', {
