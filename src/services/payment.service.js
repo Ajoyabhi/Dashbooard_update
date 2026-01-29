@@ -748,5 +748,6 @@ const bipspayPayout = async (payoutData) => {
 
 module.exports = {
   processPayin,
-  bipspayPayout
-}; 
+  bipspayPayout,
+  getBipspayToken
+};

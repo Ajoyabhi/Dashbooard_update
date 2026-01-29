@@ -454,7 +454,6 @@ bipspayCallbackQueue.process(async function (job) {
         reference_id: apitxnid,
         callbackAmount
       });
-      // After this, we continue with normal processing (wallet update, merchant callback, etc.)
     }
 
     //  till this part buddy once we have verified the user payinTransaction and userTransaction could you please add here one check if the 

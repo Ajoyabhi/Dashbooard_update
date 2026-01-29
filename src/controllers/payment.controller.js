@@ -1,7 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
 const { logger } = require('../utils/logger');
-const { processPayin } = require('../services/payment.service');
+const { processPayin, getBipspayToken } = require('../services/payment.service');
 const { callbackQueue, philpayPayoutQueue, createRedisClient, bipspayCallbackQueue, bipspayPayoutCallbackQueue } = require('../config/queue.config');
 const PayinTransaction = require('../models/payinTransaction.model');
 const { UserTransaction } = require('../models/userTransaction.model');
@@ -322,6 +322,7 @@ const getTransactionStatus = async (req, res) => {
   try {
     const { transaction_id } = req.params;
     const user_id = req.user.id;
+    const userType = req.user.user_type || req.user.userType || req.user.type || 'User';
     const searchTransactionId = String(transaction_id).trim();
     if (!searchTransactionId) {
       return res.status(400).json({
@@ -340,7 +341,7 @@ const getTransactionStatus = async (req, res) => {
       });
     }
 
-    // Get merchant details
+    // Get merchant details based on user and type
     const merchantDetails = await MerchantDetails.findOne({ where: { user_id } });
     if (!merchantDetails) {
       return res.status(404).json({
@@ -348,58 +349,19 @@ const getTransactionStatus = async (req, res) => {
         message: 'Merchant details not found'
       });
     }
-    const requestBody = {
-      partner_id: "4071", // Get this from merchant details or config
-      apitxnid: searchTransactionId
-    };
-    const aesKey = "XRUhoLqUBgmZFLdWT5PiuNQnGhI9l6Pc";
-    const aesIV = "oR21lVkifQEBNRQS";
-    const apiKey = "QPf0uqDt0EjQqkseizXyr1Ydn21HF9cOiQEFtjrV";
-    const encryptedRequestBody = await encryptText(JSON.stringify(requestBody), aesKey, aesIV);
+    const merchantName = merchantDetails.payin_merchant_name;
 
-
-    // Make API request to Unpay
-    const response = await fetch('https://unpay.in/tech/api/next/upi/request/qrstatus', {
-      method: 'POST',
-      headers: {
-        'accept': 'application/json',
-        'api-key': apiKey, // Get from config
-        'content-type': 'application/json'
-      },
-      body: JSON.stringify({
-        body: encryptedRequestBody
-      })
-    });
-
-    const result = await response.json();
-
-    // Log the actual response to debug
-    logger.info('Unpay API Response:', { result, status: response.status });
-
-    if (!response.ok) {
-      throw new Error(`API error: ${result.message || 'Unknown error'}`);
-    }
-
-    // Check if result.data exists
-    if (!result.data) {
-      logger.error('No data property in API response:', { result });
-      return res.status(500).json({
+    // Route status check based on merchant
+    if (merchantName === 'Unpay') {
+      return await getUnpayTransactionStatus(searchTransactionId, transaction, res);
+    } else if (merchantName === 'Bipspay') {
+      return await getBipspayTransactionStatus(searchTransactionId, transaction, res);
+    } else {
+      return res.status(400).json({
         success: false,
-        message: 'Invalid response from payment gateway'
+        message: `Transaction status check not configured for merchant: ${merchantName}`
       });
     }
-
-    res.status(200).json({
-      success: true,
-      transaction: {
-        amount: transaction.amount,
-        reference_id: transaction.reference_id,
-        paymentStatus: result.data.paymentStatus || 'unknown',
-        payerVpa: result.data.payerVpa || null,
-        npciTxnId: result.data.npciTxnId || null,
-        utr: result.data.rrnNumber || null
-      }
-    });
 
   } catch (error) {
     logger.error('Error getting transaction status', { error: error.message });
@@ -408,6 +370,102 @@ const getTransactionStatus = async (req, res) => {
       message: 'Error getting transaction status'
     });
   }
+};
+
+// Helper: Get Unpay transaction status
+const getUnpayTransactionStatus = async (searchTransactionId, transaction, res) => {
+  const requestBody = {
+    partner_id: "4071", // Get this from merchant details or config
+    apitxnid: searchTransactionId
+  };
+  const aesKey = "XRUhoLqUBgmZFLdWT5PiuNQnGhI9l6Pc";
+  const aesIV = "oR21lVkifQEBNRQS";
+  const apiKey = "QPf0uqDt0EjQqkseizXyr1Ydn21HF9cOiQEFtjrV";
+  const encryptedRequestBody = await encryptText(JSON.stringify(requestBody), aesKey, aesIV);
+
+  // Make API request to Unpay
+  const response = await fetch('https://unpay.in/tech/api/next/upi/request/qrstatus', {
+    method: 'POST',
+    headers: {
+      'accept': 'application/json',
+      'api-key': apiKey, // Get from config
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      body: encryptedRequestBody
+    })
+  });
+
+  const result = await response.json();
+
+  // Log the actual response to debug
+  logger.info('Unpay API Response:', { result, status: response.status });
+
+  if (!response.ok) {
+    throw new Error(`API error: ${result.message || 'Unknown error'}`);
+  }
+
+  // Check if result.data exists
+  if (!result.data) {
+    logger.error('No data property in API response:', { result });
+    return res.status(500).json({
+      success: false,
+      message: 'Invalid response from payment gateway'
+    });
+  }
+
+  return res.status(200).json({
+    success: true,
+    transaction: {
+      amount: transaction.amount,
+      reference_id: transaction.reference_id,
+      paymentStatus: result.data.paymentStatus || 'unknown',
+      payerVpa: result.data.payerVpa || null,
+      npciTxnId: result.data.npciTxnId || null,
+      utr: result.data.rrnNumber || null
+    }
+  });
+};
+
+// Helper: Get BipsPay transaction status
+const getBipspayTransactionStatus = async (searchTransactionId, transaction, res) => {
+  // BipsPay payin order status check
+  const token = await getBipspayToken();
+
+  const response = await axios.post(
+    'https://gateway.bipspay.com/api/v6/payinOrderStatus',
+    {
+      referenceNumber: searchTransactionId
+    },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    }
+  );
+
+  const result = response.data;
+
+  logger.info('BipsPay Payin Status Response:', { result, status: response.status });
+
+  if (response.status !== 200) {
+    throw new Error(`API error: ${result.message || 'Unknown error'}`);
+  }
+
+  const data = result.data || {};
+
+  return res.status(200).json({
+    success: true,
+    transaction: {
+      amount: transaction.amount,
+      reference_id: transaction.reference_id,
+      paymentStatus: data.status || result.status || 'unknown',
+      payerVpa: data.payer_UPIID || null,
+      npciTxnId: data.npciTxnId || data.transactionId || null,
+      utr: data.UTR || null
+    }
+  });
 };
 
 const handleSpayCallback = async (req, res) => {
