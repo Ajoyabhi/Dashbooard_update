@@ -27,12 +27,12 @@ router.use(auth, authorize('payin_payout', 'staff', 'agent', 'payout_only', 'pay
 //dashboard
 router.get('/dashboard',
   cacheMiddleware({
-    ttl: 60, // 3 minutes cache for dashboard data
+    ttl: 60, // 1 minute cache for dashboard data
     keyPrefix: 'user:dashboard:',
     generateKey: (req) => {
-      // Cache key based on user ID
+      // Uniform cache key based on user ID only (no days parameter)
       const userId = req.user.id;
-      return `user:dashboard:${userId}`;
+      return `user:dashboard:${userId}:v2`;
     }
   }),
   getUserDashboard
@@ -44,10 +44,9 @@ router.get('/lastNdays-transactions',
     ttl: 300, // 5 minutes cache
     keyPrefix: 'user:lastNdays:',
     generateKey: (req) => {
-      // Cache key based on user ID and days parameter
+      // Uniform cache key based on user ID only (no days parameter for consistency)
       const userId = req.user.id;
-      const days = req.query.days || '5';
-      return `user:lastNdays:${userId}:${days}`;
+      return `user:dashboard:${userId}:v2`;
     }
   }),
   getLastNDaysTransactions
