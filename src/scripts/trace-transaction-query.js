@@ -131,24 +131,6 @@ mongoose.connect(config.mongodb.uri, {
       console.log(`Total logs found: ${logs.length}`);
       console.log(`═══════════════════════════════════════════════════════════════\n`);
       
-      // Print Initial Request Stage
-      if (initialRequestLogs.length > 0) {
-        console.log('🚀 STAGE 0: INITIAL PAYIN REQUEST');
-        console.log('   (payment.service.js:61 - Initial request received)');
-        console.log('─────────────────────────────────────────────────────────────');
-        initialRequestLogs.forEach((log, index) => {
-          const timestamp = log.timestamp ? new Date(log.timestamp).toISOString() : 'N/A';
-          console.log(`\n   [${index + 1}] ${timestamp}`);
-          console.log(`   Level: ${log.level}`);
-          console.log(`   Message: ${log.message}`);
-          if (log.metadata && Object.keys(log.metadata).length > 0) {
-            console.log(`   Metadata:`);
-            console.log(JSON.stringify(log.metadata, null, 6));
-          }
-        });
-        console.log('\n');
-      }
-      
       // Categorize logs by stage
       const initialRequestLogs = [];
       const intentLinkLogs = [];
@@ -214,6 +196,24 @@ mongoose.connect(config.mongodb.uri, {
           otherLogs.push(log);
         }
       });
+      
+      // Print Initial Request Stage
+      if (initialRequestLogs.length > 0) {
+        console.log('🚀 STAGE 0: INITIAL PAYIN REQUEST');
+        console.log('   (payment.service.js:61 - Initial request received)');
+        console.log('─────────────────────────────────────────────────────────────');
+        initialRequestLogs.forEach((log, index) => {
+          const timestamp = log.timestamp ? new Date(log.timestamp).toISOString() : 'N/A';
+          console.log(`\n   [${index + 1}] ${timestamp}`);
+          console.log(`   Level: ${log.level}`);
+          console.log(`   Message: ${log.message}`);
+          if (log.metadata && Object.keys(log.metadata).length > 0) {
+            console.log(`   Metadata:`);
+            console.log(JSON.stringify(log.metadata, null, 6));
+          }
+        });
+        console.log('\n');
+      }
       
       // Print Intent Link Generation Stage
       if (intentLinkLogs.length > 0) {
