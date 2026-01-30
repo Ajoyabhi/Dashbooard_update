@@ -956,6 +956,8 @@ bipspayPayoutCallbackQueue.process(async function (job) {
     const userId = payoutTransaction.user.user_id;
     const settlement_amount = payoutTransaction.amount;
     const chargesAmount = payoutTransaction.charges.total_charges;
+    const gstAmount = parseFloat(payoutTransaction.gst_amount || 0);
+    const platformFee = parseFloat(payoutTransaction.platform_fee || 0);
 
     // Only update settlement wallet if payout failed (refund the money)
     // Similar to Philpay: refund if status is not success/completed
@@ -972,7 +974,9 @@ bipspayPayoutCallbackQueue.process(async function (job) {
         const settlementAmount = parseFloat(settlement_amount || 0);
         const chargesAmountParsed = parseFloat(chargesAmount || 0);
 
-        const newSettlement = currentSettlement + settlementAmount + chargesAmountParsed;
+        // Include GST and platform fees in the refund calculation
+        const totalRefundAmount = settlementAmount + chargesAmountParsed + gstAmount + platformFee;
+        const newSettlement = currentSettlement + totalRefundAmount;
 
         // Ensure the result is a valid number and round to 2 decimal places
         userCurrentBalance.settlement = parseFloat(newSettlement.toFixed(2));
@@ -981,7 +985,13 @@ bipspayPayoutCallbackQueue.process(async function (job) {
         logger.info('Settlement wallet refunded for failed payout', {
           reference_id: callbackData.reference,
           user_id: userId,
-          amount_refunded: settlementAmount + chargesAmountParsed,
+          amount_refunded: totalRefundAmount,
+          breakdown: {
+            settlement_amount: settlementAmount,
+            charges: chargesAmountParsed,
+            gst_amount: gstAmount,
+            platform_fee: platformFee
+          },
           new_settlement_balance: userCurrentBalance.settlement
         });
       }
@@ -1252,6 +1262,8 @@ philpayPayoutQueue.process(async function (job) {
     const userId = payinTransaction.user.user_id;
     const settlement_amount = payinTransaction.amount;
     const chargesAmount = payinTransaction.charges.total_charges;
+    const gstAmount = parseFloat(payinTransaction.gst_amount || 0);
+    const platformFee = parseFloat(payinTransaction.platform_fee || 0);
 
     // Only update settlement wallet if payout failed (refund the money)
     if (job.data.data.object.status !== "success" && job.data.data.object.status !== "Success") {
@@ -1267,7 +1279,9 @@ philpayPayoutQueue.process(async function (job) {
         const settlementAmount = parseFloat(settlement_amount || 0);
         const chargesAmountParsed = parseFloat(chargesAmount || 0);
 
-        const newSettlement = currentSettlement + settlementAmount + chargesAmountParsed;
+        // Include GST and platform fees in the refund calculation
+        const totalRefundAmount = settlementAmount + chargesAmountParsed + gstAmount + platformFee;
+        const newSettlement = currentSettlement + totalRefundAmount;
 
         // Ensure the result is a valid number and round to 2 decimal places
         userCurrrentBalance.settlement = parseFloat(newSettlement.toFixed(2));
@@ -1276,7 +1290,13 @@ philpayPayoutQueue.process(async function (job) {
         logger.info('Settlement wallet refunded for failed payout', {
           reference_id: job.data.data.object.merchant_order_id,
           user_id: userId,
-          amount_refunded: settlementAmount + chargesAmountParsed,
+          amount_refunded: totalRefundAmount,
+          breakdown: {
+            settlement_amount: settlementAmount,
+            charges: chargesAmountParsed,
+            gst_amount: gstAmount,
+            platform_fee: platformFee
+          },
           new_settlement_balance: userCurrrentBalance.settlement
         });
       }
