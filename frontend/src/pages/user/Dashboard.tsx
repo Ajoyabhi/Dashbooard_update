@@ -63,9 +63,10 @@ const Dashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      const response = await api.get('/user/dashboard');
-      if (response.data.success) {
-        const data_value = response.data.data || {};
+      const response_data = await api.get('/user/dashboard');
+      if (response_data.data.success) {
+        const data_value = response_data.data.data || {};
+
         setDashboardData({
           settlement_balance: data_value.settlement_balance || 0,
           wallet_balance: data_value.wallet_balance || 0,
