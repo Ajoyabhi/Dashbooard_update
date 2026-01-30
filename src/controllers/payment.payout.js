@@ -36,6 +36,56 @@ const initiatePayout = async (req, res) => {
   
       const { account_number, account_ifsc, bank_name, beneficiary_name, request_type, amount, reference_id } = req.body;
 
+      // Validate account number: should be 9-18 digits
+      if (!account_number || typeof account_number !== 'string') {
+        return res.status(400).json({
+          success: false,
+          message: 'Account number is required and must be a string'
+        });
+      }
+      
+      // Remove any spaces or special characters and check if it's numeric
+      const cleanAccountNumber = account_number.replace(/\s+/g, '');
+      const accountNumberRegex = /^\d{9,18}$/;
+      
+      if (!accountNumberRegex.test(cleanAccountNumber)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Account number must be between 9 and 18 digits (numeric only)'
+        });
+      }
+
+      // Validate IFSC code: should be exactly 11 characters (alphanumeric)
+      if (!account_ifsc || typeof account_ifsc !== 'string') {
+        return res.status(400).json({
+          success: false,
+          message: 'IFSC code is required and must be a string'
+        });
+      }
+      
+      // Remove any spaces and convert to uppercase
+      const cleanIfsc = account_ifsc.replace(/\s+/g, '').toUpperCase();
+      
+      // IFSC code must be exactly 11 characters: 4 letters, 0, then 6 alphanumeric
+      if (cleanIfsc.length !== 11) {
+        return res.status(400).json({
+          success: false,
+          message: 'IFSC code must be exactly 11 characters'
+        });
+      }
+      
+      const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+      if (!ifscRegex.test(cleanIfsc)) {
+        return res.status(400).json({
+          success: false,
+          message: 'IFSC code format is invalid. Expected format: ABCD0123456 (4 letters, 0, then 6 alphanumeric)'
+        });
+      }
+
+      // Use cleaned values for further processing
+      const validatedAccountNumber = cleanAccountNumber;
+      const validatedIfsc = cleanIfsc;
+
       const user_id = req.user.id;
         // Fetch user and all related data
       const user = await User.findByPk(user_id, {
@@ -297,8 +347,8 @@ const initiatePayout = async (req, res) => {
         gst_amount: gstAmount,
         platform_fee: platformFee,
         beneficiary_details: {
-          account_number: account_number,
-          account_ifsc: account_ifsc,
+          account_number: validatedAccountNumber,
+          account_ifsc: validatedIfsc,
           bank_name: bank_name,
           beneficiary_name: beneficiary_name
         },
@@ -344,8 +394,8 @@ const initiatePayout = async (req, res) => {
           amount,
           amountToDeduct,
           beneficiary_details: {
-            account_number,
-            account_ifsc,
+            account_number: validatedAccountNumber,
+            account_ifsc: validatedIfsc,
             bank_name,
             beneficiary_name,
             mobile: user.mobile
@@ -409,8 +459,8 @@ const initiatePayout = async (req, res) => {
           amountToDeduct,
           request_type,
           beneficiary_details: {
-            account_number,
-            account_ifsc,
+            account_number: validatedAccountNumber,
+            account_ifsc: validatedIfsc,
             bank_name,
             beneficiary_name,
             mobile: user.mobile,
@@ -430,8 +480,8 @@ const initiatePayout = async (req, res) => {
           amountToDeduct,
           request_type,
           beneficiary_details: {
-            account_number,
-            account_ifsc,
+            account_number: validatedAccountNumber,
+            account_ifsc: validatedIfsc,
             bank_name,
             beneficiary_name,
             mobile: user.mobile,
@@ -464,8 +514,8 @@ const initiatePayout = async (req, res) => {
           amountToDeduct,
           request_type,
           beneficiary_details: {
-            account_number,
-            account_ifsc,
+            account_number: validatedAccountNumber,
+            account_ifsc: validatedIfsc,
             bank_name,
             beneficiary_name
           }
