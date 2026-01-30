@@ -65,16 +65,16 @@ const Dashboard = () => {
     try {
       const response = await api.get('/user/dashboard');
       if (response.data.success) {
-        const data = response.data.data || {};
+        const data_value = response.data.data || {};
         setDashboardData({
-          settlement_balance: data.settlement_balance || 0,
-          wallet_balance: data.wallet_balance || 0,
-          today_payin: data.today_payin || 0,
-          today_payout: data.today_payout || 0,
-          total_payin: data.total_payin || 0,
-          total_payout: data.total_payout || 0,
-          recent_payins: Array.isArray(data.recent_payins) ? data.recent_payins : [],
-          recent_payouts: Array.isArray(data.recent_payouts) ? data.recent_payouts : []
+          settlement_balance: data_value.settlement_balance || 0,
+          wallet_balance: data_value.wallet_balance || 0,
+          today_payin: data_value.today_payin || 0,
+          today_payout: data_value.today_payout || 0,
+          total_payin: data_value.total_payin || 0,
+          total_payout: data_value.total_payout || 0,
+          recent_payins: Array.isArray(data_value.recent_payins) ? data_value.recent_payins : [],
+          recent_payouts: Array.isArray(data_value.recent_payouts) ? data_value.recent_payouts : []
         });
       } else {
         // If success is false, ensure arrays are set
@@ -101,16 +101,30 @@ const Dashboard = () => {
     try {
       setLastNDaysLoading(true);
       const response = await api.get(`/user/lastNdays-transactions?days=${selectedDays}`);
+      console.log(`📊 Last N Days API Response (${selectedDays} days):`, response.data);
+      console.log(`📊 Cache Status:`, response.headers['x-cache'] || 'UNKNOWN');
+      
       if (response.data.success) {
         // Ensure data is an array before setting it
         const data = response.data.data;
-        setLastNDaysData(Array.isArray(data) ? data : []);
+        console.log(`📊 Last N Days Data (${selectedDays} days):`, data);
+        console.log(`📊 Data is array:`, Array.isArray(data));
+        console.log(`📊 Data length:`, Array.isArray(data) ? data.length : 0);
+        
+        const processedData = Array.isArray(data) ? data : [];
+        setLastNDaysData(processedData);
       } else {
+        console.warn('⚠️ API returned success: false', response.data);
         // If success is false, set empty array
         setLastNDaysData([]);
       }
-    } catch (error) {
-      console.error('Error fetching last N days data:', error);
+    } catch (error: any) {
+      console.error('❌ Error fetching last N days data:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
       // Set empty array on error to prevent map errors
       setLastNDaysData([]);
     } finally {

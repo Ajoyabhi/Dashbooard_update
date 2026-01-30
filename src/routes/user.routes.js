@@ -44,9 +44,10 @@ router.get('/lastNdays-transactions',
     ttl: 300, // 5 minutes cache
     keyPrefix: 'user:lastNdays:',
     generateKey: (req) => {
-      // Uniform cache key based on user ID only (no days parameter for consistency)
+      // Include days parameter in cache key to differentiate between different day requests
       const userId = req.user.id;
-      return `user:dashboard:${userId}:v2`;
+      const days = req.query.days || '5'; // Default to 5 if not specified
+      return `user:lastNdays:${userId}:${days}:v2`;
     }
   }),
   getLastNDaysTransactions
