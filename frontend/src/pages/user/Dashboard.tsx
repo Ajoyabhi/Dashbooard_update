@@ -44,9 +44,9 @@ const Dashboard = () => {
     recent_payins: [],
     recent_payouts: []
   });
-  const [lastNDaysData, setLastNDaysData] = useState([]);
+  const [lastNDaysData, setLastNDaysData] = useState<any[]>([]);
   const [selectedDays, setSelectedDays] = useState(5);
-  const [weeklyPerformanceData, setWeeklyPerformanceData] = useState([]);
+  const [weeklyPerformanceData, setWeeklyPerformanceData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastNDaysLoading, setLastNDaysLoading] = useState(true);
   const [weeklyLoading, setWeeklyLoading] = useState(true);
@@ -79,10 +79,17 @@ const Dashboard = () => {
       setLastNDaysLoading(true);
       const response = await api.get(`/user/lastNdays-transactions?days=${selectedDays}`);
       if (response.data.success) {
-        setLastNDaysData(response.data.data);
+        // Ensure data is an array before setting it
+        const data = response.data.data;
+        setLastNDaysData(Array.isArray(data) ? data : []);
+      } else {
+        // If success is false, set empty array
+        setLastNDaysData([]);
       }
     } catch (error) {
       console.error('Error fetching last N days data:', error);
+      // Set empty array on error to prevent map errors
+      setLastNDaysData([]);
     } finally {
       setLastNDaysLoading(false);
     }
@@ -93,17 +100,27 @@ const Dashboard = () => {
       setWeeklyLoading(true);
       const response = await api.get('/user/lastNdays-transactions?days=7');
       if (response.data.success) {
-        // Format data for the performance chart
-        const formattedData = response.data.data.map((day: any, index: number) => ({
-          day: new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' }),
-          payin: day.payin.total_amount,
-          payout: day.payout.total_amount,
-          balance: day.payin.total_amount - day.payout.total_amount // Calculate balance
-        }));
-        setWeeklyPerformanceData(formattedData);
+        // Ensure data is an array before mapping
+        const data = response.data.data;
+        if (Array.isArray(data)) {
+          // Format data for the performance chart
+          const formattedData = data.map((day: any, index: number) => ({
+            day: day.date ? new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' }) : 'N/A',
+            payin: day.payin?.total_amount || 0,
+            payout: day.payout?.total_amount || 0,
+            balance: (day.payin?.total_amount || 0) - (day.payout?.total_amount || 0) // Calculate balance
+          }));
+          setWeeklyPerformanceData(formattedData);
+        } else {
+          setWeeklyPerformanceData([]);
+        }
+      } else {
+        setWeeklyPerformanceData([]);
       }
     } catch (error) {
       console.error('Error fetching weekly performance data:', error);
+      // Set empty array on error to prevent map errors
+      setWeeklyPerformanceData([]);
     } finally {
       setWeeklyLoading(false);
     }
@@ -280,26 +297,26 @@ const Dashboard = () => {
     { name: 'Jul', payin: 3490, payout: 4300, amt: 2100 }
   ];
 
-  // Format last N days data for charts
-  const lastNDaysChartData = lastNDaysData.map((day: any) => ({
+  // Format last N days data for charts - ensure lastNDaysData is an array
+  const lastNDaysChartData = (Array.isArray(lastNDaysData) ? lastNDaysData : []).map((day: any) => ({
     date: new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-    payin: day.payin.total_amount,
-    payout: day.payout.total_amount,
-    payinCount: day.payin.transaction_count,
-    payoutCount: day.payout.transaction_count,
-    payinCharges: day.payin.total_charges,
-    payoutCharges: day.payout.total_charges
+    payin: day.payin?.total_amount || 0,
+    payout: day.payout?.total_amount || 0,
+    payinCount: day.payin?.transaction_count || 0,
+    payoutCount: day.payout?.transaction_count || 0,
+    payinCharges: day.payin?.total_charges || 0,
+    payoutCharges: day.payout?.total_charges || 0
   }));
 
-  // Calculate totals for last N days
-  const lastNDaysTotals = lastNDaysData.reduce((totals: any, day: any) => ({
-    totalPayin: totals.totalPayin + day.payin.total_amount,
-    totalPayout: totals.totalPayout + day.payout.total_amount,
-    totalPayinCount: totals.totalPayinCount + day.payin.transaction_count,
-    totalPayoutCount: totals.totalPayoutCount + day.payout.transaction_count,
-    totalPayinCharges: totals.totalPayinCharges + day.payin.total_charges,
-    totalPayoutCharges: totals.totalPayoutCharges + day.payout.total_charges,
-    totalPayinGstPlatform: totals.totalPayinGstPlatform + (day.payin.total_gst_platform || 0)
+  // Calculate totals for last N days - ensure lastNDaysData is an array
+  const lastNDaysTotals = (Array.isArray(lastNDaysData) ? lastNDaysData : []).reduce((totals: any, day: any) => ({
+    totalPayin: totals.totalPayin + (day.payin?.total_amount || 0),
+    totalPayout: totals.totalPayout + (day.payout?.total_amount || 0),
+    totalPayinCount: totals.totalPayinCount + (day.payin?.transaction_count || 0),
+    totalPayoutCount: totals.totalPayoutCount + (day.payout?.transaction_count || 0),
+    totalPayinCharges: totals.totalPayinCharges + (day.payin?.total_charges || 0),
+    totalPayoutCharges: totals.totalPayoutCharges + (day.payout?.total_charges || 0),
+    totalPayinGstPlatform: totals.totalPayinGstPlatform + (day.payin?.total_gst_platform || 0)
   }), {
     totalPayin: 0,
     totalPayout: 0,
@@ -545,27 +562,27 @@ const Dashboard = () => {
 
                 {/* Daily Breakdown */}
                 <div className={`grid grid-cols-1 gap-4 ${selectedDays <= 5 ? 'md:grid-cols-5' : selectedDays <= 10 ? 'md:grid-cols-3 lg:grid-cols-5' : 'md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'}`}>
-                  {lastNDaysData.map((day: any, index: number) => (
+                  {(Array.isArray(lastNDaysData) ? lastNDaysData : []).map((day: any, index: number) => (
                     <div key={index} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                       <h4 className="font-semibold text-gray-800 text-sm mb-3">
-                        {new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        {day.date ? new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'N/A'}
                       </h4>
                       <div className="space-y-2">
                         <div className="flex justify-between items-center">
                           <span className="text-blue-600 text-xs">Pay-in:</span>
-                          <span className="text-blue-800 font-medium text-xs">₹{day.payin.total_amount.toLocaleString()}</span>
+                          <span className="text-blue-800 font-medium text-xs">₹{(day.payin?.total_amount || 0).toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-green-600 text-xs">Payout:</span>
-                          <span className="text-green-800 font-medium text-xs">₹{day.payout.total_amount.toLocaleString()}</span>
+                          <span className="text-green-800 font-medium text-xs">₹{(day.payout?.total_amount || 0).toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-gray-600 text-xs">Transactions:</span>
-                          <span className="text-gray-800 font-medium text-xs">{day.payin.transaction_count + day.payout.transaction_count}</span>
+                          <span className="text-gray-800 font-medium text-xs">{(day.payin?.transaction_count || 0) + (day.payout?.transaction_count || 0)}</span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-teal-600 text-xs">Payin(GST+Platform):</span>
-                          <span className="text-teal-800 font-medium text-xs">₹{(day.payin.total_gst_platform || 0).toLocaleString()}</span>
+                          <span className="text-teal-800 font-medium text-xs">₹{(day.payin?.total_gst_platform || 0).toLocaleString()}</span>
                         </div>
                       </div>
                     </div>
