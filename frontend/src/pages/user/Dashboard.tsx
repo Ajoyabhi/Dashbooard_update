@@ -41,8 +41,8 @@ const Dashboard = () => {
     today_payout: 0,
     total_payin: 0,
     total_payout: 0,
-    recent_payins: [],
-    recent_payouts: []
+    recent_payins: [] as any[],
+    recent_payouts: [] as any[]
   });
   const [lastNDaysData, setLastNDaysData] = useState<any[]>([]);
   const [selectedDays, setSelectedDays] = useState(5);
@@ -65,10 +65,33 @@ const Dashboard = () => {
     try {
       const response = await api.get('/user/dashboard');
       if (response.data.success) {
-        setDashboardData(response.data.data);
+        const data = response.data.data || {};
+        setDashboardData({
+          settlement_balance: data.settlement_balance || 0,
+          wallet_balance: data.wallet_balance || 0,
+          today_payin: data.today_payin || 0,
+          today_payout: data.today_payout || 0,
+          total_payin: data.total_payin || 0,
+          total_payout: data.total_payout || 0,
+          recent_payins: Array.isArray(data.recent_payins) ? data.recent_payins : [],
+          recent_payouts: Array.isArray(data.recent_payouts) ? data.recent_payouts : []
+        });
+      } else {
+        // If success is false, ensure arrays are set
+        setDashboardData(prev => ({
+          ...prev,
+          recent_payins: [],
+          recent_payouts: []
+        }));
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
+      // Set empty arrays on error to prevent Table errors
+      setDashboardData(prev => ({
+        ...prev,
+        recent_payins: [],
+        recent_payouts: []
+      }));
     } finally {
       setLoading(false);
     }
@@ -299,7 +322,7 @@ const Dashboard = () => {
 
   // Format last N days data for charts - ensure lastNDaysData is an array
   const lastNDaysChartData = (Array.isArray(lastNDaysData) ? lastNDaysData : []).map((day: any) => ({
-    date: new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    date: day.date ? new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'N/A',
     payin: day.payin?.total_amount || 0,
     payout: day.payout?.total_amount || 0,
     payinCount: day.payin?.transaction_count || 0,

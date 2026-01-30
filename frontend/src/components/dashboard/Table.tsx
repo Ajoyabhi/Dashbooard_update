@@ -87,8 +87,9 @@ const Table: React.FC<TableProps> = ({
     onPageSizeChange?.(newPageSize);
   };
 
-  // Filter data based on search term
-  const filteredData = data.filter((row) => {
+  // Filter data based on search term - ensure data is an array
+  const safeData = Array.isArray(data) ? data : [];
+  const filteredData = safeData.filter((row) => {
     if (!searchTerm) return true;
     return columns.some((column) => {
       const value = getValue(row, column.accessor);
