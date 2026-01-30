@@ -842,7 +842,8 @@ bipspayPayoutCallbackQueue.process(async function (job) {
 
     const callbackData = job.data.data || {};
     const transactionStatus = callbackData.status || job.data.status || 'unknown';
-    const isSuccess = transactionStatus === 'SUCCESS';
+    // Check for SUCCESS (from BipsPay) or completed (if already formatted)
+    const isSuccess = transactionStatus === 'SUCCESS' || transactionStatus === 'completed' || transactionStatus.toUpperCase() === 'SUCCESS';
 
     if (isSuccess) {
       // Update transaction charges
@@ -957,6 +958,7 @@ bipspayPayoutCallbackQueue.process(async function (job) {
     const chargesAmount = payoutTransaction.charges.total_charges;
 
     // Only update settlement wallet if payout failed (refund the money)
+    // Similar to Philpay: refund if status is not success/completed
     if (!isSuccess) {
       const userCurrentBalance = await FinancialDetails.findOne({
         where: {
