@@ -32,10 +32,37 @@ mongoose.connect(config.mongodb.uri, {
     console.log('✅ Connected to MongoDB\n');
     
     const transactionId = 'TXN20260130B83AB552';
+    const transactionUuid = '3ff927bc-c4c1-4baf-95a0-5b3468bf8a8d'; // From initial log
     
     try {
+      // First, find the initial log to get the transaction UUID
+      const initialLog = await Apilogs.findOne({
+        $or: [
+          { message: { $regex: transactionId, $options: 'i' } },
+          { 'metadata.reference_id': transactionId }
+        ]
+      })
+      .sort({ timestamp: 1 })
+      .lean();
+      
+      // Extract transaction_id from initial log if found
+      let foundTransactionUuid = transactionUuid;
+      if (initialLog && initialLog.metadata && initialLog.metadata.transaction_id) {
+        foundTransactionUuid = initialLog.metadata.transaction_id;
+      }
+      if (initialLog && initialLog.metadata && initialLog.metadata.data && initialLog.metadata.data.transaction_id) {
+        foundTransactionUuid = initialLog.metadata.data.transaction_id;
+      }
+      
       // Search for the transaction ID in message and metadata fields
-      const logs = await Apilogs.find({
+      // Also search by transaction UUID and time range
+      const timeRange = initialLog ? {
+        $gte: new Date(new Date(initialLog.timestamp).getTime() - 5 * 60 * 1000), // 5 minutes before
+        $lte: new Date(new Date(initialLog.timestamp).getTime() + 30 * 60 * 1000) // 30 minutes after
+      } : {};
+      
+      // First search: by transaction ID
+      let logs = await Apilogs.find({
         $or: [
           { message: { $regex: transactionId, $options: 'i' } },
           { 'metadata.reference_id': transactionId },
@@ -47,11 +74,48 @@ mongoose.connect(config.mongodb.uri, {
           { 'metadata.data.apitxnid': transactionId },
           { 'metadata.data.reference': transactionId },
           { 'metadata.data.data.reference_id': transactionId },
-          { 'metadata.data.data.apitxnid': transactionId }
+          { 'metadata.data.data.apitxnid': transactionId },
+          // Search by transaction UUID
+          { 'metadata.transaction_id': foundTransactionUuid },
+          { 'metadata.data.transaction_id': foundTransactionUuid }
         ]
       })
       .sort({ timestamp: 1 })
       .lean();
+      
+      // Second search: by time range and common patterns (if we have a time range)
+      if (Object.keys(timeRange).length > 0 && logs.length > 0) {
+        const timeBasedLogs = await Apilogs.find({
+          timestamp: timeRange,
+          $or: [
+            { message: { $regex: 'updating transaction status|debug.*transaction|bipspay.*callback|received.*callback', $options: 'i' } },
+            { 'metadata.reference_id': { $exists: true } },
+            { 'metadata.apitxnid': { $exists: true } },
+            { 'metadata.data.reference_id': { $exists: true } },
+            { 'metadata.data.apitxnid': { $exists: true } }
+          ]
+        })
+        .sort({ timestamp: 1 })
+        .lean();
+        
+        // Merge and deduplicate by _id
+        const logIds = new Set(logs.map(l => l._id.toString()));
+        timeBasedLogs.forEach(log => {
+          if (!logIds.has(log._id.toString())) {
+            // Check if it might be related (has similar reference_id or apitxnid in nested data)
+            const logRefId = log.metadata?.reference_id || log.metadata?.data?.reference_id || log.metadata?.data?.data?.reference_id;
+            const logApitxnid = log.metadata?.apitxnid || log.metadata?.data?.apitxnid || log.metadata?.data?.data?.apitxnid;
+            if (logRefId === transactionId || logApitxnid === transactionId || 
+                log.message?.toLowerCase().includes(transactionId.toLowerCase())) {
+              logs.push(log);
+              logIds.add(log._id.toString());
+            }
+          }
+        });
+        
+        // Sort again after merging
+        logs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      }
       
       if (logs.length === 0) {
         console.log(`❌ No logs found for transaction ID: ${transactionId}\n`);
@@ -77,19 +141,32 @@ mongoose.connect(config.mongodb.uri, {
         const lowerMessage = message.toLowerCase();
         
         // Check for intent link generation (payment.service.js:354-357)
-        if (lowerMessage.includes('updating transaction status to completed') || 
+        if (lowerMessage.includes('updating transaction status') || 
             lowerMessage.includes('debug: updating transaction status') ||
             lowerMessage.includes('intent link generated') ||
             lowerMessage.includes('payin response') ||
+            lowerMessage.includes('payment processing completed') ||
             lowerMessage.includes('bipspay payin') ||
+            (metadata.reference_id === transactionId && (lowerMessage.includes('debug') || lowerMessage.includes('completed'))) ||
             (metadata.method && metadata.method === 'POST' && metadata.endpoint && metadata.endpoint.includes('payin'))) {
           intentLinkLogs.push(log);
         }
         // Check for callback received in controller (payment.controller.js:582-585)
         else if (lowerMessage.includes('received bipspay payin callback') ||
                  lowerMessage.includes('received bipspay payout callback') ||
+                 lowerMessage.includes('bipspay payin callback') ||
+                 lowerMessage.includes('bipspay payout callback') ||
                  lowerMessage.includes('callback received') ||
-                 (metadata.method && metadata.endpoint && metadata.endpoint.includes('callback'))) {
+                 // Check if metadata.data contains the transaction ID (callback data structure)
+                 (metadata.data && (
+                   metadata.data.reference_id === transactionId || 
+                   metadata.data.apitxnid === transactionId ||
+                   metadata.data.reference === transactionId ||
+                   (typeof metadata.data === 'object' && JSON.stringify(metadata.data).includes(transactionId))
+                 )) ||
+                 (metadata.method && (metadata.method === 'POST' || metadata.method === 'GET') && 
+                  (metadata.endpoint && metadata.endpoint.includes('callback') || 
+                   metadata.data && (metadata.data.reference_id === transactionId || metadata.data.apitxnid === transactionId)))) {
           callbackReceivedLogs.push(log);
         }
         // Check for worker processing (callback.worker.js:795-800)
@@ -181,6 +258,20 @@ mongoose.connect(config.mongodb.uri, {
         });
         console.log('\n');
       }
+      
+      // Show ALL logs for debugging
+      console.log('🔍 ALL LOGS (Full Details for Debugging)');
+      console.log('─────────────────────────────────────────────────────────────');
+      logs.forEach((log, index) => {
+        const timestamp = log.timestamp ? new Date(log.timestamp).toISOString() : 'N/A';
+        console.log(`\n[${index + 1}] ${timestamp} | Level: ${log.level}`);
+        console.log(`   Message: ${log.message}`);
+        if (log.metadata && Object.keys(log.metadata).length > 0) {
+          console.log(`   Full Metadata:`);
+          console.log(JSON.stringify(log.metadata, null, 4));
+        }
+      });
+      console.log('\n');
       
       // Timeline Summary
       console.log('⏱️  TIMELINE SUMMARY');
