@@ -88,11 +88,13 @@ mongoose.connect(config.mongodb.uri, {
         const timeBasedLogs = await Apilogs.find({
           timestamp: timeRange,
           $or: [
-            { message: { $regex: 'updating transaction status|debug.*transaction|bipspay.*callback|received.*callback', $options: 'i' } },
+            { message: { $regex: 'updating transaction status|debug.*transaction|bipspay.*callback|received.*callback|received bipspay', $options: 'i' } },
             { 'metadata.reference_id': { $exists: true } },
             { 'metadata.apitxnid': { $exists: true } },
             { 'metadata.data.reference_id': { $exists: true } },
-            { 'metadata.data.apitxnid': { $exists: true } }
+            { 'metadata.data.apitxnid': { $exists: true } },
+            // Search for callback-specific patterns
+            { message: { $regex: 'callback', $options: 'i' }, 'metadata.method': { $exists: true } }
           ]
         })
         .sort({ timestamp: 1 })
@@ -129,7 +131,26 @@ mongoose.connect(config.mongodb.uri, {
       console.log(`Total logs found: ${logs.length}`);
       console.log(`═══════════════════════════════════════════════════════════════\n`);
       
+      // Print Initial Request Stage
+      if (initialRequestLogs.length > 0) {
+        console.log('🚀 STAGE 0: INITIAL PAYIN REQUEST');
+        console.log('   (payment.service.js:61 - Initial request received)');
+        console.log('─────────────────────────────────────────────────────────────');
+        initialRequestLogs.forEach((log, index) => {
+          const timestamp = log.timestamp ? new Date(log.timestamp).toISOString() : 'N/A';
+          console.log(`\n   [${index + 1}] ${timestamp}`);
+          console.log(`   Level: ${log.level}`);
+          console.log(`   Message: ${log.message}`);
+          if (log.metadata && Object.keys(log.metadata).length > 0) {
+            console.log(`   Metadata:`);
+            console.log(JSON.stringify(log.metadata, null, 6));
+          }
+        });
+        console.log('\n');
+      }
+      
       // Categorize logs by stage
+      const initialRequestLogs = [];
       const intentLinkLogs = [];
       const callbackReceivedLogs = [];
       const workerProcessedLogs = [];
@@ -140,33 +161,37 @@ mongoose.connect(config.mongodb.uri, {
         const metadata = log.metadata || {};
         const lowerMessage = message.toLowerCase();
         
+        // Check for initial payin request (payment.service.js:61)
+        if (lowerMessage.includes('starting to process payin request') ||
+            lowerMessage.includes('starting to process payout request') ||
+            (metadata.data && metadata.data.reference_id === transactionId && lowerMessage.includes('starting'))) {
+          initialRequestLogs.push(log);
+        }
         // Check for intent link generation (payment.service.js:354-357)
-        if (lowerMessage.includes('updating transaction status') || 
+        else if (lowerMessage.includes('updating transaction status') || 
             lowerMessage.includes('debug: updating transaction status') ||
             lowerMessage.includes('intent link generated') ||
             lowerMessage.includes('payin response') ||
             lowerMessage.includes('payment processing completed') ||
-            lowerMessage.includes('bipspay payin') ||
+            (lowerMessage.includes('bipspay payin') && !lowerMessage.includes('callback') && !lowerMessage.includes('starting')) ||
             (metadata.reference_id === transactionId && (lowerMessage.includes('debug') || lowerMessage.includes('completed'))) ||
-            (metadata.method && metadata.method === 'POST' && metadata.endpoint && metadata.endpoint.includes('payin'))) {
+            (metadata.method && metadata.method === 'POST' && metadata.endpoint && metadata.endpoint.includes('payin') && !metadata.endpoint.includes('callback'))) {
           intentLinkLogs.push(log);
         }
         // Check for callback received in controller (payment.controller.js:582-585)
+        // This should be a specific log message, not the initial request
         else if (lowerMessage.includes('received bipspay payin callback') ||
                  lowerMessage.includes('received bipspay payout callback') ||
-                 lowerMessage.includes('bipspay payin callback') ||
-                 lowerMessage.includes('bipspay payout callback') ||
-                 lowerMessage.includes('callback received') ||
-                 // Check if metadata.data contains the transaction ID (callback data structure)
-                 (metadata.data && (
-                   metadata.data.reference_id === transactionId || 
+                 (lowerMessage.includes('bipspay') && lowerMessage.includes('callback') && lowerMessage.includes('received')) ||
+                 // Check if metadata has callback-specific structure (method + data with reference_id/apitxnid)
+                 (metadata.method && (metadata.method === 'POST' || metadata.method === 'GET') && 
+                  metadata.data && 
+                  (metadata.data.reference_id === transactionId || 
                    metadata.data.apitxnid === transactionId ||
                    metadata.data.reference === transactionId ||
-                   (typeof metadata.data === 'object' && JSON.stringify(metadata.data).includes(transactionId))
-                 )) ||
-                 (metadata.method && (metadata.method === 'POST' || metadata.method === 'GET') && 
-                  (metadata.endpoint && metadata.endpoint.includes('callback') || 
-                   metadata.data && (metadata.data.reference_id === transactionId || metadata.data.apitxnid === transactionId)))) {
+                   (typeof metadata.data === 'object' && 
+                    (metadata.data.reference_id || metadata.data.apitxnid || metadata.data.reference) &&
+                    !metadata.data.transaction_id)))) { // Exclude initial request which has transaction_id
           callbackReceivedLogs.push(log);
         }
         // Check for worker processing (callback.worker.js:795-800)
@@ -174,7 +199,15 @@ mongoose.connect(config.mongodb.uri, {
                  lowerMessage.includes('bipspay: callback processed successfully') ||
                  lowerMessage.includes('payout transaction updated') ||
                  lowerMessage.includes('payin transaction updated') ||
-                 lowerMessage.includes('merchant callback sent')) {
+                 lowerMessage.includes('merchant callback sent') ||
+                 lowerMessage.includes('callback sent successfully') ||
+                 lowerMessage.includes('starting database lookups') ||
+                 lowerMessage.includes('database lookups completed') ||
+                 lowerMessage.includes('transaction lookup results') ||
+                 lowerMessage.includes('updated wallet balance') ||
+                 lowerMessage.includes('starting transaction updates') ||
+                 lowerMessage.includes('transaction updates completed') ||
+                 lowerMessage.includes('starting callback attempt')) {
           workerProcessedLogs.push(log);
         }
         else {
@@ -276,12 +309,24 @@ mongoose.connect(config.mongodb.uri, {
       // Timeline Summary
       console.log('⏱️  TIMELINE SUMMARY');
       console.log('─────────────────────────────────────────────────────────────');
+      if (initialRequestLogs.length > 0) {
+        const firstRequest = initialRequestLogs[0];
+        const requestTime = firstRequest.timestamp ? new Date(firstRequest.timestamp).toISOString() : 'N/A';
+        console.log(`✅ Initial Request:       ${requestTime}`);
+      }
+      
       if (intentLinkLogs.length > 0) {
         const firstIntent = intentLinkLogs[0];
         const intentTime = firstIntent.timestamp ? new Date(firstIntent.timestamp).toISOString() : 'N/A';
         console.log(`✅ Intent Link Generated: ${intentTime}`);
+        if (initialRequestLogs.length > 0 && firstIntent.timestamp && initialRequestLogs[0].timestamp) {
+          const timeDiff = new Date(firstIntent.timestamp) - new Date(initialRequestLogs[0].timestamp);
+          const seconds = Math.round(timeDiff / 1000);
+          const milliseconds = timeDiff % 1000;
+          console.log(`   ⏱️  Time from Request:     ${seconds}.${milliseconds}s`);
+        }
       } else {
-        console.log(`❌ Intent Link Generated: NOT FOUND`);
+        console.log(`❌ Intent Link Generated: NOT FOUND (likely debug level log not stored)`);
       }
       
       if (callbackReceivedLogs.length > 0) {
@@ -293,21 +338,44 @@ mongoose.connect(config.mongodb.uri, {
           const seconds = Math.round(timeDiff / 1000);
           const minutes = Math.floor(seconds / 60);
           const remainingSeconds = seconds % 60;
-          console.log(`   ⏱️  Time Difference:      ${minutes}m ${remainingSeconds}s (${seconds} seconds)`);
+          console.log(`   ⏱️  Time from Intent:      ${minutes}m ${remainingSeconds}s (${seconds} seconds)`);
+        } else if (initialRequestLogs.length > 0 && firstCallback.timestamp && initialRequestLogs[0].timestamp) {
+          const timeDiff = new Date(firstCallback.timestamp) - new Date(initialRequestLogs[0].timestamp);
+          const seconds = Math.round(timeDiff / 1000);
+          const minutes = Math.floor(seconds / 60);
+          const remainingSeconds = seconds % 60;
+          console.log(`   ⏱️  Time from Request:     ${minutes}m ${remainingSeconds}s (${seconds} seconds)`);
         }
       } else {
         console.log(`❌ Callback Received:     NOT FOUND`);
+        console.log(`   ⚠️  The callback might have been received but not logged, or bypassed the controller`);
       }
       
       if (workerProcessedLogs.length > 0) {
         const firstWorker = workerProcessedLogs[0];
-        const workerTime = firstWorker.timestamp ? new Date(firstWorker.timestamp).toISOString() : 'N/A';
-        console.log(`✅ Worker Processed:      ${workerTime}`);
+        const lastWorker = workerProcessedLogs[workerProcessedLogs.length - 1];
+        const workerStartTime = firstWorker.timestamp ? new Date(firstWorker.timestamp).toISOString() : 'N/A';
+        const workerEndTime = lastWorker.timestamp ? new Date(lastWorker.timestamp).toISOString() : 'N/A';
+        console.log(`✅ Worker Started:         ${workerStartTime}`);
+        console.log(`✅ Worker Completed:       ${workerEndTime}`);
+        if (firstWorker.timestamp && lastWorker.timestamp) {
+          const timeDiff = new Date(lastWorker.timestamp) - new Date(firstWorker.timestamp);
+          const seconds = Math.round(timeDiff / 1000);
+          const milliseconds = timeDiff % 1000;
+          console.log(`   ⏱️  Total Processing Time:  ${seconds}.${milliseconds}s`);
+        }
         if (callbackReceivedLogs.length > 0 && firstWorker.timestamp && callbackReceivedLogs[0].timestamp) {
           const timeDiff = new Date(firstWorker.timestamp) - new Date(callbackReceivedLogs[0].timestamp);
           const seconds = Math.round(timeDiff / 1000);
-          const milliseconds = timeDiff % 1000;
-          console.log(`   ⏱️  Processing Time:       ${seconds}.${milliseconds}s`);
+          const minutes = Math.floor(seconds / 60);
+          const remainingSeconds = seconds % 60;
+          console.log(`   ⏱️  Time from Callback:     ${minutes}m ${remainingSeconds}s (${seconds} seconds)`);
+        } else if (initialRequestLogs.length > 0 && firstWorker.timestamp && initialRequestLogs[0].timestamp) {
+          const timeDiff = new Date(firstWorker.timestamp) - new Date(initialRequestLogs[0].timestamp);
+          const seconds = Math.round(timeDiff / 1000);
+          const minutes = Math.floor(seconds / 60);
+          const remainingSeconds = seconds % 60;
+          console.log(`   ⏱️  Time from Request:      ${minutes}m ${remainingSeconds}s (${seconds} seconds)`);
         }
       } else {
         console.log(`❌ Worker Processed:      NOT FOUND`);
@@ -316,20 +384,52 @@ mongoose.connect(config.mongodb.uri, {
       // Status Summary
       console.log('\n📈 STATUS SUMMARY');
       console.log('─────────────────────────────────────────────────────────────');
+      const hasRequest = initialRequestLogs.length > 0;
       const hasIntent = intentLinkLogs.length > 0;
       const hasCallback = callbackReceivedLogs.length > 0;
       const hasWorker = workerProcessedLogs.length > 0;
       
-      if (hasIntent && hasCallback && hasWorker) {
+      if (hasRequest && hasIntent && hasCallback && hasWorker) {
         console.log('✅ Transaction flow is COMPLETE');
+        console.log('   ✓ Initial request received');
         console.log('   ✓ Intent link generated');
         console.log('   ✓ Callback received');
         console.log('   ✓ Worker processed successfully');
       } else {
-        console.log('⚠️  Transaction flow is INCOMPLETE');
-        if (!hasIntent) console.log('   ✗ Intent link generation not found');
-        if (!hasCallback) console.log('   ✗ Callback reception not found');
-        if (!hasWorker) console.log('   ✗ Worker processing not found');
+        console.log('⚠️  Transaction flow analysis:');
+        if (hasRequest) {
+          console.log('   ✓ Initial request received');
+        } else {
+          console.log('   ✗ Initial request not found');
+        }
+        if (hasIntent) {
+          console.log('   ✓ Intent link generation found');
+        } else {
+          console.log('   ✗ Intent link generation not found (likely debug level log not stored)');
+        }
+        if (hasCallback) {
+          console.log('   ✓ Callback received in controller');
+        } else {
+          console.log('   ⚠️  Callback received log not found');
+          console.log('      → Callback might have bypassed controller or was not logged');
+          console.log('      → Worker started processing, so callback was likely received');
+        }
+        if (hasWorker) {
+          console.log('   ✓ Worker processed successfully');
+        } else {
+          console.log('   ✗ Worker processing not found');
+        }
+      }
+      
+      // Gap Analysis
+      if (hasRequest && hasWorker && !hasCallback) {
+        console.log('\n🔍 GAP ANALYSIS:');
+        const requestTime = new Date(initialRequestLogs[0].timestamp);
+        const workerTime = new Date(workerProcessedLogs[0].timestamp);
+        const gapMinutes = Math.round((workerTime - requestTime) / 1000 / 60);
+        console.log(`   ⏱️  Gap between request and worker: ${gapMinutes} minutes`);
+        console.log(`   💡 This suggests the callback was received but not logged in the controller`);
+        console.log(`   💡 Or the callback was queued and processed later`);
       }
       
       console.log('\n═══════════════════════════════════════════════════════════════\n');
