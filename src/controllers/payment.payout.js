@@ -100,7 +100,6 @@ const initiatePayout = async (req, res) => {
         });
 
         const clientIp = getClientIp(req);
-        console.log('Client IP:', clientIp);
 
         const isIpWhitelisted = user.UserIPs.some(ip => ip.ip_address === clientIp && ip.is_active);
         if (!isIpWhitelisted) {
@@ -191,11 +190,22 @@ const initiatePayout = async (req, res) => {
         });
       }
 
-      // Check for duplicate transaction with optimized query
-      const existingTransaction = await PayoutTransaction.findOne(
-        { reference_id },
-        { _id: 1, status: 1 }
-      ).lean();
+      // Parallelize independent database queries
+      const [existingTransaction, chargeBrackets, platformCharges] = await Promise.all([
+        PayoutTransaction.findOne(
+          { reference_id },
+          { _id: 1, status: 1 }
+        ).lean(),
+        MerchantCharges.findAll({
+          where: {
+            user_id: user_id
+          },
+          order: [['start_amount', 'ASC']]
+        }),
+        PlatformCharges.findOne({
+          where: { is_active: true }
+        })
+      ]);
 
       if (existingTransaction) {
         logger.warn('Duplicate transaction attempt', {
@@ -210,14 +220,6 @@ const initiatePayout = async (req, res) => {
           status: existingTransaction.status
         });
       }
-
-      // Find all charge brackets for the user
-      const chargeBrackets = await MerchantCharges.findAll({
-        where: {
-          user_id: user_id
-        },
-        order: [['start_amount', 'ASC']]
-      });
 
       if (!chargeBrackets || chargeBrackets.length === 0) {
         return res.status(400).json({
@@ -263,11 +265,6 @@ const initiatePayout = async (req, res) => {
       // Calculate total charges first
       const totalCharges = parseFloat(adminCharge);
 
-      // Fetch platform charges from database
-      const platformCharges = await PlatformCharges.findOne({
-        where: { is_active: true }
-      });
-
       if(platformCharges?.charge){
         platformFee = (totalCharges * parseFloat(platformCharges.charge)) / 100;
       }
@@ -294,12 +291,14 @@ const initiatePayout = async (req, res) => {
         }
       );
 
-      let userTransaction = await UserTransaction.create({
+      // Create transactions in parallel
+      const transactionId = uuidv4();
+      const userTransaction = new UserTransaction({
         user: {
           id: new mongoose.Types.ObjectId(user_id),
           user_id: user_id
         },
-        transaction_id: uuidv4(),
+        transaction_id: transactionId,
         amount: amount,
         transaction_type: 'payout',
         reference_id: reference_id,
@@ -326,10 +325,9 @@ const initiatePayout = async (req, res) => {
         created_by: new mongoose.Types.ObjectId(user_id),
         created_by_model: user.user_type
       });
-      await userTransaction.save();
 
-      let payoutTransaction = await PayoutTransaction.create({
-        transaction_id: uuidv4(),
+      const payoutTransaction = new PayoutTransaction({
+        transaction_id: transactionId,
         user: {
           id: new mongoose.Types.ObjectId(user_id),
           user_id: user_id.toString(),
@@ -367,25 +365,29 @@ const initiatePayout = async (req, res) => {
         created_by: new mongoose.Types.ObjectId(user_id),
         created_by_model: user.user_type || 'User'
       });
-      await payoutTransaction.save();
 
-      await TransactionCharges.create({
-        transaction_type: 'payout',
-        reference_id: reference_id,
-        transaction_amount: amount,
-        transaction_utr: null,
-        merchant_charge: adminCharge,
-        agent_charge: agentCharge,
-        total_charges: totalCharges,
-        gst_amount: gstAmount,
-        platform_fee: platformFee,
-        user_id: user_id,
-        status: 'pending',
-        metadata: {
-          merchant_response: null,
-          requested_ip: clientIp
-        }
-      });
+      // Parallelize transaction creation
+      await Promise.all([
+        userTransaction.save(),
+        payoutTransaction.save(),
+        TransactionCharges.create({
+          transaction_type: 'payout',
+          reference_id: reference_id,
+          transaction_amount: amount,
+          transaction_utr: null,
+          merchant_charge: adminCharge,
+          agent_charge: agentCharge,
+          total_charges: totalCharges,
+          gst_amount: gstAmount,
+          platform_fee: platformFee,
+          user_id: user_id,
+          status: 'pending',
+          metadata: {
+            merchant_response: null,
+            requested_ip: clientIp
+          }
+        })
+      ]);
       let result;
       if (user.MerchantDetail.payout_merchant_name === 'Unpay') {
         const payoutData = {
@@ -403,21 +405,24 @@ const initiatePayout = async (req, res) => {
         };
         result = await unpayPayout(payoutData);
         if (result?.status == 200) {
-          await payoutTransaction.updateOne(
-            { reference_id: reference_id },
-            { $set: { status: "completed", gateway_response: { reference_id, status: "completed", message: result.data.message, merchant_response: result.data.txn_id } } }
-          );
-          await userTransaction.updateOne(
-            { reference_id: reference_id },
-            { $set: { status: "completed", gateway_response: { reference_id, status: "completed", message: result.data.message, merchant_response: result.data.txn_id } } }
-          );
-          await TransactionCharges.update(
-            {
-              status: 'completed',
-              merchant_response: result.data.txn_id
-            },
-            { where: { reference_id: reference_id } }
-          );
+          // Parallelize status updates
+          await Promise.all([
+            payoutTransaction.updateOne(
+              { reference_id: reference_id },
+              { $set: { status: "completed", gateway_response: { reference_id, status: "completed", message: result.data.message, merchant_response: result.data.txn_id } } }
+            ),
+            userTransaction.updateOne(
+              { reference_id: reference_id },
+              { $set: { status: "completed", gateway_response: { reference_id, status: "completed", message: result.data.message, merchant_response: result.data.txn_id } } }
+            ),
+            TransactionCharges.update(
+              {
+                status: 'completed',
+                merchant_response: result.data.txn_id
+              },
+              { where: { reference_id: reference_id } }
+            )
+          ]);
           res.status(200).json({
             // result od chnages
             success: true,
@@ -426,21 +431,24 @@ const initiatePayout = async (req, res) => {
             reference_id: result.data.apitxnid
           });
         } else {
-          await payoutTransaction.updateOne(
-            { reference_id: reference_id },
-            { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result?.data?.message || 'Unknown error' } } }
-          );
-          await userTransaction.updateOne(
-            { reference_id: reference_id },
-            { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result?.data?.message || 'Unknown error' } } }
-          );
-          await TransactionCharges.update(
-            {
-              status: 'failed',
-              merchant_response: result.data.txn_id
-            },
-            { where: { reference_id: reference_id } }
-          );
+          // Parallelize failed status updates
+          await Promise.all([
+            payoutTransaction.updateOne(
+              { reference_id: reference_id },
+              { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result?.data?.message || 'Unknown error' } } }
+            ),
+            userTransaction.updateOne(
+              { reference_id: reference_id },
+              { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result?.data?.message || 'Unknown error' } } }
+            ),
+            TransactionCharges.update(
+              {
+                status: 'failed',
+                merchant_response: result.data.txn_id
+              },
+              { where: { reference_id: reference_id } }
+            )
+          ]);
           res.status(400).json({
             success: false,
             message: 'Payout processing failed',
@@ -451,7 +459,6 @@ const initiatePayout = async (req, res) => {
         }
       }
       else if (user.MerchantDetail.payout_merchant_name === 'SPay') {
-        console.log("this is payout data of spay", payoutData)
         const payoutData = {
           reference_id,
           user_id,
@@ -470,7 +477,6 @@ const initiatePayout = async (req, res) => {
           }
         };
         result = await spayPayout(payoutData);
-        console.log("this is result of spay payout", result)
       }
       else if (user.MerchantDetail.payout_merchant_name === 'Philpay') {
         const payoutData = {
@@ -490,7 +496,6 @@ const initiatePayout = async (req, res) => {
           }
         };
         result = await philpayPayout(payoutData);
-        console.log("this is result of philpay payout", result)
         if (result?.status == 200) {
           return res.status(200).json({
            success: true,
@@ -521,7 +526,6 @@ const initiatePayout = async (req, res) => {
           }
         };
         result = await bipspayPayout(payoutData);
-        console.log("this is result of bipspay payout", result)
             
         if (result.success) {
           const transactionData = result.data.data || result.data;
@@ -536,44 +540,47 @@ const initiatePayout = async (req, res) => {
           const payoutRef = transactionData.payout_ref || transactionData.payout_id || reference_id;
           const utr = transactionData.rrn || transactionData.bank_ref || null;
           
-          await payoutTransaction.updateOne(
-            { reference_id: reference_id },
-            { 
-              $set: { 
-                status: dbStatus, 
-                gateway_response: { 
-                  reference_id, 
-                  status: gatewayStatus, 
-                  message: result.message || transactionData.remark || 'Payout request processed',
-                  merchant_response: payoutRef,
-                  utr: utr
+          // Parallelize status updates
+          await Promise.all([
+            payoutTransaction.updateOne(
+              { reference_id: reference_id },
+              { 
+                $set: { 
+                  status: dbStatus, 
+                  gateway_response: { 
+                    reference_id, 
+                    status: gatewayStatus, 
+                    message: result.message || transactionData.remark || 'Payout request processed',
+                    merchant_response: payoutRef,
+                    utr: utr
+                  } 
                 } 
-              } 
-            }
-          );
-          await userTransaction.updateOne(
-            { reference_id: reference_id },
-            { 
-              $set: { 
-                status: dbStatus, 
-                gateway_response: { 
-                  reference_id, 
-                  status: gatewayStatus, 
-                  message: result.message || transactionData.remark || 'Payout request processed',
-                  merchant_response: payoutRef,
-                  utr: utr
+              }
+            ),
+            userTransaction.updateOne(
+              { reference_id: reference_id },
+              { 
+                $set: { 
+                  status: dbStatus, 
+                  gateway_response: { 
+                    reference_id, 
+                    status: gatewayStatus, 
+                    message: result.message || transactionData.remark || 'Payout request processed',
+                    merchant_response: payoutRef,
+                    utr: utr
+                  } 
                 } 
-              } 
-            }
-          );
-          await TransactionCharges.update(
-            {
-              status: dbStatus,
-              transaction_utr: utr,
-              merchant_response: payoutRef
-            },
-            { where: { reference_id: reference_id } }
-          );
+              }
+            ),
+            TransactionCharges.update(
+              {
+                status: dbStatus,
+                transaction_utr: utr,
+                merchant_response: payoutRef
+              },
+              { where: { reference_id: reference_id } }
+            )
+          ]);
           
           return res.status(200).json({
             success: true,
@@ -585,21 +592,24 @@ const initiatePayout = async (req, res) => {
             remark: transactionData.remark || null
           });
         } else {
-          await payoutTransaction.updateOne(
-            { reference_id: reference_id },
-            { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result.message || 'Unknown error' } } }
-          );
-          await userTransaction.updateOne(
-            { reference_id: reference_id },
-            { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result.message || 'Unknown error' } } }
-          );
-          await TransactionCharges.update(
-            {
-              status: 'failed',
-              merchant_response: result.data?.payout_ref || result.data?.payout_id
-            },
-            { where: { reference_id: reference_id } }
-          );
+          // Parallelize failed status updates
+          await Promise.all([
+            payoutTransaction.updateOne(
+              { reference_id: reference_id },
+              { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result.message || 'Unknown error' } } }
+            ),
+            userTransaction.updateOne(
+              { reference_id: reference_id },
+              { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result.message || 'Unknown error' } } }
+            ),
+            TransactionCharges.update(
+              {
+                status: 'failed',
+                merchant_response: result.data?.payout_ref || result.data?.payout_id
+              },
+              { where: { reference_id: reference_id } }
+            )
+          ]);
 
           // Revert balance
           const userFinancial = await FinancialDetails.findOne({ where: { user_id: user_id } });

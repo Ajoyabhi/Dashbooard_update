@@ -57,11 +57,13 @@ const createIPv4Agents = () => {
  * @returns {Promise<Object>} - Processing result
  */
 const processPayin = async (data) => {
-  try {
-    logger.info('Starting to process payin request', {
+  const logContext = {
       transaction_id: data.transaction_id,
-      data
-    });
+      reference_id: data.reference_id,
+      user_id: data.user_id
+    };
+  try {
+    logger.info('Processing payin request', logContext);
 
     const {
       user_id,
@@ -122,11 +124,20 @@ const processPayin = async (data) => {
       throw new Error('Technical issue please try again later');
     }
 
-    // Check for duplicate transaction
-    const existingTransaction = await PayinTransaction.findOne(
-      { reference_id },
-      { _id: 1, status: 1 }
-    ).lean();
+    // Parallelize independent database queries
+    const [existingTransaction, chargeBrackets, platformCharges] = await Promise.all([
+      PayinTransaction.findOne(
+        { reference_id },
+        { _id: 1, status: 1 }
+      ).lean(),
+      MerchantCharges.findAll({
+        where: { user_id },
+        order: [['start_amount', 'ASC']]
+      }),
+      PlatformCharges.findOne({
+        where: { is_active: true }
+      })
+    ]);
 
     if (existingTransaction) {
       return {
@@ -134,12 +145,6 @@ const processPayin = async (data) => {
         message: 'Transaction with this reference ID already exists. Please use a different reference ID for new transactions.'
       };
     }
-
-    // Find charge brackets
-    const chargeBrackets = await MerchantCharges.findAll({
-      where: { user_id },
-      order: [['start_amount', 'ASC']]
-    });
 
     if (!chargeBrackets || chargeBrackets.length === 0) {
       throw new Error('No charge brackets found for the user');
@@ -176,11 +181,6 @@ const processPayin = async (data) => {
 
     const totalCharges = parseFloat(adminCharge);
 
-    // Fetch platform charges from database
-    const platformCharges = await PlatformCharges.findOne({
-      where: { is_active: true }
-    });
-
     if (platformCharges?.charge) {
       platformFee = (totalCharges * parseFloat(platformCharges.charge)) / 100;
     }
@@ -202,7 +202,7 @@ const processPayin = async (data) => {
 
 
     // Create user transaction
-    const userTransaction = await UserTransaction.create({
+    const userTransaction = new UserTransaction({
       user: {
         id: new mongoose.Types.ObjectId(user_id),
         user_id: user_id,
@@ -245,10 +245,9 @@ const processPayin = async (data) => {
       created_by: new mongoose.Types.ObjectId(user_id),
       created_by_model: user.user_type
     });
-    await userTransaction.save();
 
     // Create payin transaction
-    const payinTransaction = await PayinTransaction.create({
+    const payinTransaction = new PayinTransaction({
       transaction_id: data.transaction_id,
       user: {
         id: new mongoose.Types.ObjectId(user_id),
@@ -286,28 +285,29 @@ const processPayin = async (data) => {
       created_by: new mongoose.Types.ObjectId(user_id),
       created_by_model: user.user_type || 'User'
     });
-    await payinTransaction.save();
-    await TransactionCharges.create({
-      transaction_type: 'payin',
-      reference_id: reference_id,
-      transaction_amount: parseFloat(order_amount),
-      transaction_utr: null,
-      merchant_charge: parseFloat(adminCharge),
-      agent_charge: parseFloat(agentCharge),
-      total_charges: parseFloat(totalCharges),
-      gst_amount: parseFloat(gstAmount),
-      platform_fee: parseFloat(platformFee),
-      user_id: parseInt(user_id),
-      status: 'pending',
-      metadata: {
-        merchant_response: null,
-        requested_ip: clientIp
-      }
-    });
-    logger.debug('DEBUG: Starting payment processing', {
-      reference_id,
-      timestamp: new Date().toISOString()
-    });
+
+    // Parallelize transaction creation
+    await Promise.all([
+      userTransaction.save(),
+      payinTransaction.save(),
+      TransactionCharges.create({
+        transaction_type: 'payin',
+        reference_id: reference_id,
+        transaction_amount: parseFloat(order_amount),
+        transaction_utr: null,
+        merchant_charge: parseFloat(adminCharge),
+        agent_charge: parseFloat(agentCharge),
+        total_charges: parseFloat(totalCharges),
+        gst_amount: parseFloat(gstAmount),
+        platform_fee: parseFloat(platformFee),
+        user_id: parseInt(user_id),
+        status: 'pending',
+        metadata: {
+          merchant_response: null,
+          requested_ip: clientIp
+        }
+      })
+    ]);
 
     const payinData = {
       user_id,
@@ -320,8 +320,6 @@ const processPayin = async (data) => {
     };
 
     let result;
-    const serverIp = getServerIp();
-    console.log("this is my ip address", serverIp);
     if (user.MerchantDetail.payin_merchant_name == "Unpay") {
       result = await unpayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee);
     } else if (user.MerchantDetail.payin_merchant_name == "Spay") {
@@ -335,95 +333,80 @@ const processPayin = async (data) => {
     else {
       throw new Error('Invalid merchant name');
     }
-    console.log("result", result);
-    logger.debug('DEBUG: Payment processing completed', {
-      reference_id,
-      success: result?.success,
-      timestamp: new Date().toISOString()
-    });
 
-    console.log("this is the returned result", result)
-    logger.debug('DEBUG: Payment processing completed', {
-      reference_id,
-      success: result?.success,
-      timestamp: new Date().toISOString()
-    });
-
-    // Update transaction status
+    // Update transaction status - parallelize updates
     if (result?.statuscode == "TXN" || result?.data?.statuscode == "TXNS") {
-      logger.debug('DEBUG: Updating transaction status to completed', {
-        reference_id,
-        timestamp: new Date().toISOString()
-      });
-
-      await PayinTransaction.updateOne(
-        { reference_id },
-        {
-          $set: {
-            status: 'payin_qr_generated',
-            gateway_response: {
-              utr: null,
+      await Promise.all([
+        PayinTransaction.updateOne(
+          { reference_id },
+          {
+            $set: {
               status: 'payin_qr_generated',
-              message: 'Payin qr string generated',
-              merchant_response: result.data.apitxnid
+              gateway_response: {
+                utr: null,
+                status: 'payin_qr_generated',
+                message: 'Payin qr string generated',
+                merchant_response: result.data.apitxnid
+              }
             }
           }
-        }
-      );
-      await UserTransaction.updateOne(
-        { reference_id },
-        {
-          $set: {
-            status: 'payin_qr_generated',
-            gateway_response: {
-              utr: null,
+        ),
+        UserTransaction.updateOne(
+          { reference_id },
+          {
+            $set: {
               status: 'payin_qr_generated',
-              message: 'Payin qr string generated',
-              merchant_response: result.data.apitxnid
+              gateway_response: {
+                utr: null,
+                status: 'payin_qr_generated',
+                message: 'Payin qr string generated',
+                merchant_response: result.data.apitxnid
+              }
             }
           }
-        }
-      );
-      await TransactionCharges.update(
-        {
-          transaction_utr: result.data.apitxnid,
-          status: 'pending'
-        },
-        {
-          where: {
-            reference_id: reference_id
+        ),
+        TransactionCharges.update(
+          {
+            transaction_utr: result.data.apitxnid,
+            status: 'pending'
+          },
+          {
+            where: {
+              reference_id: reference_id
+            }
           }
-        }
-      );
+        )
+      ]);
       return {
         success: true,
         reference_id: result.data.apitxnid,
         payment_url: encodeURI(result.data.qrString)
       };
     } else {
-      await PayinTransaction.updateOne(
-        { reference_id },
-        { $set: { status: 'failed' } }
-      );
-      await UserTransaction.updateOne(
-        { reference_id },
-        { $set: { status: 'failed' } }
-      );
-      await TransactionCharges.update(
-        {
-          status: 'failed'
-        },
-        {
-          where: {
-            reference_id: reference_id
+      // Parallelize failed status updates
+      await Promise.all([
+        PayinTransaction.updateOne(
+          { reference_id },
+          { $set: { status: 'failed' } }
+        ),
+        UserTransaction.updateOne(
+          { reference_id },
+          { $set: { status: 'failed' } }
+        ),
+        TransactionCharges.update(
+          {
+            status: 'failed'
+          },
+          {
+            where: {
+              reference_id: reference_id
+            }
           }
-        }
-      );
-      logger.error('DEBUG: Payin request failed', {
-        reference_id,
-        status: 'failed',
-        message: result.message,
-        timestamp: new Date().toISOString()
+        )
+      ]);
+      logger.error('Payin request failed', {
+        ...logContext,
+        message: result.message
       });
       return {
         success: false,
@@ -432,8 +415,8 @@ const processPayin = async (data) => {
     }
   } catch (error) {
     logger.error('Error processing payin request', {
-      error: error.message,
-      stack: error.stack
+      ...logContext,
+      error: error.message
     });
     return {
       success: false,
@@ -742,7 +725,7 @@ const bipspayPayout = async (payoutData) => {
   } catch (error) {
     logger.error('Error processing BipsPay payout request', {
       error: error.message,
-      stack: error.stack
+      reference_id: payoutData.reference_id
     });
     return {
       success: false,

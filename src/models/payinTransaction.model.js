@@ -65,6 +65,29 @@ const payinTransactionSchema = new mongoose.Schema({
     requested_ip: String,
     callback_received_at: Date
   },
+  callback_timing: {
+    received_at: {
+      type: Date,
+      default: null
+    },
+    sent_to_merchant_at: {
+      type: Date,
+      default: null
+    },
+    processing_time_ms: {
+      type: Number,
+      default: null
+    },
+    merchant_callback_attempts: {
+      type: Number,
+      default: 0
+    },
+    merchant_callback_status: {
+      type: String,
+      enum: ['pending', 'sent', 'failed'],
+      default: 'pending'
+    }
+  },
   remark: String,
   created_by: {
     type: mongoose.Schema.Types.ObjectId,
@@ -84,6 +107,8 @@ payinTransactionSchema.index({ reference_id: 1 });
 payinTransactionSchema.index({ 'user.id': 1 });
 payinTransactionSchema.index({ status: 1 });
 payinTransactionSchema.index({ createdAt: 1 });
+payinTransactionSchema.index({ 'callback_timing.received_at': 1 });
+payinTransactionSchema.index({ 'callback_timing.merchant_callback_status': 1 });
 
 const PayinTransaction = mongoose.model('PayinTransaction', payinTransactionSchema);
 

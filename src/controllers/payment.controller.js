@@ -4,6 +4,7 @@ const { logger } = require('../utils/logger');
 const { processPayin, getBipspayToken } = require('../services/payment.service');
 const { callbackQueue, philpayPayoutQueue, createRedisClient, bipspayCallbackQueue, bipspayPayoutCallbackQueue } = require('../config/queue.config');
 const PayinTransaction = require('../models/payinTransaction.model');
+const PayoutTransaction = require('../models/payoutTransaction.model');
 const { UserTransaction } = require('../models/userTransaction.model');
 const { MerchantDetails } = require('../models');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
@@ -579,17 +580,45 @@ const handlePhilpayPayoutCallback = async (req, res) => {
 const handleBipspayCallback = async (req, res) => {
   try {
     const callbackData = req.method === 'GET' ? req.query : req.body;
+    const callbackReceivedAt = new Date();
+    
+    // Extract reference_id from callback data
+    const referenceId = callbackData.apitxnid || callbackData.reference || callbackData.order_id || callbackData.data?.reference || callbackData.data?.order_id;
+    
+    // Update PayinTransaction with callback received time immediately
+    if (referenceId) {
+      await PayinTransaction.updateOne(
+        { reference_id: referenceId },
+        { 
+          $set: { 
+            'callback_timing.received_at': callbackReceivedAt,
+            'callback_timing.merchant_callback_status': 'pending'
+          } 
+        }
+      ).catch(err => {
+        // Log but don't fail if update fails (transaction might not exist yet)
+        logger.warn('Failed to update callback timing', { reference_id: referenceId, error: err.message });
+      });
+    }
+    
     logger.info('Received Bipspay Payin callback', {
       method: req.method,
-      data: callbackData
+      reference_id: referenceId,
+      received_at: callbackReceivedAt.toISOString()
     });
-    const job = await bipspayCallbackQueue.add(callbackData, {
+    
+    // Add callback received time to job data
+    const job = await bipspayCallbackQueue.add({
+      ...callbackData,
+      _callback_received_at: callbackReceivedAt.toISOString()
+    }, {
       attempts: 3,
       backoff: {
         type: 'exponential',
         delay: 5000
       }
     });
+    
     res.status(200).json({
       success: true,
       message: 'Callback processed successfully',
@@ -604,17 +633,45 @@ const handleBipspayCallback = async (req, res) => {
 const handleBipspayPayoutCallback = async (req, res) => {
   try {
     const callbackData = req.method === 'GET' ? req.query : req.body;
+    const callbackReceivedAt = new Date();
+    
+    // Extract reference_id from callback data
+    const referenceId = callbackData.reference || callbackData.data?.reference || callbackData.order_id || callbackData.data?.order_id;
+    
+    // Update PayoutTransaction with callback received time immediately
+    if (referenceId) {
+      await PayoutTransaction.updateOne(
+        { reference_id: referenceId },
+        { 
+          $set: { 
+            'callback_timing.received_at': callbackReceivedAt,
+            'callback_timing.merchant_callback_status': 'pending'
+          } 
+        }
+      ).catch(err => {
+        // Log but don't fail if update fails (transaction might not exist yet)
+        logger.warn('Failed to update payout callback timing', { reference_id: referenceId, error: err.message });
+      });
+    }
+    
     logger.info('Received Bipspay Payout callback', {
       method: req.method,
-      data: callbackData
+      reference_id: referenceId,
+      received_at: callbackReceivedAt.toISOString()
     });
-    const job = await bipspayPayoutCallbackQueue.add(callbackData, {
+    
+    // Add callback received time to job data
+    const job = await bipspayPayoutCallbackQueue.add({
+      ...callbackData,
+      _callback_received_at: callbackReceivedAt.toISOString()
+    }, {
       attempts: 3,
       backoff: {
         type: 'exponential',
         delay: 5000
       }
     });
+    
     res.status(200).json({
       success: true,
       message: 'Callback processed successfully',

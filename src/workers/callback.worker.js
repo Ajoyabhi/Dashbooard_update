@@ -1,4 +1,4 @@
-const { callbackQueue, philpayPayoutQueue, bipspayCallbackQueue, bipspayPayoutCallbackQueue } = require('../config/queue.config');
+const { callbackQueue, philpayPayoutQueue, bipspayCallbackQueue, bipspayPayoutCallbackQueue, merchantCallbackQueue } = require('../config/queue.config');
 const { logger } = require('../utils/logger');
 const PayinTransaction = require('../models/payinTransaction.model');
 const UserTransaction = require('../models/userTransaction.model');
@@ -30,7 +30,8 @@ mongoose.connect(config.mongodb.uri, {
   });
 
 // Process generic callback jobs (Unpay / others using common format) with concurrency
-const CALLBACK_CONCURRENCY = 10; // Process 10 jobs at a time
+// Increased concurrency for better throughput - can handle more callbacks simultaneously
+const CALLBACK_CONCURRENCY = 15; // Process 15 jobs at a time (increased from 10)
 logger.info(`Starting callback worker with concurrency of ${CALLBACK_CONCURRENCY}`);
 callbackQueue.process(CALLBACK_CONCURRENCY, async function (job) {
   const startTime = Date.now();
@@ -339,20 +340,19 @@ callbackQueue.process(CALLBACK_CONCURRENCY, async function (job) {
 
 // Process BipsPay payin callback jobs with concurrency
 // Set concurrency to process multiple jobs simultaneously
-const BIPSPAY_CALLBACK_CONCURRENCY = 10; // Process 10 jobs at a time
+// Increased for better throughput - optimized for Bipspay callbacks
+const BIPSPAY_CALLBACK_CONCURRENCY = 15; // Process 15 jobs at a time (increased from 10)
 logger.info(`Starting BipsPay callback worker with concurrency of ${BIPSPAY_CALLBACK_CONCURRENCY}`);
 bipspayCallbackQueue.process(BIPSPAY_CALLBACK_CONCURRENCY, async function (job) {
   const startTime = Date.now();
   let timeout = null;
-  console.log("================================================");
-  console.log("this is the job data of bipspay callback", job.data);
-  console.log("================================================");
+  const logContext = {
+    jobId: job.id,
+    attempts: job.attemptsMade
+  };
+  
   try {
-    logger.info('Processing BipsPay callback job', {
-      jobId: job.id,
-      data: job.data,
-      attempts: job.attemptsMade
-    });
+    logger.info('Processing BipsPay callback job', logContext);
 
     // Set job timeout - increased to 5 minutes to handle slow operations
     timeout = setTimeout(() => {
@@ -414,33 +414,28 @@ bipspayCallbackQueue.process(BIPSPAY_CALLBACK_CONCURRENCY, async function (job) 
 
     // Map BipsPay status to our status format
     const mappedStatus = (statuscode === 'TXN' || statuscode === 'SUCCESS') ? 'completed' : 'failed';
+    
+    // Update log context with reference_id
+    logContext.reference_id = apitxnid;
 
-    // Find transactions once - use Promise.all for parallel execution
-    logger.info('BipsPay: Starting database lookups', { jobId: job.id, apitxnid, isFlatFormat });
+    // Find transactions in parallel
     const [payinTransaction, userTransaction] = await Promise.all([
       PayinTransaction.findOne({ reference_id: apitxnid }),
       UserTransaction.findOne({ reference_id: apitxnid })
     ]);
-    logger.info('BipsPay: Database lookups completed', { jobId: job.id, apitxnid });
-
-    logger.info('BipsPay: Transaction lookup results', {
-      jobId: job.id,
-      apitxnid,
-      payinTransactionFound: !!payinTransaction,
-      userTransactionFound: !!userTransaction,
-      payinTransactionId: payinTransaction?._id,
-      userTransactionId: userTransaction?._id
-    });
 
     if (!payinTransaction || !userTransaction) {
-      logger.error('BipsPay: Transaction records not found', {
-        jobId: job.id,
-        apitxnid,
-        payinTransactionFound: !!payinTransaction,
-        userTransactionFound: !!userTransaction,
-        jobData: job.data
-      });
+      logger.error('BipsPay: Transaction records not found', logContext);
       throw new Error('Transaction records not found');
+    }
+    
+    // Get userId from transaction and fetch merchant details
+    const transactionUserId = payinTransaction.user.user_id;
+    let merchantDetails = null;
+    if (transactionUserId) {
+      merchantDetails = await MerchantDetails.findOne({
+        where: { user_id: parseInt(transactionUserId, 10) }
+      });
     }
 
     // After verifying records, ensure callback amount matches original requested amount
@@ -448,26 +443,29 @@ bipspayCallbackQueue.process(BIPSPAY_CALLBACK_CONCURRENCY, async function (job) 
     const callbackAmount = parseFloat(amount || 0);
 
     if (!isNaN(requestedAmount) && !isNaN(callbackAmount) && requestedAmount !== callbackAmount) {
-      const mismatchMessage = `Callback amount ${callbackAmount} does not match requested amount ${requestedAmount}`;
-      logger.warn('BipsPay: Amount mismatch detected, recalculating charges based on callback amount', {
-        jobId: job.id,
-        apitxnid,
+      logger.warn('BipsPay: Amount mismatch detected, recalculating charges', {
+        ...logContext,
         requestedAmount,
         callbackAmount
       });
 
       const userId = payinTransaction.user.user_id;
 
-      // Find applicable charge bracket for the new callback amount
-      const chargeBrackets = await MerchantCharges.findAll({
-        where: { user_id: userId },
-        order: [['start_amount', 'ASC']]
-      });
+      // Parallelize charge brackets and platform charges lookup
+      const [chargeBrackets, platformCharges] = await Promise.all([
+        MerchantCharges.findAll({
+          where: { user_id: userId },
+          order: [['start_amount', 'ASC']]
+        }),
+        PlatformCharges.findOne({
+          where: { is_active: true }
+        })
+      ]);
 
       if (!chargeBrackets || chargeBrackets.length === 0) {
-        logger.error('BipsPay: No charge brackets found for user during amount mismatch recalculation', {
-          user_id: userId,
-          reference_id: apitxnid
+        logger.error('BipsPay: No charge brackets found for amount mismatch recalculation', {
+          ...logContext,
+          user_id: userId
         });
         // Continue with existing charges if brackets not found
       } else {
@@ -499,11 +497,7 @@ bipspayCallbackQueue.process(BIPSPAY_CALLBACK_CONCURRENCY, async function (job) 
 
           const newTotalCharges = parseFloat(newAdminCharge);
 
-          // Fetch platform charges from database
-          const platformCharges = await PlatformCharges.findOne({
-            where: { is_active: true }
-          });
-
+          // Use platform charges fetched in parallel above
           if (platformCharges?.charge) {
             newPlatformFee = (newTotalCharges * parseFloat(platformCharges.charge)) / 100;
           }
@@ -567,18 +561,9 @@ bipspayCallbackQueue.process(BIPSPAY_CALLBACK_CONCURRENCY, async function (job) 
             await session.endSession();
           }
 
-          logger.info('BipsPay: Amount and charges recalculated and updated', {
-            reference_id: apitxnid,
-            callbackAmount,
-            newAdminCharge,
-            newAgentCharge,
-            newTotalCharges,
-            newGstAmount,
-            newPlatformFee
-          });
         } else {
-          logger.warn('BipsPay: No applicable charge bracket found for callback amount, updating amount only', {
-            reference_id: apitxnid,
+          logger.warn('BipsPay: No applicable charge bracket found, updating amount only', {
+            ...logContext,
             callbackAmount
           });
           // Update amount only if no bracket found
@@ -605,16 +590,21 @@ bipspayCallbackQueue.process(BIPSPAY_CALLBACK_CONCURRENCY, async function (job) 
           }
         }
       }
-
-      // Refetch payinTransaction to get updated charges for wallet calculation
-      const updatedPayinTransaction = await PayinTransaction.findOne({ reference_id: apitxnid });
-      if (updatedPayinTransaction) {
-        payinTransaction = updatedPayinTransaction;
+      
+      // Update payinTransaction reference with new amount if recalculated
+      if (applicableBracket) {
+        payinTransaction.amount = callbackAmount;
+        payinTransaction.charges = {
+          admin_charge: newAdminCharge,
+          agent_charge: newAgentCharge,
+          total_charges: newTotalCharges
+        };
+        payinTransaction.gst_amount = parseFloat(newGstAmount);
+        payinTransaction.platform_fee = parseFloat(newPlatformFee);
+      } else {
+        payinTransaction.amount = callbackAmount;
       }
     }
-
-    //  till this part buddy once we have verified the user payinTransaction and userTransaction could you please add here one check if the 
-    // callback amount is not same as in the payinTransaction amount then cancel this trancsaction by saying the requested amount is not same as asked and send the same to call url as well
 
     const userId = payinTransaction.user.user_id;
     const updateData = {
@@ -627,7 +617,7 @@ bipspayCallbackQueue.process(BIPSPAY_CALLBACK_CONCURRENCY, async function (job) 
       }
     };
 
-    // Handle completed transaction
+    // Handle completed transaction - parallelize financial operations
     if (mappedStatus === 'completed') {
       // Ensure all values are numbers with defaults
       const beforeBalance = parseFloat(userTransaction.balance?.before || 0);
@@ -638,24 +628,22 @@ bipspayCallbackQueue.process(BIPSPAY_CALLBACK_CONCURRENCY, async function (job) 
 
       // Calculate new balance
       const newBalance = beforeBalance + transactionAmount - adminCharge - platformFee - gstAmount;
-
-      // Update user transaction balance
-      await UserTransaction.updateOne(
-        { reference_id: apitxnid },
-        {
-          $set: {
-            'balance.after': newBalance
-          }
-        }
-      );
-
-      // Update financial details
-      const financialDetails = await FinancialDetails.findOne({
-        where: { user_id: userId }
-      });
-
       const amountToAdd = transactionAmount - adminCharge - platformFee - gstAmount;
 
+      // Parallelize financial updates
+      const [financialDetails] = await Promise.all([
+        FinancialDetails.findOne({ where: { user_id: userId } }),
+        UserTransaction.updateOne(
+          { reference_id: apitxnid },
+          {
+            $set: {
+              'balance.after': newBalance
+            }
+          }
+        )
+      ]);
+
+      // Update or create financial details
       if (financialDetails) {
         await financialDetails.increment('wallet', {
           by: amountToAdd
@@ -669,28 +657,22 @@ bipspayCallbackQueue.process(BIPSPAY_CALLBACK_CONCURRENCY, async function (job) 
           rolling_reserve: 0
         });
       }
-
-      logger.info('BipsPay: Updated wallet balance in FinancialDetails', {
-        user_id: userId,
-        amount: amount,
-        reference_id: apitxnid,
-        action: financialDetails ? 'incremented' : 'created'
-      });
     }
 
     // Update all transaction records in a single session
-    logger.info('BipsPay: Starting transaction updates', { jobId: job.id, apitxnid });
     const session = await mongoose.startSession();
     try {
       await session.withTransaction(async () => {
         await Promise.all([
           PayinTransaction.updateOne(
             { reference_id: apitxnid },
-            { $set: updateData }
+            { $set: updateData },
+            { session }
           ),
           UserTransaction.updateOne(
             { reference_id: apitxnid },
-            { $set: updateData }
+            { $set: updateData },
+            { session }
           ),
           TransactionCharges.update(
             {
@@ -707,124 +689,31 @@ bipspayCallbackQueue.process(BIPSPAY_CALLBACK_CONCURRENCY, async function (job) 
     } finally {
       await session.endSession();
     }
-    logger.info('BipsPay: Transaction updates completed', { jobId: job.id, apitxnid });
 
-    // Get merchant details early for potential parallel processing
-    logger.info('BipsPay: Starting merchant details lookup', { jobId: job.id, userId });
-    const merchantDetails = await MerchantDetails.findOne({
-      where: {
-        user_id: parseInt(userId, 10)
-      }
-    });
-    logger.info('BipsPay: Merchant details lookup completed', {
-      jobId: job.id,
-      userId,
-      hasCallback: !!merchantDetails?.payin_callback
-    });
-
+    // Queue merchant callback instead of blocking
     if (merchantDetails?.payin_callback) {
-      logger.info('BipsPay: Starting merchant callback process', {
-        jobId: job.id,
-        callbackUrl: merchantDetails.payin_callback
-      });
-      // Retry configuration - optimized for faster processing
-      const maxRetries = 2; // Reduced from 3 to 2
-      const baseDelay = 1000; // Reduced from 2 seconds to 1 second
-      let lastError;
-
-      // Add a timeout for the entire callback process (30 seconds max)
-      const callbackTimeout = setTimeout(() => {
-        logger.warn('BipsPay: Merchant callback process timeout - skipping callback', {
-          jobId: job.id,
-          apitxnid,
-          callbackUrl: merchantDetails.payin_callback
-        });
-      }, 30000); // 30 seconds max for entire callback process
-
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-          logger.info(`BipsPay: Starting callback attempt ${attempt}/${maxRetries}`, {
-            jobId: job.id,
-            apitxnid
-          });
-
-          let callbackData;
-          if (statuscode === 'SUCCESS') {
-            callbackData = {
-              reference_id: apitxnid,
-              amount: amount,
-              status: mappedStatus,
-              utr: utr,
-              message: message || 'Transaction processed',
-              timestamp: new Date().toISOString()
-            };
-          } else {
-            callbackData = {
-              reference_id: apitxnid,
-              transaction_id: txnid,
-              amount: amount,
-              status: mappedStatus,
-              utr: utr,
-              message: message || 'Transaction processed',
-              timestamp: new Date().toISOString()
-            };
-          }
-
-          console.log("this is callback data of bipspay callback", callbackData);
-
-          const response = await axios.post(merchantDetails.payin_callback, callbackData, {
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            timeout: 5000 // Reduced from 10 seconds to 5 seconds
-          });
-
-          logger.info('BipsPay: Callback sent successfully to merchant', {
-            reference_id: apitxnid,
-            callback_url: merchantDetails.payin_callback,
-            response_status: response.status,
-            attempt: attempt
-          });
-
-          // Clear callback timeout and break out of retry loop
-          clearTimeout(callbackTimeout);
-          break;
-
-        } catch (error) {
-          lastError = error;
-
-          logger.warn('BipsPay: Callback attempt failed', {
-            reference_id: apitxnid,
-            callback_url: merchantDetails.payin_callback,
-            error: error.message,
-            attempt: attempt,
-            maxRetries: maxRetries
-          });
-
-          // If this is the last attempt, log the final error
-          if (attempt === maxRetries) {
-            logger.error('BipsPay: Failed to send callback to merchant after all retries', {
-              reference_id: apitxnid,
-              callback_url: merchantDetails.payin_callback,
-              error: error.message,
-              totalAttempts: maxRetries
-            });
-            // Clear callback timeout on final failure
-            clearTimeout(callbackTimeout);
-          } else {
-            // Wait before retrying with exponential backoff
-            const delay = baseDelay * Math.pow(2, attempt - 1);
-            logger.info(`BipsPay: Retrying callback in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`, {
-              reference_id: apitxnid
-            });
-            await new Promise(resolve => setTimeout(resolve, delay));
-          }
-        }
-      }
-    } else {
-      logger.warn('BipsPay: No callback URL found for merchant', {
+      const callbackData = {
         reference_id: apitxnid,
-        user_id: userId
+        amount: amount,
+        status: mappedStatus,
+        utr: utr,
+        message: message || 'Transaction processed',
+        timestamp: new Date().toISOString(),
+        _callback_received_at: job.data._callback_received_at // Pass received time for timing calculation
+      };
+      
+      // Add transaction_id for failed transactions
+      if (txnid) {
+        callbackData.transaction_id = txnid;
+      }
+      
+      await merchantCallbackQueue.add({
+        callbackUrl: merchantDetails.payin_callback,
+        callbackData: callbackData,
+        reference_id: apitxnid
+      }, {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 }
       });
     }
 
@@ -833,7 +722,7 @@ bipspayCallbackQueue.process(BIPSPAY_CALLBACK_CONCURRENCY, async function (job) 
 
     const processingTime = Date.now() - startTime;
     logger.info('BipsPay: Callback processed successfully', {
-      reference_id: apitxnid,
+      ...logContext,
       status: mappedStatus,
       utr,
       processingTimeMs: processingTime
@@ -852,17 +741,12 @@ bipspayCallbackQueue.process(BIPSPAY_CALLBACK_CONCURRENCY, async function (job) 
     }
 
     logger.error('Error processing BipsPay callback', {
-      jobId: job.id,
-      error: error.message,
-      stack: error.stack,
-      attempts: job.attemptsMade
+      ...logContext,
+      error: error.message
     });
 
     if (job.attemptsMade >= 3) {
-      logger.error('BipsPay job failed permanently after max retries', {
-        jobId: job.id,
-        attempts: job.attemptsMade
-      });
+      logger.error('BipsPay job failed permanently after max retries', logContext);
       return { success: false, error: 'Max retries exceeded' };
     }
 
@@ -872,129 +756,81 @@ bipspayCallbackQueue.process(BIPSPAY_CALLBACK_CONCURRENCY, async function (job) 
 
 
 // Process BipsPay payout callback jobs with concurrency
-const BIPSPAY_PAYOUT_CALLBACK_CONCURRENCY = 10; // Process 10 jobs at a time
+// Increased for better throughput - optimized for Bipspay payout callbacks
+const BIPSPAY_PAYOUT_CALLBACK_CONCURRENCY = 15; // Process 15 jobs at a time (increased from 10)
 logger.info(`Starting BipsPay payout callback worker with concurrency of ${BIPSPAY_PAYOUT_CALLBACK_CONCURRENCY}`);
 bipspayPayoutCallbackQueue.process(BIPSPAY_PAYOUT_CALLBACK_CONCURRENCY, async function (job) {
+  const logContext = {
+    jobId: job.id,
+    attempts: job.attemptsMade
+  };
+  
   try {
-    logger.info('Processing BipsPay payout callback job', {
-      jobId: job.id,
-      data: job.data,
-      attempts: job.attemptsMade
-    });
-
-    const callbackData = job.data.data || {};
+    const callbackData = job.data.data || job.data || {};
+    const referenceId = callbackData.reference || callbackData.order_id;
     const transactionStatus = callbackData.status || job.data.status || 'unknown';
-    // Check for SUCCESS (from BipsPay) or completed (if already formatted)
     const isSuccess = transactionStatus === 'SUCCESS' || transactionStatus === 'completed' || transactionStatus.toUpperCase() === 'SUCCESS';
+    
+    logContext.reference_id = referenceId;
+    logContext.status = transactionStatus;
 
-    if (isSuccess) {
-      // Update transaction charges
-      await TransactionCharges.update(
-        {
-          status: 'completed',
-          transaction_utr: callbackData.UTR || null
-        },
-        {
-          where: {
-            reference_id: callbackData.reference
-          }
-        }
-      );
-      await UserTransaction.updateOne(
-        { reference_id: callbackData.reference },
-        {
-          $set: {
-            status: 'completed',
-            gateway_response: {
-              merchant_response: callbackData.reference,
-              status: 'completed',
-              message: callbackData.message || callbackData.remarks || 'Transaction processed',
-              utr: callbackData.UTR || null
-            }
-          }
-        }
-      );
-      logger.info('User transaction updated', { reference: callbackData.reference });
-
-      // Update payout transaction
-      await PayoutTransaction.updateOne(
-        { reference_id: callbackData.reference },
-        {
-          $set: {
-            status: 'completed',
-            gateway_response: {
-              merchant_response: callbackData.reference,
-              status: 'completed',
-              message: callbackData.message || callbackData.remarks || 'Transaction processed',
-              utr: callbackData.UTR || null
-            }
-          }
-        }
-      );
-      logger.info('Payout transaction updated', { reference: callbackData.reference });
-    } else {
-      logger.info('BipsPay payout job failed', {
-        jobId: job.id,
-        status: transactionStatus,
-        message: callbackData.message || callbackData.remarks || 'Transaction failed',
-        attempts: job.attemptsMade
-      });
-
-      await TransactionCharges.update(
-        {
-          status: 'failed',
-          transaction_utr: callbackData.UTR || null
-        },
-        {
-          where: {
-            reference_id: callbackData.reference
-          }
-        }
-      );
-      logger.info('Transaction charges updated', { reference: callbackData.reference });
-
-      // Update user transaction
-      await UserTransaction.updateOne(
-        { reference_id: callbackData.reference },
-        {
-          $set: {
-            status: 'failed',
-            gateway_response: {
-              merchant_response: callbackData.reference,
-              status: 'failed',
-              message: callbackData.message || callbackData.remarks || 'Transaction failed',
-              utr: callbackData.UTR || null
-            }
-          }
-        }
-      );
-      logger.info('User transaction updated', { reference: callbackData.reference });
-
-      // Update payout transaction
-      await PayoutTransaction.updateOne(
-        { reference_id: callbackData.reference },
-        {
-          $set: {
-            status: 'failed',
-            gateway_response: {
-              merchant_response: callbackData.reference,
-              status: 'failed',
-              message: callbackData.message || callbackData.remarks || 'Transaction failed',
-              utr: callbackData.UTR || null
-            }
-          }
-        }
-      );
-      logger.info('Payout transaction updated', { reference: callbackData.reference });
+    if (!referenceId) {
+      logger.error('BipsPay payout: Missing reference_id in callback data', logContext);
+      throw new Error('Missing reference_id in callback data');
     }
 
-    const payoutTransaction = await PayoutTransaction.findOne({ reference_id: callbackData.reference });
-    const userTransaction = await UserTransaction.findOne({ reference_id: callbackData.reference });
+    // Parallelize initial lookups
+    const [payoutTransaction, userTransaction] = await Promise.all([
+      PayoutTransaction.findOne({ reference_id: referenceId }),
+      UserTransaction.findOne({ reference_id: referenceId })
+    ]);
 
     if (!payoutTransaction || !userTransaction) {
+      logger.error('BipsPay payout: Transaction records not found', logContext);
       throw new Error('Transaction records not found');
     }
 
+    const updateData = {
+      status: isSuccess ? 'completed' : 'failed',
+      gateway_response: {
+        merchant_response: referenceId,
+        status: isSuccess ? 'completed' : 'failed',
+        message: callbackData.message || callbackData.remarks || (isSuccess ? 'Transaction processed' : 'Transaction failed'),
+        utr: callbackData.UTR || null
+      }
+    };
+
+    // Parallelize all transaction updates in single session
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        await Promise.all([
+          PayoutTransaction.updateOne(
+            { reference_id: referenceId },
+            { $set: updateData },
+            { session }
+          ),
+          UserTransaction.updateOne(
+            { reference_id: referenceId },
+            { $set: updateData },
+            { session }
+          ),
+          TransactionCharges.update(
+            {
+              status: isSuccess ? 'completed' : 'failed',
+              transaction_utr: callbackData.UTR || null
+            },
+            {
+              where: { reference_id: referenceId }
+            }
+          )
+        ]);
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    // Get userId from transaction (already fetched)
     const userId = payoutTransaction.user.user_id;
     const settlement_amount = payoutTransaction.amount;
     const chargesAmount = payoutTransaction.charges.total_charges;
@@ -1002,7 +838,6 @@ bipspayPayoutCallbackQueue.process(BIPSPAY_PAYOUT_CALLBACK_CONCURRENCY, async fu
     const platformFee = parseFloat(payoutTransaction.platform_fee || 0);
 
     // Only update settlement wallet if payout failed (refund the money)
-    // Similar to Philpay: refund if status is not success/completed
     if (!isSuccess) {
       const userCurrentBalance = await FinancialDetails.findOne({
         where: {
@@ -1011,137 +846,56 @@ bipspayPayoutCallbackQueue.process(BIPSPAY_PAYOUT_CALLBACK_CONCURRENCY, async fu
       });
 
       if (userCurrentBalance) {
-        // Ensure all values are properly parsed as numbers and handle potential null/undefined values
         const currentSettlement = parseFloat(userCurrentBalance.settlement || 0);
         const settlementAmount = parseFloat(settlement_amount || 0);
         const chargesAmountParsed = parseFloat(chargesAmount || 0);
-
-        // Include GST and platform fees in the refund calculation
         const totalRefundAmount = settlementAmount + chargesAmountParsed + gstAmount + platformFee;
         const newSettlement = currentSettlement + totalRefundAmount;
 
-        // Ensure the result is a valid number and round to 2 decimal places
         userCurrentBalance.settlement = parseFloat(newSettlement.toFixed(2));
         await userCurrentBalance.save();
-
-        logger.info('Settlement wallet refunded for failed payout', {
-          reference_id: callbackData.reference,
-          user_id: userId,
-          amount_refunded: totalRefundAmount,
-          breakdown: {
-            settlement_amount: settlementAmount,
-            charges: chargesAmountParsed,
-            gst_amount: gstAmount,
-            platform_fee: platformFee
-          },
-          new_settlement_balance: userCurrentBalance.settlement
-        });
       }
-    } else {
-      logger.info('Payout successful - no settlement refund needed', {
-        reference_id: callbackData.reference,
-        user_id: userId
-      });
     }
 
+    // Fetch merchant details and queue callback
     const merchantDetails = await MerchantDetails.findOne({
       where: {
         user_id: parseInt(userId, 10)
       }
     });
 
+    // Queue merchant callback instead of blocking
     if (merchantDetails?.payout_callback) {
-      // Retry configuration
-      const maxRetries = 3;
-      const baseDelay = 2000; // 2 seconds
-      let lastError;
-
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-          let callbackDataToMerchant;
-          if (isSuccess) {
-            callbackDataToMerchant = {
-              reference_id: callbackData.reference,
-              amount: callbackData.amount,
-              status: 'completed',
-              utr: callbackData.UTR,
-              message: callbackData.message || callbackData.remarks || 'Transaction processed',
-              timestamp: new Date().toISOString()
-            };
-          } else {
-            callbackDataToMerchant = {
-              reference_id: callbackData.reference,
-              transaction_id: callbackData.reference,
-              amount: callbackData.amount,
-              status: 'failed',
-              utr: callbackData.UTR,
-              message: callbackData.message || callbackData.remarks || 'Transaction failed',
-              timestamp: new Date().toISOString()
-            };
-          }
-
-          console.log("this is callback data of bipspay payout", callbackDataToMerchant);
-
-          const response = await axios.post(merchantDetails.payout_callback, callbackDataToMerchant, {
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            timeout: 10000
-          });
-
-          logger.info('Callback sent successfully to merchant', {
-            reference_id: callbackData.reference,
-            callback_url: merchantDetails.payout_callback,
-            response_status: response.status,
-            attempt: attempt
-          });
-
-          // Success - break out of retry loop
-          break;
-
-        } catch (error) {
-          lastError = error;
-
-          logger.warn('Callback attempt failed', {
-            reference_id: callbackData.reference,
-            callback_url: merchantDetails.payout_callback,
-            error: error.message,
-            attempt: attempt,
-            maxRetries: maxRetries
-          });
-
-          // If this is the last attempt, log the final error
-          if (attempt === maxRetries) {
-            logger.error('Failed to send callback to merchant after all retries', {
-              reference_id: callbackData.reference,
-              callback_url: merchantDetails.payout_callback,
-              error: error.message,
-              totalAttempts: maxRetries
-            });
-          } else {
-            // Wait before retrying with exponential backoff
-            const delay = baseDelay * Math.pow(2, attempt - 1);
-            logger.info(`Retrying callback in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`, {
-              reference_id: callbackData.reference
-            });
-            await new Promise(resolve => setTimeout(resolve, delay));
-          }
-        }
+      const callbackDataToMerchant = {
+        reference_id: referenceId,
+        amount: callbackData.amount || payoutTransaction.amount,
+        status: isSuccess ? 'completed' : 'failed',
+        utr: callbackData.UTR || null,
+        message: callbackData.message || callbackData.remarks || (isSuccess ? 'Transaction processed' : 'Transaction failed'),
+        timestamp: new Date().toISOString(),
+        _callback_received_at: job.data._callback_received_at // Pass received time for timing calculation
+      };
+      
+      // Add transaction_id for failed transactions
+      if (!isSuccess) {
+        callbackDataToMerchant.transaction_id = referenceId;
       }
-    } else {
-      logger.warn('No callback URL found for merchant', {
-        reference_id: callbackData.reference,
-        user_id: userId
+      
+      await merchantCallbackQueue.add({
+        callbackUrl: merchantDetails.payout_callback,
+        callbackData: callbackDataToMerchant,
+        reference_id: referenceId
+      }, {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 }
       });
     }
 
     return { success: true, jobId: job.id };
   } catch (error) {
     logger.error('Error processing BipsPay payout callback job', {
-      jobId: job.id,
-      error: error.message,
-      stack: error.stack,
-      attempts: job.attemptsMade
+      ...logContext,
+      error: error.message
     });
     return { success: false, error: `Error is ${error}`, jobId: job.id };
   }
@@ -1187,7 +941,8 @@ callbackQueue.on('stalled', (job) => {
 });
 
 // Process Philpay payout jobs with concurrency
-const PHILPAY_PAYOUT_CONCURRENCY = 10; // Process 10 jobs at a time
+// Increased for better throughput
+const PHILPAY_PAYOUT_CONCURRENCY = 15; // Process 15 jobs at a time (increased from 10)
 logger.info(`Starting Philpay payout worker with concurrency of ${PHILPAY_PAYOUT_CONCURRENCY}`);
 philpayPayoutQueue.process(PHILPAY_PAYOUT_CONCURRENCY, async function (job) {
   try {
@@ -1478,13 +1233,140 @@ philpayPayoutQueue.on('stalled', (job) => {
   });
 });
 
+// Process merchant callback jobs - non-blocking merchant callbacks
+// Higher concurrency for merchant callbacks as they're lightweight HTTP calls
+const MERCHANT_CALLBACK_CONCURRENCY = 30; // Process 30 merchant callbacks concurrently (increased from 20)
+logger.info(`Starting merchant callback worker with concurrency of ${MERCHANT_CALLBACK_CONCURRENCY}`);
+merchantCallbackQueue.process(MERCHANT_CALLBACK_CONCURRENCY, async (job) => {
+  const { callbackUrl, callbackData, reference_id } = job.data;
+  const callbackSentAt = new Date();
+  let attempts = 0;
+  const maxRetries = 3;
+  const baseDelay = 2000;
+  
+  const logContext = {
+    jobId: job.id,
+    reference_id: reference_id || callbackData.reference_id,
+    callbackUrl
+  };
+  
+  try {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      attempts = attempt;
+      try {
+        const response = await axios.post(callbackUrl, callbackData, {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 5000
+        });
+        
+        // Calculate processing time
+        const callbackReceivedAt = callbackData._callback_received_at 
+          ? new Date(callbackData._callback_received_at) 
+          : null;
+        const processingTimeMs = callbackReceivedAt 
+          ? callbackSentAt.getTime() - callbackReceivedAt.getTime() 
+          : null;
+        
+        // Update transaction with callback sent time (works for both PayinTransaction and PayoutTransaction)
+        const updateReferenceId = reference_id || callbackData.reference_id;
+        if (updateReferenceId) {
+          // Try to update PayinTransaction first, then PayoutTransaction
+          await Promise.all([
+            PayinTransaction.updateOne(
+              { reference_id: updateReferenceId },
+              { 
+                $set: { 
+                  'callback_timing.sent_to_merchant_at': callbackSentAt,
+                  'callback_timing.processing_time_ms': processingTimeMs,
+                  'callback_timing.merchant_callback_attempts': attempts,
+                  'callback_timing.merchant_callback_status': 'sent'
+                } 
+              }
+            ).catch(() => null), // Ignore if not found (might be payout)
+            PayoutTransaction.updateOne(
+              { reference_id: updateReferenceId },
+              { 
+                $set: { 
+                  'callback_timing.sent_to_merchant_at': callbackSentAt,
+                  'callback_timing.processing_time_ms': processingTimeMs,
+                  'callback_timing.merchant_callback_attempts': attempts,
+                  'callback_timing.merchant_callback_status': 'sent'
+                } 
+              }
+            ).catch(() => null) // Ignore if not found (might be payin)
+          ]);
+        }
+        
+        logger.info('Merchant callback sent successfully', {
+          ...logContext,
+          attempt: attempts,
+          status: response.status,
+          processing_time_ms: processingTimeMs
+        });
+        
+        return { success: true, processing_time_ms: processingTimeMs };
+      } catch (error) {
+        if (attempt === maxRetries) {
+          // Update with failed status (works for both PayinTransaction and PayoutTransaction)
+          const updateReferenceId = reference_id || callbackData.reference_id;
+          if (updateReferenceId) {
+            await Promise.all([
+              PayinTransaction.updateOne(
+                { reference_id: updateReferenceId },
+                { 
+                  $set: { 
+                    'callback_timing.merchant_callback_attempts': attempts,
+                    'callback_timing.merchant_callback_status': 'failed'
+                  } 
+                }
+              ).catch(() => null), // Ignore if not found
+              PayoutTransaction.updateOne(
+                { reference_id: updateReferenceId },
+                { 
+                  $set: { 
+                    'callback_timing.merchant_callback_attempts': attempts,
+                    'callback_timing.merchant_callback_status': 'failed'
+                  } 
+                }
+              ).catch(() => null) // Ignore if not found
+            ]);
+          }
+          
+          logger.error('Merchant callback failed after retries', {
+            ...logContext,
+            error: error.message,
+            attempts: attempts
+          });
+          throw error;
+        }
+        await new Promise(resolve => setTimeout(resolve, baseDelay * Math.pow(2, attempt - 1)));
+      }
+    }
+  } catch (error) {
+    logger.error('Error processing merchant callback', {
+      ...logContext,
+      error: error.message
+    });
+    throw error;
+  }
+});
 
 // Handle process events
 process.on('SIGTERM', async () => {
   logger.info('Shutting down callback worker...');
-  await mongoose.connection.close();
-  await callbackQueue.close();
-  await philpayPayoutQueue.close();
+  try {
+    await mongoose.connection.close();
+    await Promise.all([
+      callbackQueue.close(),
+      bipspayCallbackQueue.close(),
+      bipspayPayoutCallbackQueue.close(),
+      philpayPayoutQueue.close(),
+      merchantCallbackQueue.close()
+    ]);
+    logger.info('All callback workers closed successfully');
+  } catch (error) {
+    logger.error('Error closing callback workers:', error);
+  }
   process.exit(0);
 });
 

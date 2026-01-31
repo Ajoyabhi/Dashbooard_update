@@ -83,18 +83,24 @@ const queueOptions = {
     retryProcessDelay: 5000,
     drainDelay: 5,
     limiter: {
-      max: 30, // Reduced to stay within free tier limits
+      max: 100, // Increased for better throughput (can be adjusted based on Redis tier)
       duration: 1000
     }
   },
   defaultJobOptions: {
-    attempts: 2,
+    attempts: 3, // Increased from 2 to 3 for better reliability
     backoff: {
       type: 'exponential',
-      delay: 1000
+      delay: 2000 // Increased initial delay for better retry strategy
     },
-    removeOnComplete: true,
-    removeOnFail: false,
+    removeOnComplete: {
+      age: 3600, // Keep completed jobs for 1 hour for debugging
+      count: 1000 // Keep last 1000 completed jobs
+    },
+    removeOnFail: {
+      age: 86400, // Keep failed jobs for 24 hours for analysis
+      count: 5000 // Keep last 5000 failed jobs
+    },
     timeout: 300000 // 5 minute timeout for jobs to match worker timeout
   }
 };
@@ -334,7 +340,43 @@ philpayPayoutQueue.on('failed', (job, error) => {
   });
 });
 
+// Create merchant callback queue for non-blocking merchant callbacks
+const merchantCallbackQueue = new Bull('merchantCallback', queueOptions);
+logger.info("Merchant callback queue created with proper Redis configuration");
 
+merchantCallbackQueue.on('ready', () => {
+  logger.info('Merchant callback queue is ready and connected to Redis');
+});
+
+merchantCallbackQueue.on('active', (job) => {
+  logger.info('Merchant callback job started processing', {
+    jobId: job.id,
+    timestamp: new Date().toISOString()
+  });
+});
+
+merchantCallbackQueue.on('completed', (job) => {
+  logger.info('Merchant callback job completed', {
+    jobId: job.id,
+    timestamp: new Date().toISOString()
+  });
+});
+
+merchantCallbackQueue.on('failed', (job, error) => {
+  logger.error('Merchant callback job failed', {
+    jobId: job.id,
+    error: error.message,
+    timestamp: new Date().toISOString()
+  });
+});
+
+merchantCallbackQueue.on('error', (error) => {
+  logger.error('Merchant callback queue error:', error);
+  if (error.message.includes('Connection is closed')) {
+    logger.info('Attempting to recover from connection error...');
+    merchantCallbackQueue.resume();
+  }
+});
 
 // Apply event handlers to all clients
 handleRedisEvents(createRedisClient('client'), 'client');
@@ -344,9 +386,19 @@ handleRedisEvents(createRedisClient('bclient'), 'bclient');
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   logger.info('Shutting down queues...');
-  await callbackQueue.close();
-  await payinQueue.close();
-  await philpayPayoutQueue.close();
+  try {
+    await Promise.all([
+      callbackQueue.close(),
+      payinQueue.close(),
+      philpayPayoutQueue.close(),
+      bipspayCallbackQueue.close(),
+      bipspayPayoutCallbackQueue.close(),
+      merchantCallbackQueue.close()
+    ]);
+    logger.info('All queues closed successfully');
+  } catch (error) {
+    logger.error('Error closing queues:', error);
+  }
   process.exit(0);
 });
 
@@ -356,5 +408,6 @@ module.exports = {
   payinQueue,
   createRedisClient,
   bipspayCallbackQueue,
-  bipspayPayoutCallbackQueue
+  bipspayPayoutCallbackQueue,
+  merchantCallbackQueue
 }; 
