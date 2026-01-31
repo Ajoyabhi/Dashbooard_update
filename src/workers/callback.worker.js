@@ -366,22 +366,57 @@ bipspayCallbackQueue.process(BIPSPAY_CALLBACK_CONCURRENCY, async function (job) 
 
     const { event, status, data } = job.data || {};
 
-    const statuscode =
-      status === 'SUCCESS' || data?.status === 'SUCCESS'
-        ? 'SUCCESS'
-        : status || data?.status || 'FAILED';
+    // Handle both flat and nested callback formats
+    // Flat format: { apitxnid, statuscode, amount, txnid, utr, message, status }
+    // Nested format: { event, status, data: { reference, order_id, amount, UTR, remarks, status } }
+    const isFlatFormat = job.data?.apitxnid !== undefined || job.data?.statuscode !== undefined;
+    
+    let statuscode, amount, apitxnid, txnid, utr, message;
+    
+    if (isFlatFormat) {
+      // Flat format - data is directly in job.data
+      statuscode = job.data.statuscode || job.data.status || 'FAILED';
+      amount = job.data.amount;
+      apitxnid = job.data.apitxnid; // Our reference_id in DB
+      txnid = job.data.txnid;
+      utr = job.data.utr;
+      message = job.data.message || job.data.status || 'Transaction processed';
+    } else {
+      // Nested format - data is in job.data.data
+      statuscode =
+        status === 'SUCCESS' || data?.status === 'SUCCESS'
+          ? 'SUCCESS'
+          : status || data?.status || 'FAILED';
+      amount = data?.amount;
+      apitxnid = data?.reference || data?.order_id; // Our reference_id in DB
+      txnid = data?.order_id;
+      utr = data?.UTR;
+      message = data?.remarks || status || data?.status || 'Transaction processed';
+    }
 
-    const amount = data?.amount;
-    const apitxnid = data?.reference || data?.order_id; // Our reference_id in DB
-    const txnid = data?.order_id;
-    const utr = data?.UTR;
-    const message = data?.remarks || status || data?.status || 'Transaction processed';
+    // Validate that we have a reference_id before proceeding
+    if (!apitxnid) {
+      logger.error('BipsPay: Missing reference_id (apitxnid) in callback data', {
+        jobId: job.id,
+        jobData: job.data,
+        isFlatFormat,
+        extractedFields: {
+          statuscode,
+          amount,
+          apitxnid,
+          txnid,
+          utr,
+          message
+        }
+      });
+      throw new Error('Missing reference_id (apitxnid) in callback data');
+    }
 
     // Map BipsPay status to our status format
     const mappedStatus = (statuscode === 'TXN' || statuscode === 'SUCCESS') ? 'completed' : 'failed';
 
     // Find transactions once - use Promise.all for parallel execution
-    logger.info('BipsPay: Starting database lookups', { jobId: job.id, apitxnid });
+    logger.info('BipsPay: Starting database lookups', { jobId: job.id, apitxnid, isFlatFormat });
     const [payinTransaction, userTransaction] = await Promise.all([
       PayinTransaction.findOne({ reference_id: apitxnid }),
       UserTransaction.findOne({ reference_id: apitxnid })
