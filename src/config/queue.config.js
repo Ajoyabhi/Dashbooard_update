@@ -31,7 +31,8 @@ const createRedisClient = (type) => {
     },
     maxRetriesPerRequest: 3,
     connectTimeout: 20000, // 20s for callback operations (critical, needs more time)
-    commandTimeout: 10000, // 10s timeout for commands to prevent hanging (longer than cache for critical ops)
+    // NOTE: commandTimeout is NOT set here - Bull uses blocking operations (brpoplpush) 
+    // that need to wait indefinitely for jobs. Bull handles its own job timeouts.
     enableOfflineQueue: true,
     enableReadyCheck: true,
     reconnectOnError: (err) => {
