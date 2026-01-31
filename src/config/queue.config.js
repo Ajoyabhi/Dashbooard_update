@@ -34,7 +34,6 @@ const createRedisClient = (type) => {
     commandTimeout: 10000, // 10s timeout for commands to prevent hanging (longer than cache for critical ops)
     enableOfflineQueue: true,
     enableReadyCheck: true,
-    connectionName: `bull-${type}`,
     reconnectOnError: (err) => {
       logger.error(`Redis ${type} client error:`, err);
       return true; // Always try to reconnect
@@ -59,17 +58,22 @@ const createRedisClient = (type) => {
   }
 
   // Special configuration for subscriber and bclient
+  // NOTE: connectionName cannot be set for subscriber/bclient as they enter subscriber mode
+  // and can only execute (P|S)SUBSCRIBE / (P|S)UNSUBSCRIBE / PING / QUIT commands
   if (type === 'subscriber' || type === 'bclient') {
     return new Redis({
       ...baseConfig,
       enableReadyCheck: false,
       maxRetriesPerRequest: null
+      // connectionName is NOT set here - it would fail in subscriber mode
     });
   }
 
-  // Configuration for other clients
+  // Configuration for other clients (client type)
+  // connectionName is safe to use for regular clients
   return new Redis({
     ...baseConfig,
+    connectionName: `bull-${type}`, // Only set for non-subscriber clients
     lazyConnect: true
   });
 };
