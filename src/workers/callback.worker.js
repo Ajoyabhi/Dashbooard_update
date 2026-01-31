@@ -29,8 +29,10 @@ mongoose.connect(config.mongodb.uri, {
     process.exit(1);
   });
 
-// Process generic callback jobs (Unpay / others using common format)
-callbackQueue.process(async function (job) {
+// Process generic callback jobs (Unpay / others using common format) with concurrency
+const CALLBACK_CONCURRENCY = 10; // Process 10 jobs at a time
+logger.info(`Starting callback worker with concurrency of ${CALLBACK_CONCURRENCY}`);
+callbackQueue.process(CALLBACK_CONCURRENCY, async function (job) {
   const startTime = Date.now();
   try {
     logger.info('Processing callback job', {
@@ -335,8 +337,11 @@ callbackQueue.process(async function (job) {
   }
 });
 
-// Process BipsPay payin callback jobs
-bipspayCallbackQueue.process(async function (job) {
+// Process BipsPay payin callback jobs with concurrency
+// Set concurrency to process multiple jobs simultaneously
+const BIPSPAY_CALLBACK_CONCURRENCY = 10; // Process 10 jobs at a time
+logger.info(`Starting BipsPay callback worker with concurrency of ${BIPSPAY_CALLBACK_CONCURRENCY}`);
+bipspayCallbackQueue.process(BIPSPAY_CALLBACK_CONCURRENCY, async function (job) {
   const startTime = Date.now();
   let timeout = null;
   console.log("================================================");
@@ -831,8 +836,10 @@ bipspayCallbackQueue.process(async function (job) {
 });
 
 
-// Process BipsPay payout callback jobs
-bipspayPayoutCallbackQueue.process(async function (job) {
+// Process BipsPay payout callback jobs with concurrency
+const BIPSPAY_PAYOUT_CALLBACK_CONCURRENCY = 10; // Process 10 jobs at a time
+logger.info(`Starting BipsPay payout callback worker with concurrency of ${BIPSPAY_PAYOUT_CALLBACK_CONCURRENCY}`);
+bipspayPayoutCallbackQueue.process(BIPSPAY_PAYOUT_CALLBACK_CONCURRENCY, async function (job) {
   try {
     logger.info('Processing BipsPay payout callback job', {
       jobId: job.id,
@@ -1144,7 +1151,10 @@ callbackQueue.on('stalled', (job) => {
   });
 });
 
-philpayPayoutQueue.process(async function (job) {
+// Process Philpay payout jobs with concurrency
+const PHILPAY_PAYOUT_CONCURRENCY = 10; // Process 10 jobs at a time
+logger.info(`Starting Philpay payout worker with concurrency of ${PHILPAY_PAYOUT_CONCURRENCY}`);
+philpayPayoutQueue.process(PHILPAY_PAYOUT_CONCURRENCY, async function (job) {
   try {
     logger.info('Processing philpay payout job', {
       jobId: job.id,
