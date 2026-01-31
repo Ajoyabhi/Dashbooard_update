@@ -88,6 +88,29 @@ const payoutTransactionSchema = new mongoose.Schema({
   metadata: {
     type: mongoose.Schema.Types.Mixed
   },
+  callback_timing: {
+    received_at: {
+      type: Date,
+      default: null
+    },
+    sent_to_merchant_at: {
+      type: Date,
+      default: null
+    },
+    processing_time_ms: {
+      type: Number,
+      default: null
+    },
+    merchant_callback_attempts: {
+      type: Number,
+      default: 0
+    },
+    merchant_callback_status: {
+      type: String,
+      enum: ['pending', 'sent', 'failed'],
+      default: 'pending'
+    }
+  },
   remark: {
     type: String,
     required: true
@@ -108,9 +131,12 @@ const payoutTransactionSchema = new mongoose.Schema({
 
 // Indexes for faster queries
 payoutTransactionSchema.index({ transaction_id: 1 });
+payoutTransactionSchema.index({ reference_id: 1 });
 payoutTransactionSchema.index({ user: 1 });
 payoutTransactionSchema.index({ status: 1 });
 payoutTransactionSchema.index({ created_at: 1 });
+payoutTransactionSchema.index({ 'callback_timing.received_at': 1 });
+payoutTransactionSchema.index({ 'callback_timing.merchant_callback_status': 1 });
 
 const PayoutTransaction = mongoose.model('PayoutTransaction', payoutTransactionSchema);
 
