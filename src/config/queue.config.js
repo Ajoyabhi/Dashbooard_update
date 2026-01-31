@@ -15,6 +15,7 @@ const createRedisClient = (type) => {
   }
 
   // Base configuration for all clients
+  // Optimized for callback processing - longer timeouts for critical operations
   const baseConfig = {
     host: process.env.REDIS_HOST,
     port: port,
@@ -25,11 +26,12 @@ const createRedisClient = (type) => {
         return null; // Stop retrying after 10 attempts
       }
       const delay = Math.min(times * 1000, 10000); // Max 10 second delay
-      logger.info(`Redis ${type} client retry attempt ${times} with delay ${delay}ms`);
+      logger.debug(`Redis ${type} client retry attempt ${times} with delay ${delay}ms`);
       return delay;
     },
     maxRetriesPerRequest: 3,
-    connectTimeout: 20000,
+    connectTimeout: 20000, // 20s for callback operations (critical, needs more time)
+    commandTimeout: 10000, // 10s timeout for commands to prevent hanging (longer than cache for critical ops)
     enableOfflineQueue: true,
     enableReadyCheck: true,
     connectionName: `bull-${type}`,
@@ -40,7 +42,10 @@ const createRedisClient = (type) => {
     keepAlive: 10000, // Send keepalive every 10 seconds
     family: 4, // Force IPv4
     db: 0,
-    showFriendlyErrorStack: true
+    showFriendlyErrorStack: true,
+    // Performance optimizations
+    enableAutoPipelining: true, // Automatically pipeline commands for better throughput
+    maxLoadingTimeout: 5000 // Max time to wait for loading
   };
 
   // Add TLS configuration only if REDIS_TLS_ENABLED is true

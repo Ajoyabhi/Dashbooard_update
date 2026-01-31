@@ -1,33 +1,41 @@
 const Redis = require('ioredis');
+const { logger } = require('../utils/logger');
 
-// Create Redis client for caching with proper authentication
-// Use environment variables directly like queue.config.js
+// Create Redis client for caching with optimized configuration
+// IMPORTANT: This uses a SEPARATE connection from Bull queue clients (connectionName: 'cache-client')
+// Cache operations are non-critical and have shorter timeouts to avoid interfering with callback processing
+// Use lazyConnect to avoid blocking on startup
 const redis = new Redis({
     host: process.env.REDIS_HOST || 'localhost',
     port: parseInt(process.env.REDIS_PORT) || 6379,
     password: process.env.REDIS_PASSWORD || undefined, // Only set if password exists
     retryStrategy: (times) => {
         if (times > 10) {
-            console.error('Cache Redis client max retries reached');
+            logger.error('Cache Redis client max retries reached');
             return null;
         }
         const delay = Math.min(times * 1000, 10000);
-        console.log(`Cache Redis client retry attempt ${times} with delay ${delay}ms`);
+        logger.debug(`Cache Redis client retry attempt ${times} with delay ${delay}ms`);
         return delay;
     },
     maxRetriesPerRequest: 3,
-    connectTimeout: 20000,
+    connectTimeout: 10000, // 10s for cache (faster failure detection for non-critical ops)
+    commandTimeout: 5000, // 5s timeout for commands (shorter than queue for fast cache lookups)
     enableOfflineQueue: true,
     enableReadyCheck: true,
-    connectionName: 'cache-client',
+    lazyConnect: true, // Connect on-demand instead of immediately
+    connectionName: 'cache-client', // Separate connection from queue clients
     reconnectOnError: (err) => {
-        console.error('Cache Redis client error:', err);
+        logger.error('Cache Redis client error:', err);
         return true;
     },
     keepAlive: 10000,
     family: 4,
     db: 0,
     showFriendlyErrorStack: true,
+    // Performance optimizations
+    enableAutoPipelining: true, // Automatically pipeline commands
+    maxLoadingTimeout: 5000, // Max time to wait for loading
     ...(process.env.REDIS_TLS_ENABLED === 'true' && {
         tls: {
             rejectUnauthorized: false,
@@ -38,21 +46,21 @@ const redis = new Redis({
     })
 });
 
-// Handle Redis connection events
+// Handle Redis connection events (non-blocking)
 redis.on('connect', () => {
-    console.log('Cache Redis client connected successfully');
+    logger.debug('Cache Redis client connected successfully');
 });
 
 redis.on('ready', () => {
-    console.log('Cache Redis client ready');
+    logger.debug('Cache Redis client ready');
 });
 
 redis.on('error', (err) => {
-    console.error('Cache Redis client error:', err.message);
+    logger.error('Cache Redis client error:', err.message);
 });
 
 redis.on('reconnecting', () => {
-    console.log('Cache Redis client reconnecting...');
+    logger.debug('Cache Redis client reconnecting...');
 });
 
 /**
@@ -81,36 +89,75 @@ const cacheMiddleware = (options = {}) => {
 
         try {
             const cacheKey = generateKey(req);
+            const startTime = Date.now();
 
-            // Try to get cached response
-            const cachedData = await redis.get(cacheKey);
+            // Try to get cached response with timeout
+            // If Redis is not connected, the get() will trigger lazy connect
+            const cachedData = await Promise.race([
+                redis.get(cacheKey).catch((err) => {
+                    // If connection fails, return null to continue without cache
+                    if (err.message && err.message.includes('Connection')) {
+                        logger.debug(`Cache Redis connection issue for key ${cacheKey}`);
+                    }
+                    return null;
+                }),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Cache timeout')), 1000)
+                )
+            ]).catch((err) => {
+                // If cache lookup fails or times out, continue without cache
+                if (err.message !== 'Cache timeout') {
+                    logger.debug(`Cache lookup failed for key ${cacheKey}:`, err.message);
+                }
+                return null;
+            });
 
             if (cachedData) {
-                console.log(`Cache HIT for key: ${cacheKey}`);
-                const parsedData = JSON.parse(cachedData);
+                const cacheTime = Date.now() - startTime;
+                logger.debug(`Cache HIT for key: ${cacheKey} (${cacheTime}ms)`);
+                
+                // Parse JSON asynchronously to avoid blocking
+                let parsedData;
+                try {
+                    parsedData = JSON.parse(cachedData);
+                } catch (parseError) {
+                    logger.error(`Cache parse error for key ${cacheKey}:`, parseError);
+                    // If parse fails, continue without cache
+                    return next();
+                }
 
                 // Set cache headers
                 res.setHeader('X-Cache', 'HIT');
                 res.setHeader('X-Cache-Key', cacheKey);
+                res.setHeader('X-Cache-Time', `${cacheTime}ms`);
 
                 return res.json(parsedData);
             }
 
-            console.log(`Cache MISS for key: ${cacheKey}`);
+            const cacheTime = Date.now() - startTime;
+            logger.debug(`Cache MISS for key: ${cacheKey} (lookup: ${cacheTime}ms)`);
 
             // Store original res.json function
             const originalJson = res.json.bind(res);
 
-            // Override res.json to cache the response
+            // Override res.json to cache the response (non-blocking)
             res.json = function (data) {
-                // Cache the response data
-                redis.setex(cacheKey, ttl, JSON.stringify(data))
-                    .then(() => {
-                        console.log(`Cached data for key: ${cacheKey} with TTL: ${ttl}s`);
-                    })
-                    .catch((err) => {
-                        console.error(`Error caching data for key ${cacheKey}:`, err);
-                    });
+                // Cache the response data asynchronously (don't wait for it)
+                // Use setImmediate to avoid blocking the response
+                setImmediate(() => {
+                    try {
+                        const jsonString = JSON.stringify(data);
+                        redis.setex(cacheKey, ttl, jsonString)
+                            .then(() => {
+                                logger.debug(`Cached data for key: ${cacheKey} with TTL: ${ttl}s`);
+                            })
+                            .catch((err) => {
+                                logger.error(`Error caching data for key ${cacheKey}:`, err.message);
+                            });
+                    } catch (stringifyError) {
+                        logger.error(`Error stringifying data for cache key ${cacheKey}:`, stringifyError.message);
+                    }
+                });
 
                 // Set cache headers
                 res.setHeader('X-Cache', 'MISS');
@@ -122,7 +169,7 @@ const cacheMiddleware = (options = {}) => {
 
             next();
         } catch (error) {
-            console.error('Cache middleware error:', error);
+            logger.error('Cache middleware error:', error.message);
             // If cache fails, continue without caching
             next();
         }
@@ -149,13 +196,13 @@ const clearCache = async (pattern = 'cache:*') => {
         stream.on('end', async () => {
             if (keys.length > 0) {
                 await redis.del(...keys);
-                console.log(`Cleared ${keys.length} cache keys matching pattern: ${pattern}`);
+                logger.info(`Cleared ${keys.length} cache keys matching pattern: ${pattern}`);
             } else {
-                console.log(`No cache keys found matching pattern: ${pattern}`);
+                logger.debug(`No cache keys found matching pattern: ${pattern}`);
             }
         });
     } catch (error) {
-        console.error('Error clearing cache:', error);
+        logger.error('Error clearing cache:', error);
         throw error;
     }
 };
@@ -167,10 +214,10 @@ const clearCache = async (pattern = 'cache:*') => {
 const clearCacheKey = async (key) => {
     try {
         const result = await redis.del(key);
-        console.log(`Cleared cache key: ${key}, result: ${result}`);
+        logger.debug(`Cleared cache key: ${key}, result: ${result}`);
         return result;
     } catch (error) {
-        console.error(`Error clearing cache key ${key}:`, error);
+        logger.error(`Error clearing cache key ${key}:`, error);
         throw error;
     }
 };
@@ -188,7 +235,7 @@ const getCacheStats = async () => {
             info: info
         };
     } catch (error) {
-        console.error('Error getting cache stats:', error);
+        logger.error('Error getting cache stats:', error);
         throw error;
     }
 };
