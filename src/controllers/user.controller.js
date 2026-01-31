@@ -687,52 +687,52 @@ const getUserFundRequests = async (req, res) => {
 
 const getUserDashboard = async (req, res) => {
   try {
-    const user = await User.findByPk(req.user.id);
-
-    // Get financial details
-    const financialDetails = await FinancialDetails.findOne({
-      where: { user_id: req.user.id }
-    });
-
-    // Get today's date in YYYY-MM-DD format
+    const userId = req.user.id;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    // Get today's transactions
-    const todayTransactions = await TransactionCharges.findAll({
-      where: {
-        user_id: req.user.id,
-        created_at: {
-          [Op.gte]: today,
-          [Op.lt]: tomorrow
+    // Parallelize all independent database queries
+    const [
+      user,
+      financialDetails,
+      todayTransactions,
+      allTransactions,
+      recentPayins,
+      recentPayouts
+    ] = await Promise.all([
+      User.findByPk(userId),
+      FinancialDetails.findOne({
+        where: { user_id: userId }
+      }),
+      TransactionCharges.findAll({
+        where: {
+          user_id: userId,
+          created_at: {
+            [Op.gte]: today,
+            [Op.lt]: tomorrow
+          }
         }
-      }
-    });
-
-    // Get all transactions for total calculations
-    const allTransactions = await TransactionCharges.findAll({
-      where: {
-        user_id: req.user.id
-      }
-    });
-
-    // Get recent payin transactions
-    const recentPayins = await PayinTransaction.find({
-      'user.user_id': req.user.id.toString()
-    })
-      .sort({ createdAt: -1 })
-      .limit(10)
-      .lean();
-
-    // Get recent payout transactions
-    const recentPayouts = await PayoutTransaction.find({
-      'user.user_id': req.user.id.toString()
-    })
-      .sort({ createdAt: -1 })
-      .limit(10)
-      .lean();
+      }),
+      TransactionCharges.findAll({
+        where: {
+          user_id: userId
+        }
+      }),
+      PayinTransaction.find({
+        'user.user_id': userId.toString()
+      })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean(),
+      PayoutTransaction.find({
+        'user.user_id': userId.toString()
+      })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean()
+    ]);
 
     // Calculate today's pay-in and payout with charges handling
     const todayPayin = todayTransactions
@@ -892,7 +892,10 @@ const getUserDashboard = async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('Error fetching user dashboard:', error);
+    logger.error('Error fetching user dashboard', {
+      error: error.message,
+      userId: req.user.id
+    });
     res.status(500).json({ success: false, message: 'Error fetching user dashboard' });
   }
 };
@@ -921,55 +924,51 @@ const getLastNDaysTransactions = async (req, res) => {
 
       const startDate = targetDate;
 
-      console.log(`Date: ${targetDate.toISOString().split('T')[0]}`);
-      console.log(`UTC Start: ${startDate.toISOString()}`);
-      console.log(`UTC End: ${endDate.toISOString()}`);
-
-      // Get payin transactions for the day for this user
-      const payinTransactions = await TransactionCharges.findAll({
-        where: {
-          user_id: userId,
-          transaction_type: 'payin',
-          status: 'completed',
-          created_at: {
-            [Op.between]: [startDate, endDate]
-          }
-        },
-        attributes: [
-          'transaction_amount',
-          'merchant_charge',
-          'agent_charge',
-          'total_charges',
-          'gst_amount',
-          'platform_fee',
-          'reference_id',
-          'transaction_utr',
-          'created_at'
-        ]
-      });
-
-      // Get payout transactions for the day for this user
-      const payoutTransactions = await TransactionCharges.findAll({
-        where: {
-          user_id: userId,
-          transaction_type: 'payout',
-          status: 'completed',
-          created_at: {
-            [Op.between]: [startDate, endDate]
-          }
-        },
-        attributes: [
-          'transaction_amount',
-          'merchant_charge',
-          'agent_charge',
-          'total_charges',
-          'gst_amount',
-          'platform_fee',
-          'reference_id',
-          'transaction_utr',
-          'created_at'
-        ]
-      });
+      // Parallelize payin and payout queries for each day
+      const [payinTransactions, payoutTransactions] = await Promise.all([
+        TransactionCharges.findAll({
+          where: {
+            user_id: userId,
+            transaction_type: 'payin',
+            status: 'completed',
+            created_at: {
+              [Op.between]: [startDate, endDate]
+            }
+          },
+          attributes: [
+            'transaction_amount',
+            'merchant_charge',
+            'agent_charge',
+            'total_charges',
+            'gst_amount',
+            'platform_fee',
+            'reference_id',
+            'transaction_utr',
+            'created_at'
+          ]
+        }),
+        TransactionCharges.findAll({
+          where: {
+            user_id: userId,
+            transaction_type: 'payout',
+            status: 'completed',
+            created_at: {
+              [Op.between]: [startDate, endDate]
+            }
+          },
+          attributes: [
+            'transaction_amount',
+            'merchant_charge',
+            'agent_charge',
+            'total_charges',
+            'gst_amount',
+            'platform_fee',
+            'reference_id',
+            'transaction_utr',
+            'created_at'
+          ]
+        })
+      ]);
 
       // Calculate totals for payin
       const payinTotal = payinTransactions.reduce((sum, t) => sum + parseFloat(t.transaction_amount || 0), 0);
@@ -1027,7 +1026,11 @@ const getLastNDaysTransactions = async (req, res) => {
       selectedDays: selectedDays
     });
   } catch (error) {
-    console.error('Error fetching user last N days transactions:', error);
+    logger.error('Error fetching user last N days transactions', {
+      error: error.message,
+      userId: req.user.id,
+      days: selectedDays
+    });
     res.status(500).json({
       success: false,
       message: 'Error fetching user last N days transactions',

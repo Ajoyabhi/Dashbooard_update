@@ -6,6 +6,7 @@ const PayinTransaction = require('../models/payinTransaction.model');
 // const Wallet = require('../models/wallet.model');
 const Transaction = require('../models/transaction.model');
 const UserTransaction = require('../models/userTransaction.model');
+const { logger } = require('../utils/logger');
 // const User = require('../models/User');
 
 const getAllUsers = async (req, res) => {
@@ -1165,58 +1166,77 @@ const updateUserPayoutCallback = async (req, res) => {
 
 const getAdminDashboard = async (req, res) => {
     try {
-        // 1. Get total number of users
-        const totalUsers = await User.count();
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
 
-        // 2. Calculate total available balance from financial_details
-        const totalBalance = await FinancialDetails.sum('wallet');
-
-        // 3. Calculate total payout (sum of merchant charges for completed payout transactions)
-        const totalPayout = await TransactionCharges.sum('merchant_charge', {
-            where: {
-                transaction_type: 'payout',
-                status: 'completed'
-            }
-        });
-
-        // 4. Calculate today's payout
-        const todayPayout = await TransactionCharges.sum('merchant_charge', {
-            where: {
-                transaction_type: 'payout',
-                status: 'completed',
-                created_at: {
-                    [Op.gte]: new Date().setHours(0, 0, 0, 0)
+        // Parallelize all independent database queries
+        const [
+            totalUsers,
+            totalBalance,
+            totalPayout,
+            todayPayout,
+            totalPayin,
+            todayPayin,
+            totalOutflow,
+            totalInflow,
+            recentPayoutTransactions
+        ] = await Promise.all([
+            User.count(),
+            FinancialDetails.sum('wallet'),
+            TransactionCharges.sum('merchant_charge', {
+                where: {
+                    transaction_type: 'payout',
+                    status: 'completed'
                 }
-            }
-        });
-
-        // 5. Calculate total payin (sum of merchant charges for completed payin transactions)
-        const totalPayin = await TransactionCharges.sum('merchant_charge', {
-            where: {
-                transaction_type: 'payin',
-                status: 'completed'
-            }
-        });
-
-        // 6. Calculate today's payin
-        const todayPayin = await TransactionCharges.sum('merchant_charge', {
-            where: {
-                transaction_type: 'payin',
-                status: 'completed',
-                created_at: {
-                    [Op.gte]: new Date().setHours(0, 0, 0, 0)
+            }),
+            TransactionCharges.sum('merchant_charge', {
+                where: {
+                    transaction_type: 'payout',
+                    status: 'completed',
+                    created_at: {
+                        [Op.gte]: todayStart
+                    }
                 }
-            }
-        });
+            }),
+            TransactionCharges.sum('merchant_charge', {
+                where: {
+                    transaction_type: 'payin',
+                    status: 'completed'
+                }
+            }),
+            TransactionCharges.sum('merchant_charge', {
+                where: {
+                    transaction_type: 'payin',
+                    status: 'completed',
+                    created_at: {
+                        [Op.gte]: todayStart
+                    }
+                }
+            }),
+            TransactionCharges.sum('transaction_amount', {
+                where: {
+                    status: 'completed',
+                    transaction_type: 'payout'
+                }
+            }),
+            TransactionCharges.sum('transaction_amount', {
+                where: {
+                    status: 'completed',
+                    transaction_type: 'payin'
+                }
+            }),
+            PayoutTransaction.find()
+                .sort({ createdAt: -1 })
+                .limit(10)
+                .lean()
+        ]);
 
-        // 7. Calculate total profit (sum of total payin and total payout)
+        // Calculate profits
         const totalProfit = (totalPayin || 0) + (totalPayout || 0);
-
-        // 8. Calculate today's profit (sum of today's payin and today's payout)
         const todayProfit = (todayPayin || 0) + (todayPayout || 0);
 
-        // 9. Calculate last 7 days payout and payin data
-        const last7DaysData = [];
+        // Calculate last 7 days data - parallelize queries for each day
+        const last7DaysDataPromises = [];
         for (let i = 6; i >= 0; i--) {
             const startDate = new Date();
             startDate.setDate(startDate.getDate() - i);
@@ -1225,52 +1245,37 @@ const getAdminDashboard = async (req, res) => {
             const endDate = new Date(startDate);
             endDate.setHours(23, 59, 59, 999);
 
-            const dayPayout = await TransactionCharges.sum('merchant_charge', {
-                where: {
-                    transaction_type: 'payout',
-                    status: 'completed',
-                    created_at: {
-                        [Op.between]: [startDate, endDate]
-                    }
-                }
-            });
-
-            const dayPayin = await TransactionCharges.sum('merchant_charge', {
-                where: {
-                    transaction_type: 'payin',
-                    status: 'completed',
-                    created_at: {
-                        [Op.between]: [startDate, endDate]
-                    }
-                }
-            });
-
-            last7DaysData.push({
-                date: startDate.toISOString().split('T')[0],
-                payout: dayPayout || 0,
-                payin: dayPayin || 0,
-                profit: (dayPayout || 0) + (dayPayin || 0)
-            });
+            // Parallelize payin and payout queries for each day
+            last7DaysDataPromises.push(
+                Promise.all([
+                    TransactionCharges.sum('merchant_charge', {
+                        where: {
+                            transaction_type: 'payout',
+                            status: 'completed',
+                            created_at: {
+                                [Op.between]: [startDate, endDate]
+                            }
+                        }
+                    }),
+                    TransactionCharges.sum('merchant_charge', {
+                        where: {
+                            transaction_type: 'payin',
+                            status: 'completed',
+                            created_at: {
+                                [Op.between]: [startDate, endDate]
+                            }
+                        }
+                    })
+                ]).then(([dayPayout, dayPayin]) => ({
+                    date: startDate.toISOString().split('T')[0],
+                    payout: dayPayout || 0,
+                    payin: dayPayin || 0,
+                    profit: (dayPayout || 0) + (dayPayin || 0)
+                }))
+            );
         }
 
-        // 10. Get recent payout transactions from MongoDB
-        const recentPayoutTransactions = await PayoutTransaction.find()
-            .sort({ createdAt: -1 })
-            .limit(10);
-
-        const totalOutflow = await TransactionCharges.sum('transaction_amount', {
-            where: {
-                status: 'completed',
-                transaction_type: 'payout'
-            }
-        });
-
-        const totalInflow = await TransactionCharges.sum('transaction_amount', {
-            where: {
-                status: 'completed',
-                transaction_type: 'payin'
-            }
-        });
+        const last7DaysData = await Promise.all(last7DaysDataPromises);
 
 
         const dashboardData = {
@@ -1306,7 +1311,9 @@ const getAdminDashboard = async (req, res) => {
             data: dashboardData
         });
     } catch (error) {
-        console.error('Error fetching dashboard data:', error);
+        logger.error('Error fetching admin dashboard data', {
+            error: error.message
+        });
         res.status(500).json({
             success: false,
             message: 'Error fetching dashboard data'
@@ -3074,59 +3081,59 @@ const getLastNDaysTransactionDetails = async (req, res) => {
             // console.log(`UTC Start: ${startDate.toISOString()}`);
             // console.log(`UTC End: ${endDate.toISOString()}`);
 
-            // Get payin transactions for the day
-            const payinTransactions = await TransactionCharges.findAll({
-                where: {
-                    transaction_type: 'payin',
-                    status: 'completed',
-                    created_at: {
-                        [Op.between]: [startDate, endDate]
-                    }
-                },
-                include: [{
-                    model: User,
-                    attributes: ['id', 'name', 'email']
-                }],
-                attributes: [
-                    'user_id',
-                    'transaction_amount',
-                    'merchant_charge',
-                    'agent_charge',
-                    'total_charges',
-                    'gst_amount',
-                    'platform_fee',
-                    'reference_id',
-                    'transaction_utr',
-                    'created_at'
-                ]
-            });
-
-            // Get payout transactions for the day
-            const payoutTransactions = await TransactionCharges.findAll({
-                where: {
-                    transaction_type: 'payout',
-                    status: 'completed',
-                    created_at: {
-                        [Op.between]: [startDate, endDate]
-                    }
-                },
-                include: [{
-                    model: User,
-                    attributes: ['id', 'name', 'email']
-                }],
-                attributes: [
-                    'user_id',
-                    'transaction_amount',
-                    'merchant_charge',
-                    'agent_charge',
-                    'total_charges',
-                    'gst_amount',
-                    'platform_fee',
-                    'reference_id',
-                    'transaction_utr',
-                    'created_at'
-                ]
-            });
+            // Parallelize payin and payout queries for each day
+            const [payinTransactions, payoutTransactions] = await Promise.all([
+                TransactionCharges.findAll({
+                    where: {
+                        transaction_type: 'payin',
+                        status: 'completed',
+                        created_at: {
+                            [Op.between]: [startDate, endDate]
+                        }
+                    },
+                    include: [{
+                        model: User,
+                        attributes: ['id', 'name', 'email']
+                    }],
+                    attributes: [
+                        'user_id',
+                        'transaction_amount',
+                        'merchant_charge',
+                        'agent_charge',
+                        'total_charges',
+                        'gst_amount',
+                        'platform_fee',
+                        'reference_id',
+                        'transaction_utr',
+                        'created_at'
+                    ]
+                }),
+                TransactionCharges.findAll({
+                    where: {
+                        transaction_type: 'payout',
+                        status: 'completed',
+                        created_at: {
+                            [Op.between]: [startDate, endDate]
+                        }
+                    },
+                    include: [{
+                        model: User,
+                        attributes: ['id', 'name', 'email']
+                    }],
+                    attributes: [
+                        'user_id',
+                        'transaction_amount',
+                        'merchant_charge',
+                        'agent_charge',
+                        'total_charges',
+                        'gst_amount',
+                        'platform_fee',
+                        'reference_id',
+                        'transaction_utr',
+                        'created_at'
+                    ]
+                })
+            ]);
 
             // Calculate totals for payin
             const payinTotal = payinTransactions.reduce((sum, t) => sum + parseFloat(t.transaction_amount || 0), 0);
@@ -3189,7 +3196,6 @@ const getLastNDaysTransactionDetails = async (req, res) => {
 
             // User-wise aggregation for payout transactions
             const payoutUserWise = {};
-            console.log(`Processing ${payoutTransactions.length} payout transactions for ${startDate.toISOString().split('T')[0]}`);
 
             payoutTransactions.forEach(transaction => {
                 const userId = transaction.user_id;
@@ -3281,7 +3287,10 @@ const getLastNDaysTransactionDetails = async (req, res) => {
             selectedDays: selectedDays
         });
     } catch (error) {
-        // console.error('Error fetching last N days transaction details:', error);
+        logger.error('Error fetching last N days transaction details', {
+            error: error.message,
+            days: selectedDays
+        });
         res.status(500).json({
             success: false,
             message: 'Error fetching last N days transaction details',
