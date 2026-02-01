@@ -135,7 +135,7 @@ const generateAmounts = (totalAmount = 80000) => {
 };
 
 // Generate all amounts
-const AMOUNTS = generateAmounts(200000);
+const AMOUNTS = generateAmounts(100000);
 
 // Function to sleep/delay
 const sleep = (seconds) => {
