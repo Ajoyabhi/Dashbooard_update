@@ -100,7 +100,7 @@ const generateReferenceId = (beneficiaryName) => {
 // Generate amounts that sum to 50,000 (similar to JSON pattern)
 // Using varied amounts like: 101, 110, 200, 285, 300, 400, 460, 500, 550, 964, 1000, 1300, 2000, 6000, etc.
 const generateAmounts = (totalAmount = 80000) => {
-  const amountTemplates = [120, 285, 150, 200, 285, 300, 340, 400, 460, 479, 500, 502, 550, 964, 1000, 1250,  1300, 1700, 1900, 2500, 2000, 6000];
+  const amountTemplates = [460, 479, 500, 502, 550, 964, 1000, 1250,  1300, 1700, 1900, 2000, 3000, 4000, 2500, 2000, 6000, 10000, 12000];
   const amounts = [];
   let remaining = totalAmount;
   
