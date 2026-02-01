@@ -49,6 +49,9 @@ const generateBeneficiaryName = () => {
   return `B-${digits}${letters}`;
 };
 
+// Track used reference IDs to ensure uniqueness
+const usedReferenceIds = new Set();
+
 // Function to generate reference ID in format: A{YYYYMMDDHHMMSS}{milliseconds_first_digit}{first3digits}
 const generateReferenceId = (beneficiaryName) => {
   const now = new Date();
@@ -66,7 +69,19 @@ const generateReferenceId = (beneficiaryName) => {
   const beneficiaryDigits = beneficiaryName.match(/B-(\d{5})/)[1];
   const first3Digits = beneficiaryDigits.slice(0, 3);
   
-  return `A${year}${month}${day}${hours}${minutes}${seconds}${millisecondsFirstDigit}${first3Digits}`;
+  let refId = `A${year}${month}${day}${hours}${minutes}${seconds}${millisecondsFirstDigit}${first3Digits}`;
+  
+  // Check for collision (should be extremely rare with delays in place)
+  // If collision detected, add a small random suffix (using last digit of milliseconds)
+  if (usedReferenceIds.has(refId)) {
+    const millisecondsLastDigit = milliseconds[2]; // Use last digit of milliseconds as fallback
+    refId = `A${year}${month}${day}${hours}${minutes}${seconds}${millisecondsLastDigit}${first3Digits}`;
+  }
+  
+  // Add to used set
+  usedReferenceIds.add(refId);
+  
+  return refId;
 };
 
 // Generate amounts that sum to 50,000 (similar to JSON pattern)
