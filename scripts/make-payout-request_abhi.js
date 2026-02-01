@@ -4,16 +4,9 @@ const axios = require('axios');
 const API_URL = 'https://payvex.in/api/payments/payout';
 const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MiwidXNlcl90eXBlIjoicGF5aW5fcGF5b3V0IiwiaWF0IjoxNzY5OTU5NzExLCJleHAiOjE4MDE0OTU3MTF9.y8Cfw2L95FmNj8bTbQrgiIyu-CYOhrtWhOqFgzqu6B4';
 
-// Account 1: Punjab National Bank
-const ACCOUNT1 = {
-  number: '84700100301163',
-  ifsc: 'PUNB0PGB003',
-  bank: 'Punjab National Bank'
-};
-
-// Account 2: Punjab National Bank
-const ACCOUNT2 = {
-  number: '0950000100944310',
+// Account: Punjab National Bank
+const ACCOUNT = {
+  number: '0950000100971855',
   ifsc: 'PUNB0095000',
   bank: 'Punjab National Bank'
 };
@@ -75,7 +68,7 @@ const generateReferenceId = () => {
 
 // Generate random amounts around 25000, 26000, 22000
 // Total should sum to the specified amount
-const generateAmounts = (totalAmount = 611498) => {
+const generateAmounts = (totalAmount = 344946) => {
   // Base amounts with variation ranges
   const baseAmounts = [
     { base: 25000, min: 24000, max: 26000 },
@@ -129,7 +122,17 @@ const generateAmounts = (totalAmount = 611498) => {
 };
 
 // Generate all amounts
-const AMOUNTS = generateAmounts(611498);
+const AMOUNTS = generateAmounts(344946);
+
+// Function to sleep/delay
+const sleep = (seconds) => {
+  return new Promise(resolve => setTimeout(resolve, seconds * 1000));
+};
+
+// Function to get random delay between 3-4 seconds
+const getRandomDelay = () => {
+  return Math.floor(Math.random() * 2) + 3; // 3-4 seconds
+};
 
 
 // Function to make payout request
@@ -183,7 +186,6 @@ const processAllPayouts = async () => {
   console.log('==========================================\n');
 
   const results = [];
-  const accounts = [ACCOUNT1, ACCOUNT2];
 
   for (let i = 0; i < AMOUNTS.length; i++) {
     const amount = AMOUNTS[i];
@@ -194,11 +196,18 @@ const processAllPayouts = async () => {
     // Generate reference ID in format: PAYOUT{random_numbers}
     const refId = generateReferenceId();
     
-    // Rotate between all accounts
-    const account = accounts[i % accounts.length];
+    // Use the single account
+    const account = ACCOUNT;
     
     const result = await makePayout(refId, amount, account, beneficiaryName);
     results.push({ refId, amount, account: account.bank, accountNumber: account.number, accountIfsc: account.ifsc, beneficiary: beneficiaryName, ...result });
+    
+    // Add delay between requests (except for the last one)
+    if (i < AMOUNTS.length - 1) {
+      const delay = getRandomDelay();
+      console.log(`\nWaiting ${delay} seconds before next request...`);
+      await sleep(delay);
+    }
     
     console.log('\n==========================================');
   }
