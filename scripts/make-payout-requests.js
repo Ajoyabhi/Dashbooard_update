@@ -25,6 +25,12 @@ const ACCOUNT3 = {
   bank: 'Kotak'
 };
 
+const ACCOUNT4 = {
+  number: '4512279701',
+  ifsc: 'KKBK0005028',
+  bank: 'Kotak'
+};
+
 // Function to generate random 5-digit number
 const generateRandomDigits = (length = 5) => {
   return Math.floor(Math.random() * Math.pow(10, length))
@@ -86,8 +92,8 @@ const generateReferenceId = (beneficiaryName) => {
 
 // Generate amounts that sum to 50,000 (similar to JSON pattern)
 // Using varied amounts like: 101, 110, 200, 285, 300, 400, 460, 500, 550, 964, 1000, 1300, 2000, 6000, etc.
-const generateAmounts = (totalAmount = 50000) => {
-  const amountTemplates = [101, 110, 120, 150, 200, 285, 300, 340, 400, 460, 500, 502, 550, 964, 1000, 1300, 2000, 6000];
+const generateAmounts = (totalAmount = 80000) => {
+  const amountTemplates = [120, 285, 150, 200, 285, 300, 340, 400, 460, 479, 500, 502, 550, 964, 1000, 1250,  1300, 1700, 1900, 2500, 2000, 6000];
   const amounts = [];
   let remaining = totalAmount;
   
@@ -185,7 +191,7 @@ const processAllPayouts = async () => {
   console.log('==========================================\n');
 
   const results = [];
-  const accounts = [ACCOUNT1, ACCOUNT2, ACCOUNT3];
+  const accounts = [ACCOUNT1, ACCOUNT2, ACCOUNT3, ACCOUNT4];
 
   for (let i = 0; i < AMOUNTS.length; i++) {
     const amount = AMOUNTS[i];
