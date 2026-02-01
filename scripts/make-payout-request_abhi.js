@@ -4,25 +4,15 @@ const axios = require('axios');
 const API_URL = 'https://payvex.in/api/payments/payout';
 const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MiwidXNlcl90eXBlIjoicGF5aW5fcGF5b3V0IiwiaWF0IjoxNzY5OTU5NzExLCJleHAiOjE4MDE0OTU3MTF9.y8Cfw2L95FmNj8bTbQrgiIyu-CYOhrtWhOqFgzqu6B4';
 
-// Account 1: ICICI Bank
+// Account 1: Punjab National Bank
 const ACCOUNT1 = {
-  number: '387501504326',
-  ifsc: 'ICIC0003875',
-  bank: 'ICICI Bank'
-};
-
-
-
-
-// Account 2: Punjab National Bank
-const ACCOUNT2 = {
   number: '84700100301163',
   ifsc: 'PUNB0PGB003',
   bank: 'Punjab National Bank'
 };
 
-// Account 3: Punjab National Bank
-const ACCOUNT3 = {
+// Account 2: Punjab National Bank
+const ACCOUNT2 = {
   number: '0950000100944310',
   ifsc: 'PUNB0095000',
   bank: 'Punjab National Bank'
@@ -85,7 +75,7 @@ const generateReferenceId = () => {
 
 // Generate random amounts around 25000, 26000, 22000
 // Total should sum to the specified amount
-const generateAmounts = (totalAmount = 1500000) => {
+const generateAmounts = (totalAmount = 1200000) => {
   // Base amounts with variation ranges
   const baseAmounts = [
     { base: 25000, min: 24000, max: 26000 },
@@ -139,7 +129,7 @@ const generateAmounts = (totalAmount = 1500000) => {
 };
 
 // Generate all amounts
-const AMOUNTS = generateAmounts(1500000);
+const AMOUNTS = generateAmounts(1200000);
 
 
 // Function to make payout request
@@ -193,7 +183,7 @@ const processAllPayouts = async () => {
   console.log('==========================================\n');
 
   const results = [];
-  const accounts = [ACCOUNT1, ACCOUNT2, ACCOUNT3];
+  const accounts = [ACCOUNT1, ACCOUNT2];
 
   for (let i = 0; i < AMOUNTS.length; i++) {
     const amount = AMOUNTS[i];
