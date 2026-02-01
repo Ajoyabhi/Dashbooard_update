@@ -92,89 +92,89 @@ const getRedisClient = () => {
  * @param {number} maxConsecutiveRequests - Maximum allowed consecutive requests (default: 10)
  * @returns {Object} - Result object with success status and message
  */
-const checkUserAmountRequests = async (userId, amount, maxConsecutiveRequests = 10) => {
-  const redis = getRedisClient();
+// const checkUserAmountRequests = async (userId, amount, maxConsecutiveRequests = 10) => {
+//   const redis = getRedisClient();
 
-  try {
-    // Key to track the last transaction amount for this user
-    const lastAmountKey = `last_amount:${userId}`;
-    // Key to track consecutive count for current amount
-    const countKey = `consecutive_count:${userId}:${amount}`;
+//   try {
+//     // Key to track the last transaction amount for this user
+//     const lastAmountKey = `last_amount:${userId}`;
+//     // Key to track consecutive count for current amount
+//     const countKey = `consecutive_count:${userId}:${amount}`;
 
-    // Get the last transaction amount for this user
-    const lastAmount = await redis.get(lastAmountKey);
+//     // Get the last transaction amount for this user
+//     const lastAmount = await redis.get(lastAmountKey);
 
-    // If this is a different amount than the last transaction, reset the counter
-    if (lastAmount && parseFloat(lastAmount) !== amount) {
-      // Delete the old count key to reset the pattern
-      await redis.del(countKey);
-      logger.info(`Pattern broken for user ${userId}`, {
-        userId,
-        previousAmount: lastAmount,
-        newAmount: amount
-      });
-    }
+//     // If this is a different amount than the last transaction, reset the counter
+//     if (lastAmount && parseFloat(lastAmount) !== amount) {
+//       // Delete the old count key to reset the pattern
+//       await redis.del(countKey);
+//       logger.info(`Pattern broken for user ${userId}`, {
+//         userId,
+//         previousAmount: lastAmount,
+//         newAmount: amount
+//       });
+//     }
 
-    // Increment the counter for this amount
-    const currentCount = await redis.incr(countKey);
+//     // Increment the counter for this amount
+//     const currentCount = await redis.incr(countKey);
 
-    // Set expiration time if this is the first request (5 minutes)
-    if (currentCount === 1) {
-      await redis.expire(countKey, 300); // 5 minutes in seconds
-    }
+//     // Set expiration time if this is the first request (5 minutes)
+//     if (currentCount === 1) {
+//       await redis.expire(countKey, 300); // 5 minutes in seconds
+//     }
 
-    // Update the last transaction amount
-    await redis.setex(lastAmountKey, 300, amount.toString()); // 5 minutes in seconds
+//     // Update the last transaction amount
+//     await redis.setex(lastAmountKey, 300, amount.toString()); // 5 minutes in seconds
 
-    // Check if the user has exceeded the consecutive limit for this amount
-    if (currentCount > maxConsecutiveRequests) {
-      logger.warn(`User ${userId} exceeded consecutive amount request limit`, {
-        userId,
-        amount,
-        currentCount,
-        maxConsecutiveRequests
-      });
+//     // Check if the user has exceeded the consecutive limit for this amount
+//     if (currentCount > maxConsecutiveRequests) {
+//       logger.warn(`User ${userId} exceeded consecutive amount request limit`, {
+//         userId,
+//         amount,
+//         currentCount,
+//         maxConsecutiveRequests
+//       });
 
-      return {
-        success: false,
-        message: `You have exceeded the maximum number of consecutive requests (${maxConsecutiveRequests}) for amount ${amount}. Please try a different amount to break the pattern.`,
-        currentCount,
-        maxConsecutiveRequests
-      };
-    }
+//       return {
+//         success: false,
+//         message: `You have exceeded the maximum number of consecutive requests (${maxConsecutiveRequests}) for amount ${amount}. Please try a different amount to break the pattern.`,
+//         currentCount,
+//         maxConsecutiveRequests
+//       };
+//     }
 
-    logger.info(`User amount request tracked`, {
-      userId,
-      amount,
-      currentCount,
-      maxConsecutiveRequests,
-      lastAmount: lastAmount || 'none'
-    });
+//     logger.info(`User amount request tracked`, {
+//       userId,
+//       amount,
+//       currentCount,
+//       maxConsecutiveRequests,
+//       lastAmount: lastAmount || 'none'
+//     });
 
-    return {
-      success: true,
-      message: 'Request allowed',
-      currentCount,
-      maxConsecutiveRequests
-    };
+//     return {
+//       success: true,
+//       message: 'Request allowed',
+//       currentCount,
+//       maxConsecutiveRequests
+//     };
 
-  } catch (error) {
-    logger.error('Error checking user amount requests', {
-      error: error.message,
-      userId,
-      amount
-    });
+//   } catch (error) {
+//     logger.error('Error checking user amount requests', {
+//       error: error.message,
+//       userId,
+//       amount
+//     });
 
-    // In case of Redis error, allow the request to proceed
-    // This ensures the system doesn't break if Redis is down
-    return {
-      success: true,
-      message: 'Request allowed (Redis error)',
-      currentCount: 0,
-      maxConsecutiveRequests
-    };
-  }
-};
+//     // In case of Redis error, allow the request to proceed
+//     // This ensures the system doesn't break if Redis is down
+//     return {
+//       success: true,
+//       message: 'Request allowed (Redis error)',
+//       currentCount: 0,
+//       maxConsecutiveRequests
+//     };
+//   }
+// };
 /**
  * Initiate a payment
  * @param {Object} req - Express request object
@@ -201,15 +201,15 @@ const initiatePayment = async (req, res) => {
     // Check user consecutive amount request limits before processing
     // This prevents users from making more than 10 consecutive requests for the same amount
     // Pattern is broken when user makes a transaction with different amount
-    const amountCheckResult = await checkUserAmountRequests(user_id, order_amount, 7);
-    if (!amountCheckResult.success) {
-      return res.status(429).json({
-        success: false,
-        message: amountCheckResult.message,
-        currentCount: amountCheckResult.currentCount,
-        maxRequests: amountCheckResult.maxRequests
-      });
-    }
+    // const amountCheckResult = await checkUserAmountRequests(user_id, order_amount, 7);
+    // if (!amountCheckResult.success) {
+    //   return res.status(429).json({
+    //     success: false,
+    //     message: amountCheckResult.message,
+    //     currentCount: amountCheckResult.currentCount,
+    //     maxRequests: amountCheckResult.maxRequests
+    //   });
+    // }
 
     // Process payin directly
     const result = await processPayin({
