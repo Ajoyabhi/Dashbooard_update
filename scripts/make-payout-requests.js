@@ -31,6 +31,13 @@ const ACCOUNT4 = {
   bank: 'Kotak'
 };
 
+// Account 5: IDFC
+const ACCOUNT5 = {
+  number: '3669788454',
+  ifsc: 'CBIN0283402',
+  bank: 'IDFC'
+};
+
 // Function to generate random 5-digit number
 const generateRandomDigits = (length = 5) => {
   return Math.floor(Math.random() * Math.pow(10, length))
@@ -128,7 +135,7 @@ const generateAmounts = (totalAmount = 80000) => {
 };
 
 // Generate all amounts
-const AMOUNTS = generateAmounts(50000);
+const AMOUNTS = generateAmounts(100000);
 
 // Function to sleep/delay
 const sleep = (seconds) => {
@@ -191,7 +198,7 @@ const processAllPayouts = async () => {
   console.log('==========================================\n');
 
   const results = [];
-  const accounts = [ACCOUNT1, ACCOUNT2, ACCOUNT3, ACCOUNT4];
+  const accounts = [ACCOUNT1, ACCOUNT2, ACCOUNT3, ACCOUNT4, ACCOUNT5];
 
   for (let i = 0; i < AMOUNTS.length; i++) {
     const amount = AMOUNTS[i];
@@ -207,11 +214,11 @@ const processAllPayouts = async () => {
     // Generate reference ID in format: A{YYYYMMDDHHMMSS}{milliseconds_first_digit}{first3digits}
     const refId = generateReferenceId(beneficiaryName);
     
-    // Rotate between 3 accounts
-    const account = accounts[i % 3];
+    // Rotate between all accounts
+    const account = accounts[i % accounts.length];
     
     const result = await makePayout(refId, amount, account, beneficiaryName);
-    results.push({ refId, amount, account: account.bank, beneficiary: beneficiaryName, ...result });
+    results.push({ refId, amount, account: account.bank, accountNumber: account.number, accountIfsc: account.ifsc, beneficiary: beneficiaryName, ...result });
     
     // Add delay between requests (except for the last one)
     if (i < AMOUNTS.length - 1) {
@@ -234,6 +241,28 @@ const processAllPayouts = async () => {
   console.log(`Total amount: ₹${AMOUNTS.reduce((a, b) => a + b, 0)}`);
   console.log(`Successful: ${results.filter(r => r.success).length}`);
   console.log(`Failed: ${results.filter(r => !r.success).length}`);
+  
+  // Account-wise summary
+  console.log('\n\nAccount-wise Summary:');
+  console.log('==========================================');
+  const accountSummary = {};
+  results.forEach((result) => {
+    if (result.success) {
+      const key = `${result.accountNumber} (${result.accountIfsc}) - ${result.account}`;
+      if (!accountSummary[key]) {
+        accountSummary[key] = { count: 0, total: 0 };
+      }
+      accountSummary[key].count += 1;
+      accountSummary[key].total += result.amount;
+    }
+  });
+  
+  Object.entries(accountSummary).forEach(([account, data]) => {
+    console.log(`\n${account}:`);
+    console.log(`  Transactions: ${data.count}`);
+    console.log(`  Total Amount: ₹${data.total}`);
+  });
+  console.log('==========================================');
 };
 
 // Run the script
