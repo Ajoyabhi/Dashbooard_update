@@ -2,7 +2,7 @@ const axios = require('axios');
 
 // Configuration
 const API_URL = 'https://payvex.in/api/payments/payout';
-const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NSwidXNlcl90eXBlIjoicGF5aW5fcGF5b3V0IiwiaWF0IjoxNzY5OTMwNzU3LCJleHAiOjE4MDE0NjY3NTd9.jJLokRi3vdH6FYOhLHQbkEafrRYEo7z36Tp_1Rd7J3I';
+const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MiwidXNlcl90eXBlIjoicGF5aW5fcGF5b3V0IiwiaWF0IjoxNzY5OTcyNTcyLCJleHAiOjE4MDE1MDg1NzJ9.7Bh54UTSFJBbAlMyd4LBH1CbZ9ARAV36KVPsNhDHVAo';
 
 // Account: ICICI Bank
 const ACCOUNT = {
