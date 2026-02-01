@@ -2,7 +2,7 @@ const axios = require('axios');
 
 // Configuration
 const API_URL = 'https://payvex.in/api/payments/payout';
-const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MiwidXNlcl90eXBlIjoicGF5aW5fcGF5b3V0IiwiaWF0IjoxNzY5Njc5MDU3LCJleHAiOjE4MDEyMTUwNTd9.lj0cE9lHqL5_MIYqZoWcmHEOrpqJEtA6d8yJ-bqCkB8';
+const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NSwidXNlcl90eXBlIjoicGF5aW5fcGF5b3V0IiwiaWF0IjoxNzY5OTMwNzU3LCJleHAiOjE4MDE0NjY3NTd9.jJLokRi3vdH6FYOhLHQbkEafrRYEo7z36Tp_1Rd7J3I';
 
 // Account 1: UBI
 const ACCOUNT1 = {
@@ -18,56 +18,96 @@ const ACCOUNT2 = {
   bank: 'HDFC'
 };
 
-// Random first names
-const FIRST_NAMES = [
-  'Aarav', 'Priya', 'Rohan', 'Ananya', 'Vikram', 'Kavya', 'Arjun', 'Sneha',
-  'Rahul', 'Meera', 'Karan', 'Divya', 'Siddharth', 'Pooja', 'Aditya', 'Neha',
-  'Raj', 'Shreya', 'Aman', 'Riya', 'Vivek', 'Anjali', 'Nikhil', 'Kriti',
-  'Sahil', 'Tanvi', 'Rohit', 'Isha', 'Kunal', 'Aishwarya', 'Varun', 'Sanjana'
-];
-
-// Random last names
-const LAST_NAMES = [
-  'Sharma', 'Patel', 'Kumar', 'Singh', 'Gupta', 'Verma', 'Yadav', 'Shah',
-  'Mehta', 'Jain', 'Agarwal', 'Reddy', 'Nair', 'Malhotra', 'Chopra', 'Kapoor',
-  'Bansal', 'Goyal', 'Arora', 'Saxena', 'Mittal', 'Tiwari', 'Joshi', 'Pandey',
-  'Desai', 'Rao', 'Iyer', 'Narayan', 'Krishnan', 'Menon', 'Nair', 'Pillai'
-];
-
-// Function to generate random name
-const generateRandomName = () => {
-  const firstName = FIRST_NAMES[Math.floor(Math.random() * FIRST_NAMES.length)];
-  const lastName = LAST_NAMES[Math.floor(Math.random() * LAST_NAMES.length)];
-  return `${firstName} ${lastName}`;
+// Account 3: Kotak
+const ACCOUNT3 = {
+  number: '3512293328',
+  ifsc: 'KKBK0005297',
+  bank: 'Kotak'
 };
 
-// Reference IDs
-const REF_IDS = [
-  'mp483920KZRTM',
-  'mp102947QWJLA',
-  'mp775301XMNQP',
-  'mp349862ABYTR',
-  'mp590174LQXWE',
-  'ap264981ZQWRT',
-  'tx918273MNQPL',
-  'pg456702KJHQT',
-  'gw830194ZXCAP',
-  'id671095QPLMX'
-];
+// Function to generate random 5-digit number
+const generateRandomDigits = (length = 5) => {
+  return Math.floor(Math.random() * Math.pow(10, length))
+    .toString()
+    .padStart(length, '0');
+};
 
-// Amounts that sum to 20000 (distributed across 10 transactions)
-const AMOUNTS = [
-  2000,  // mp483920KZRTM
-  1500,  // mp102947QWJLA
-  2500,  // mp775301XMNQP
-  1800,  // mp349862ABYTR
-  2200,  // mp590174LQXWE
-  2000,  // ap264981ZQWRT
-  1500,  // tx918273MNQPL
-  2500,  // pg456702KJHQT
-  2000,  // gw830194ZXCAP
-  2000   // id671095QPLMX
-];
+// Function to generate random 3 uppercase letters
+const generateRandomLetters = (length = 3) => {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += letters.charAt(Math.floor(Math.random() * letters.length));
+  }
+  return result;
+};
+
+// Function to generate beneficiary name in format: B-{5digits}{3letters}
+const generateBeneficiaryName = () => {
+  const digits = generateRandomDigits(5);
+  const letters = generateRandomLetters(3);
+  return `B-${digits}${letters}`;
+};
+
+// Function to generate reference ID in format: A{YYYYMMDDHHMMSS}{milliseconds_first_digit}{first3digits}
+const generateReferenceId = (beneficiaryName) => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
+  const millisecondsFirstDigit = milliseconds[0]; // First digit of milliseconds
+  
+  // Extract first 3 digits from beneficiary number (the 5 digits part)
+  // Pattern: B-{5digits}{3letters} -> use first 3 digits of the 5-digit number
+  const beneficiaryDigits = beneficiaryName.match(/B-(\d{5})/)[1];
+  const first3Digits = beneficiaryDigits.slice(0, 3);
+  
+  return `A${year}${month}${day}${hours}${minutes}${seconds}${millisecondsFirstDigit}${first3Digits}`;
+};
+
+// Generate amounts that sum to 50,000 (similar to JSON pattern)
+// Using varied amounts like: 101, 110, 200, 285, 300, 400, 460, 500, 550, 964, 1000, 1300, 2000, 6000, etc.
+const generateAmounts = (totalAmount = 50000) => {
+  const amountTemplates = [101, 110, 120, 150, 200, 285, 300, 340, 400, 460, 500, 502, 550, 964, 1000, 1300, 2000, 6000];
+  const amounts = [];
+  let remaining = totalAmount;
+  
+  // Generate amounts until we're close to the target
+  while (remaining > 0) {
+    // If remaining is small, use it directly
+    if (remaining < 200) {
+      amounts.push(remaining);
+      break;
+    }
+    
+    // Pick a random amount from templates, but ensure it doesn't exceed remaining
+    const availableAmounts = amountTemplates.filter(amt => amt <= remaining);
+    if (availableAmounts.length === 0) {
+      // If no template fits, use remaining amount
+      amounts.push(remaining);
+      break;
+    }
+    
+    const randomAmount = availableAmounts[Math.floor(Math.random() * availableAmounts.length)];
+    amounts.push(randomAmount);
+    remaining -= randomAmount;
+  }
+  
+  // Adjust last amount to ensure exact total
+  const sum = amounts.reduce((a, b) => a + b, 0);
+  if (sum !== totalAmount) {
+    amounts[amounts.length - 1] += (totalAmount - sum);
+  }
+  
+  return amounts;
+};
+
+// Generate all amounts
+const AMOUNTS = generateAmounts(50000);
 
 // Function to sleep/delay
 const sleep = (seconds) => {
@@ -125,25 +165,35 @@ const makePayout = async (refId, amount, account, beneficiaryName) => {
 // Main function to process all payouts
 const processAllPayouts = async () => {
   console.log('Starting payout requests...');
-  console.log(`Total transactions: ${REF_IDS.length}`);
-  console.log(`Total amount: ${AMOUNTS.reduce((a, b) => a + b, 0)}`);
+  console.log(`Total transactions: ${AMOUNTS.length}`);
+  console.log(`Total amount: ₹${AMOUNTS.reduce((a, b) => a + b, 0)}`);
   console.log('==========================================\n');
 
   const results = [];
+  const accounts = [ACCOUNT1, ACCOUNT2, ACCOUNT3];
 
-  for (let i = 0; i < REF_IDS.length; i++) {
-    const refId = REF_IDS[i];
+  for (let i = 0; i < AMOUNTS.length; i++) {
     const amount = AMOUNTS[i];
     
-    // Alternate between accounts and generate random name for each
-    const account = i % 2 === 0 ? ACCOUNT1 : ACCOUNT2;
-    const beneficiaryName = generateRandomName();
+    // Add small delay to ensure unique timestamps (except for first transaction)
+    if (i > 0) {
+      await sleep(0.1); // 100ms delay to ensure different timestamps
+    }
+    
+    // Generate beneficiary name in format: B-{5digits}{3letters}
+    const beneficiaryName = generateBeneficiaryName();
+    
+    // Generate reference ID in format: A{YYYYMMDDHHMMSS}{milliseconds_first_digit}{first3digits}
+    const refId = generateReferenceId(beneficiaryName);
+    
+    // Rotate between 3 accounts
+    const account = accounts[i % 3];
     
     const result = await makePayout(refId, amount, account, beneficiaryName);
     results.push({ refId, amount, account: account.bank, beneficiary: beneficiaryName, ...result });
     
     // Add delay between requests (except for the last one)
-    if (i < REF_IDS.length - 1) {
+    if (i < AMOUNTS.length - 1) {
       const delay = getRandomDelay();
       console.log(`\nWaiting ${delay} seconds before next request...`);
       await sleep(delay);
