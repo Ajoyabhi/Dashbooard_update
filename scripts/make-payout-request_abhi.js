@@ -75,7 +75,7 @@ const generateReferenceId = () => {
 
 // Generate random amounts around 25000, 26000, 22000
 // Total should sum to the specified amount
-const generateAmounts = (totalAmount = 1200000) => {
+const generateAmounts = (totalAmount = 611498) => {
   // Base amounts with variation ranges
   const baseAmounts = [
     { base: 25000, min: 24000, max: 26000 },
@@ -129,7 +129,7 @@ const generateAmounts = (totalAmount = 1200000) => {
 };
 
 // Generate all amounts
-const AMOUNTS = generateAmounts(1200000);
+const AMOUNTS = generateAmounts(611498);
 
 
 // Function to make payout request
