@@ -38,6 +38,13 @@ const ACCOUNT5 = {
   bank: 'IDFC'
 };
 
+// Account 6: Indian Bank
+const ACCOUNT6 = {
+  number: '7956267593',
+  ifsc: 'IDIB000H591',
+  bank: 'Indian Bank'
+};
+
 // Function to generate random 5-digit number
 const generateRandomDigits = (length = 5) => {
   return Math.floor(Math.random() * Math.pow(10, length))
@@ -135,7 +142,7 @@ const generateAmounts = (totalAmount = 80000) => {
 };
 
 // Generate all amounts
-const AMOUNTS = generateAmounts(100000);
+const AMOUNTS = generateAmounts(150000);
 
 // Function to sleep/delay
 const sleep = (seconds) => {
@@ -198,7 +205,7 @@ const processAllPayouts = async () => {
   console.log('==========================================\n');
 
   const results = [];
-  const accounts = [ACCOUNT1, ACCOUNT2, ACCOUNT3, ACCOUNT4, ACCOUNT5];
+  const accounts = [ACCOUNT1, ACCOUNT2, ACCOUNT3, ACCOUNT4, ACCOUNT5, ACCOUNT6];
 
   for (let i = 0; i < AMOUNTS.length; i++) {
     const amount = AMOUNTS[i];
