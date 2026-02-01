@@ -100,7 +100,7 @@ const generateReferenceId = (beneficiaryName) => {
 // Generate amounts that sum to 50,000 (similar to JSON pattern)
 // Using varied amounts like: 101, 110, 200, 285, 300, 400, 460, 500, 550, 964, 1000, 1300, 2000, 6000, etc.
 const generateAmounts = (totalAmount = 80000) => {
-  const amountTemplates = [460, 479, 500, 502, 550, 964, 1000, 1250,  1300, 1700, 1900, 2000, 3000, 4000, 2500, 2000, 6000, 10000, 12000];
+  const amountTemplates = [1000,1100,1500,1800, 2000, 3000, 4000, 5000, 5500, 6000, 10000, 12000];
   const amounts = [];
   let remaining = totalAmount;
   
@@ -135,16 +135,16 @@ const generateAmounts = (totalAmount = 80000) => {
 };
 
 // Generate all amounts
-const AMOUNTS = generateAmounts(100000);
+const AMOUNTS = generateAmounts(200000);
 
 // Function to sleep/delay
 const sleep = (seconds) => {
   return new Promise(resolve => setTimeout(resolve, seconds * 1000));
 };
 
-// Function to get random delay between 6-10 seconds
+// Function to get random delay between 3-4 seconds
 const getRandomDelay = () => {
-  return Math.floor(Math.random() * 5) + 6; // 6-10 seconds
+  return Math.floor(Math.random() * 2) + 3; // 3-4 seconds
 };
 
 // Function to make payout request
