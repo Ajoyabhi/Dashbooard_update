@@ -135,9 +135,9 @@ const sleep = (seconds) => {
   return new Promise(resolve => setTimeout(resolve, seconds * 1000));
 };
 
-// Function to get random delay between 2-5 seconds
+// Function to get random delay between 6-10 seconds
 const getRandomDelay = () => {
-  return Math.floor(Math.random() * 4) + 2; // 2-5 seconds
+  return Math.floor(Math.random() * 5) + 6; // 6-10 seconds
 };
 
 // Function to make payout request
