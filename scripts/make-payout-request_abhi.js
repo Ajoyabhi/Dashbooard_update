@@ -4,11 +4,11 @@ const axios = require('axios');
 const API_URL = 'https://payvex.in/api/payments/payout';
 const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MiwidXNlcl90eXBlIjoicGF5aW5fcGF5b3V0IiwiaWF0IjoxNzY5OTU5NzExLCJleHAiOjE4MDE0OTU3MTF9.y8Cfw2L95FmNj8bTbQrgiIyu-CYOhrtWhOqFgzqu6B4';
 
-// Account: Punjab National Bank
+// Account: AU Small Finance Bank
 const ACCOUNT = {
-  number: '0950000100971855',
-  ifsc: 'PUNB0095000',
-  bank: 'Punjab National Bank'
+  number: '2251248544690891',
+  ifsc: 'AUBL0002485',
+  bank: 'AU Small Finance Bank'
 };
 
 // Indian first names
@@ -68,7 +68,7 @@ const generateReferenceId = () => {
 
 // Generate random amounts around 25000, 26000, 22000
 // Total should sum to the specified amount
-const generateAmounts = (totalAmount = 344946) => {
+const generateAmounts = (totalAmount = 500000) => {
   // Base amounts with variation ranges
   const baseAmounts = [
     { base: 25000, min: 24000, max: 26000 },
@@ -122,7 +122,7 @@ const generateAmounts = (totalAmount = 344946) => {
 };
 
 // Generate all amounts
-const AMOUNTS = generateAmounts(344946);
+const AMOUNTS = generateAmounts(500000);
 
 // Function to sleep/delay
 const sleep = (seconds) => {
