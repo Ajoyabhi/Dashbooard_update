@@ -4,11 +4,28 @@ const axios = require('axios');
 const API_URL = 'https://payvex.in/api/payments/payout';
 const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MiwidXNlcl90eXBlIjoicGF5aW5fcGF5b3V0IiwiaWF0IjoxNzY5OTU5NzExLCJleHAiOjE4MDE0OTU3MTF9.y8Cfw2L95FmNj8bTbQrgiIyu-CYOhrtWhOqFgzqu6B4';
 
-// Account: ICICI Bank
-const ACCOUNT = {
+// Account 1: ICICI Bank
+const ACCOUNT1 = {
   number: '387501504326',
   ifsc: 'ICIC0003875',
   bank: 'ICICI Bank'
+};
+
+
+
+
+// Account 2: Punjab National Bank
+const ACCOUNT2 = {
+  number: '84700100301163',
+  ifsc: 'PUNB0PGB003',
+  bank: 'Punjab National Bank'
+};
+
+// Account 3: Punjab National Bank
+const ACCOUNT3 = {
+  number: '0950000100944310',
+  ifsc: 'PUNB0095000',
+  bank: 'Punjab National Bank'
 };
 
 // Indian first names
@@ -68,7 +85,7 @@ const generateReferenceId = () => {
 
 // Generate random amounts around 25000, 26000, 22000
 // Total should sum to the specified amount
-const generateAmounts = (totalAmount = 452000) => {
+const generateAmounts = (totalAmount = 1500000) => {
   // Base amounts with variation ranges
   const baseAmounts = [
     { base: 25000, min: 24000, max: 26000 },
@@ -122,17 +139,8 @@ const generateAmounts = (totalAmount = 452000) => {
 };
 
 // Generate all amounts
-const AMOUNTS = generateAmounts(452000);
+const AMOUNTS = generateAmounts(1500000);
 
-// Function to sleep/delay
-const sleep = (seconds) => {
-  return new Promise(resolve => setTimeout(resolve, seconds * 1000));
-};
-
-// Function to get random delay between 3-4 seconds
-const getRandomDelay = () => {
-  return Math.floor(Math.random() * 2) + 3; // 3-4 seconds
-};
 
 // Function to make payout request
 const makePayout = async (refId, amount, account, beneficiaryName) => {
@@ -185,14 +193,10 @@ const processAllPayouts = async () => {
   console.log('==========================================\n');
 
   const results = [];
+  const accounts = [ACCOUNT1, ACCOUNT2, ACCOUNT3];
 
   for (let i = 0; i < AMOUNTS.length; i++) {
     const amount = AMOUNTS[i];
-    
-    // Add small delay to ensure unique timestamps (except for first transaction)
-    if (i > 0) {
-      await sleep(0.1); // 100ms delay to ensure different timestamps
-    }
     
     // Generate random Indian beneficiary name
     const beneficiaryName = generateBeneficiaryName();
@@ -200,18 +204,11 @@ const processAllPayouts = async () => {
     // Generate reference ID in format: PAYOUT{random_numbers}
     const refId = generateReferenceId();
     
-    // Use the single account
-    const account = ACCOUNT;
+    // Rotate between all accounts
+    const account = accounts[i % accounts.length];
     
     const result = await makePayout(refId, amount, account, beneficiaryName);
     results.push({ refId, amount, account: account.bank, accountNumber: account.number, accountIfsc: account.ifsc, beneficiary: beneficiaryName, ...result });
-    
-    // Add delay between requests (except for the last one)
-    if (i < AMOUNTS.length - 1) {
-      const delay = getRandomDelay();
-      console.log(`\nWaiting ${delay} seconds before next request...`);
-      await sleep(delay);
-    }
     
     console.log('\n==========================================');
   }
