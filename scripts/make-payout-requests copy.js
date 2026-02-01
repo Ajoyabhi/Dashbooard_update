@@ -2,7 +2,7 @@ const axios = require('axios');
 
 // Configuration
 const API_URL = 'https://payvex.in/api/payments/payout';
-const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MiwidXNlcl90eXBlIjoicGF5aW5fcGF5b3V0IiwiaWF0IjoxNzY5OTcyNTcyLCJleHAiOjE4MDE1MDg1NzJ9.7Bh54UTSFJBbAlMyd4LBH1CbZ9ARAV36KVPsNhDHVAo';
+const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MiwidXNlcl90eXBlIjoicGF5aW5fcGF5b3V0IiwiaWF0IjoxNzY5OTU5NzExLCJleHAiOjE4MDE0OTU3MTF9.y8Cfw2L95FmNj8bTbQrgiIyu-CYOhrtWhOqFgzqu6B4';
 
 // Account: ICICI Bank
 const ACCOUNT = {
@@ -38,30 +38,24 @@ const generateBeneficiaryName = () => {
 // Track used reference IDs to ensure uniqueness
 const usedReferenceIds = new Set();
 
-// Function to generate reference ID in format: A{YYYYMMDDHHMMSS}{milliseconds_first_digit}{first3digits}
-const generateReferenceId = (beneficiaryName) => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  const seconds = String(now.getSeconds()).padStart(2, '0');
-  const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
-  const millisecondsFirstDigit = milliseconds[0]; // First digit of milliseconds
+// Function to generate reference ID in format: PAYOUT{random_numbers}
+const generateReferenceId = () => {
+  // Generate random 9-digit number
+  const randomNumber = Math.floor(Math.random() * 1000000000)
+    .toString()
+    .padStart(9, '0');
   
-  // Extract first 3 digits from beneficiary number (the 5 digits part)
-  // Pattern: B-{5digits}{3letters} -> use first 3 digits of the 5-digit number
-  const beneficiaryDigits = beneficiaryName.match(/B-(\d{5})/)[1];
-  const first3Digits = beneficiaryDigits.slice(0, 3);
+  let refId = `PAYOUT${randomNumber}`;
   
-  let refId = `A${year}${month}${day}${hours}${minutes}${seconds}${millisecondsFirstDigit}${first3Digits}`;
-  
-  // Check for collision (should be extremely rare with delays in place)
-  // If collision detected, add a small random suffix (using last digit of milliseconds)
-  if (usedReferenceIds.has(refId)) {
-    const millisecondsLastDigit = milliseconds[2]; // Use last digit of milliseconds as fallback
-    refId = `A${year}${month}${day}${hours}${minutes}${seconds}${millisecondsLastDigit}${first3Digits}`;
+  // Check for collision (should be extremely rare)
+  // If collision detected, generate a new random number
+  let attempts = 0;
+  while (usedReferenceIds.has(refId) && attempts < 10) {
+    const newRandomNumber = Math.floor(Math.random() * 1000000000)
+      .toString()
+      .padStart(9, '0');
+    refId = `PAYOUT${newRandomNumber}`;
+    attempts++;
   }
   
   // Add to used set
@@ -201,8 +195,8 @@ const processAllPayouts = async () => {
     // Generate beneficiary name in format: B-{5digits}{3letters}
     const beneficiaryName = generateBeneficiaryName();
     
-    // Generate reference ID in format: A{YYYYMMDDHHMMSS}{milliseconds_first_digit}{first3digits}
-    const refId = generateReferenceId(beneficiaryName);
+    // Generate reference ID in format: PAYOUT{random_numbers}
+    const refId = generateReferenceId();
     
     // Use the single account
     const account = ACCOUNT;
