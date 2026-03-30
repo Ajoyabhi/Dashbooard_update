@@ -7,6 +7,7 @@ const { TransactionCharges, FinancialDetails, MerchantDetails, MerchantCharges, 
 const mongoose = require('mongoose');
 const config = require('../config/index');
 const axios = require('axios');
+const { redis } = require('../middleware/cache.middleware');
 
 // Configure queue with retry and timeout settings
 callbackQueue.setMaxListeners(0); // Prevent memory leaks
@@ -66,29 +67,23 @@ callbackQueue.process(CALLBACK_CONCURRENCY, async function (job) {
     const mappedStatus = (statuscode === 'TXN' || statuscode === 'SUCCESS') ? 'completed' : 'failed';
 
 
-    // Find transactions once - use Promise.all for parallel execution
+    // Find transactions once
     logger.info('Starting database lookups', { jobId: job.id, apitxnid });
-    const [payinTransaction, userTransaction] = await Promise.all([
-      PayinTransaction.findOne({ reference_id: apitxnid }),
-      UserTransaction.findOne({ reference_id: apitxnid })
-    ]);
+    const payinTransaction = await PayinTransaction.findOne({ reference_id: apitxnid });
     logger.info('Database lookups completed', { jobId: job.id, apitxnid });
 
     logger.info('Transaction lookup results', {
       jobId: job.id,
       apitxnid,
       payinTransactionFound: !!payinTransaction,
-      userTransactionFound: !!userTransaction,
-      payinTransactionId: payinTransaction?._id,
-      userTransactionId: userTransaction?._id
+      payinTransactionId: payinTransaction?._id
     });
 
-    if (!payinTransaction || !userTransaction) {
+    if (!payinTransaction) {
       logger.error('Transaction records not found', {
         jobId: job.id,
         apitxnid,
         payinTransactionFound: !!payinTransaction,
-        userTransactionFound: !!userTransaction,
         jobData: job.data
       });
       throw new Error('Transaction records not found');
@@ -108,24 +103,10 @@ callbackQueue.process(CALLBACK_CONCURRENCY, async function (job) {
     // Handle completed transaction
     if (mappedStatus === 'completed') {
       // Ensure all values are numbers with defaults
-      const beforeBalance = parseFloat(userTransaction.balance?.before || 0);
       const transactionAmount = parseFloat(amount || 0);
       const adminCharge = parseFloat(payinTransaction.charges?.admin_charge || 0);
       const platformFee = parseFloat(payinTransaction.platform_fee || 0);
       const gstAmount = parseFloat(payinTransaction.gst_amount || 0);
-
-      // Calculate new balance
-      const newBalance = beforeBalance + transactionAmount - adminCharge - platformFee - gstAmount;
-
-      // Update user transaction balance
-      await UserTransaction.updateOne(
-        { reference_id: apitxnid },
-        {
-          $set: {
-            'balance.after': newBalance
-          }
-        }
-      );
 
       // Update financial details
       const financialDetails = await FinancialDetails.findOne({
@@ -163,10 +144,6 @@ callbackQueue.process(CALLBACK_CONCURRENCY, async function (job) {
       await session.withTransaction(async () => {
         await Promise.all([
           PayinTransaction.updateOne(
-            { reference_id: apitxnid },
-            { $set: updateData }
-          ),
-          UserTransaction.updateOne(
             { reference_id: apitxnid },
             { $set: updateData }
           ),
@@ -418,13 +395,10 @@ bipspayCallbackQueue.process(BIPSPAY_CALLBACK_CONCURRENCY, async function (job) 
     // Update log context with reference_id
     logContext.reference_id = apitxnid;
 
-    // Find transactions in parallel
-    const [payinTransaction, userTransaction] = await Promise.all([
-      PayinTransaction.findOne({ reference_id: apitxnid }),
-      UserTransaction.findOne({ reference_id: apitxnid })
-    ]);
+    // Find transaction
+    const payinTransaction = await PayinTransaction.findOne({ reference_id: apitxnid });
 
-    if (!payinTransaction || !userTransaction) {
+    if (!payinTransaction) {
       logger.error('BipsPay: Transaction records not found', logContext);
       throw new Error('Transaction records not found');
     }
@@ -451,14 +425,27 @@ bipspayCallbackQueue.process(BIPSPAY_CALLBACK_CONCURRENCY, async function (job) 
 
       const userId = payinTransaction.user.user_id;
 
-      // Parallelize charge brackets and platform charges lookup
-      const [chargeBrackets, platformCharges] = await Promise.all([
+      // Optimize PlatformCharges with Redis caching (5 min TTL)
+      let platformCharges = null;
+      try {
+        const cachedPlatformCharges = await redis.get('platform_charges:active');
+        if (cachedPlatformCharges) {
+          platformCharges = JSON.parse(cachedPlatformCharges);
+        } else {
+          platformCharges = await PlatformCharges.findOne({ where: { is_active: true } });
+          if (platformCharges) {
+            await redis.setex('platform_charges:active', 300, JSON.stringify(platformCharges));
+          }
+        }
+      } catch (err) {
+        logger.error('Redis cache error for platform charges in worker', { error: err.message });
+        platformCharges = await PlatformCharges.findOne({ where: { is_active: true } });
+      }
+
+      const [chargeBrackets] = await Promise.all([
         MerchantCharges.findAll({
           where: { user_id: userId },
           order: [['start_amount', 'ASC']]
-        }),
-        PlatformCharges.findOne({
-          where: { is_active: true }
         })
       ]);
 
@@ -526,21 +513,6 @@ bipspayCallbackQueue.process(BIPSPAY_CALLBACK_CONCURRENCY, async function (job) 
                     }
                   }
                 ),
-                UserTransaction.updateOne(
-                  { reference_id: apitxnid },
-                  {
-                    $set: {
-                      amount: callbackAmount,
-                      charges: {
-                        admin_charge: newAdminCharge,
-                        agent_charge: newAgentCharge,
-                        total_charges: newTotalCharges
-                      },
-                      gst_amount: parseFloat(newGstAmount),
-                      platform_fee: parseFloat(newPlatformFee)
-                    }
-                  }
-                ),
                 TransactionCharges.update(
                   {
                     transaction_amount: callbackAmount,
@@ -572,10 +544,6 @@ bipspayCallbackQueue.process(BIPSPAY_CALLBACK_CONCURRENCY, async function (job) 
             await session.withTransaction(async () => {
               await Promise.all([
                 PayinTransaction.updateOne(
-                  { reference_id: apitxnid },
-                  { $set: { amount: callbackAmount } }
-                ),
-                UserTransaction.updateOne(
                   { reference_id: apitxnid },
                   { $set: { amount: callbackAmount } }
                 ),
@@ -620,27 +588,16 @@ bipspayCallbackQueue.process(BIPSPAY_CALLBACK_CONCURRENCY, async function (job) 
     // Handle completed transaction - parallelize financial operations
     if (mappedStatus === 'completed') {
       // Ensure all values are numbers with defaults
-      const beforeBalance = parseFloat(userTransaction.balance?.before || 0);
       const transactionAmount = parseFloat(amount || 0);
       const adminCharge = parseFloat(payinTransaction.charges?.admin_charge || 0);
       const platformFee = parseFloat(payinTransaction.platform_fee || 0);
       const gstAmount = parseFloat(payinTransaction.gst_amount || 0);
 
-      // Calculate new balance
-      const newBalance = beforeBalance + transactionAmount - adminCharge - platformFee - gstAmount;
       const amountToAdd = transactionAmount - adminCharge - platformFee - gstAmount;
 
       // Parallelize financial updates
       const [financialDetails] = await Promise.all([
-        FinancialDetails.findOne({ where: { user_id: userId } }),
-        UserTransaction.updateOne(
-          { reference_id: apitxnid },
-          {
-            $set: {
-              'balance.after': newBalance
-            }
-          }
-        )
+        FinancialDetails.findOne({ where: { user_id: userId } })
       ]);
 
       // Update or create financial details
@@ -665,11 +622,6 @@ bipspayCallbackQueue.process(BIPSPAY_CALLBACK_CONCURRENCY, async function (job) 
       await session.withTransaction(async () => {
         await Promise.all([
           PayinTransaction.updateOne(
-            { reference_id: apitxnid },
-            { $set: updateData },
-            { session }
-          ),
-          UserTransaction.updateOne(
             { reference_id: apitxnid },
             { $set: updateData },
             { session }
@@ -779,13 +731,10 @@ bipspayPayoutCallbackQueue.process(BIPSPAY_PAYOUT_CALLBACK_CONCURRENCY, async fu
       throw new Error('Missing reference_id in callback data');
     }
 
-    // Parallelize initial lookups
-    const [payoutTransaction, userTransaction] = await Promise.all([
-      PayoutTransaction.findOne({ reference_id: referenceId }),
-      UserTransaction.findOne({ reference_id: referenceId })
-    ]);
+    // Find transaction
+    const payoutTransaction = await PayoutTransaction.findOne({ reference_id: referenceId });
 
-    if (!payoutTransaction || !userTransaction) {
+    if (!payoutTransaction) {
       logger.error('BipsPay payout: Transaction records not found', logContext);
       throw new Error('Transaction records not found');
     }
@@ -806,11 +755,6 @@ bipspayPayoutCallbackQueue.process(BIPSPAY_PAYOUT_CALLBACK_CONCURRENCY, async fu
       await session.withTransaction(async () => {
         await Promise.all([
           PayoutTransaction.updateOne(
-            { reference_id: referenceId },
-            { $set: updateData },
-            { session }
-          ),
-          UserTransaction.updateOne(
             { reference_id: referenceId },
             { $set: updateData },
             { session }
@@ -966,22 +910,6 @@ philpayPayoutQueue.process(PHILPAY_PAYOUT_CONCURRENCY, async function (job) {
         }
       );
       logger.info('Transaction charges stored', { reference: job.data.data.object.merchant_order_id });
-      // Update user transaction
-      await UserTransaction.updateOne(
-        { reference_id: job.data.data.object.merchant_order_id },
-        {
-          $set: {
-            status: 'success',
-            gateway_response: {
-              merchant_response: job.data.data.object.merchant_order_id,
-              status: 'success',
-              message: job.data.data.object.message || 'Transaction processed',
-              utr: job.data.data.object.bank_reference_id || null
-            }
-          }
-        }
-      );
-      logger.info('User transaction updated', { reference: job.data.data.object.merchant_order_id });
       // Update payout transaction
       await PayoutTransaction.updateOne(
         { reference_id: job.data.data.object.merchant_order_id },
@@ -1018,22 +946,6 @@ philpayPayoutQueue.process(PHILPAY_PAYOUT_CONCURRENCY, async function (job) {
         }
       );
       logger.info('Transaction charges stored', { reference: job.data.data.object.merchant_order_id });
-      // Update user transaction
-      await UserTransaction.updateOne(
-        { reference_id: job.data.data.object.merchant_order_id },
-        {
-          $set: {
-            status: 'failed',
-            gateway_response: {
-              merchant_response: job.data.data.object.merchant_order_id,
-              status: 'failed',
-              message: job.data.data.object.message || 'Transaction failed',
-              utr: job.data.data.object.bank_reference_id || null
-            }
-          }
-        }
-      );
-      logger.info('User transaction updated', { reference: job.data.data.object.merchant_order_id });
       // Update payout transaction
       await PayoutTransaction.updateOne(
         { reference_id: job.data.data.object.merchant_order_id },
@@ -1053,9 +965,8 @@ philpayPayoutQueue.process(PHILPAY_PAYOUT_CONCURRENCY, async function (job) {
     }
 
     const payinTransaction = await PayoutTransaction.findOne({ reference_id: job.data.data.object.merchant_order_id });
-    const userTransaction = await UserTransaction.findOne({ reference_id: job.data.data.object.merchant_order_id });
 
-    if (!payinTransaction || !userTransaction) {
+    if (!payinTransaction) {
       throw new Error('Transaction records not found');
     }
 

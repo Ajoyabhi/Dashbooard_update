@@ -1277,7 +1277,7 @@ const getAdminDashboard = async (req, res) => {
 
         const last7DaysData = await Promise.all(last7DaysDataPromises);
 
-
+        console.log("i reached here")
         const dashboardData = {
             totalUsers: totalUsers || 0,
             totalBalance: totalBalance || 0,

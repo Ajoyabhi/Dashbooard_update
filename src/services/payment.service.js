@@ -1,7 +1,7 @@
 const { logger } = require('../utils/logger');
 const { User, UserStatus, MerchantDetails, MerchantCharges, MerchantModeCharges, FinancialDetails, UserIPs, TransactionCharges, PlatformCharges } = require('../models');
 const PayinTransaction = require('../models/payinTransaction.model');
-const UserTransaction = require('../models/userTransaction.model');
+const { redis } = require('../middleware/cache.middleware');
 const mongoose = require('mongoose');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
 const axios = require('axios');
@@ -124,19 +124,32 @@ const processPayin = async (data) => {
       throw new Error('Technical issue please try again later');
     }
 
-    // Parallelize independent database queries
-    const [existingTransaction, chargeBrackets, platformCharges] = await Promise.all([
+    // Optimized MerchantCharges from already fetched association
+    const chargeBrackets = user.MerchantCharges ? user.MerchantCharges.sort((a, b) => parseFloat(a.start_amount) - parseFloat(b.start_amount)) : [];
+
+    // Optimize PlatformCharges with Redis caching (5 min TTL)
+    let platformCharges = null;
+    try {
+      const cachedPlatformCharges = await redis.get('platform_charges:active');
+      if (cachedPlatformCharges) {
+        platformCharges = JSON.parse(cachedPlatformCharges);
+      } else {
+        platformCharges = await PlatformCharges.findOne({ where: { is_active: true } });
+        if (platformCharges) {
+          await redis.setex('platform_charges:active', 300, JSON.stringify(platformCharges));
+        }
+      }
+    } catch (err) {
+      logger.error('Redis cache error for platform charges', { error: err.message });
+      platformCharges = await PlatformCharges.findOne({ where: { is_active: true } });
+    }
+
+    // Parallelize remaining database queries
+    const [existingTransaction] = await Promise.all([
       PayinTransaction.findOne(
         { reference_id },
         { _id: 1, status: 1 }
-      ).lean(),
-      MerchantCharges.findAll({
-        where: { user_id },
-        order: [['start_amount', 'ASC']]
-      }),
-      PlatformCharges.findOne({
-        where: { is_active: true }
-      })
+      ).lean()
     ]);
 
     if (existingTransaction) {
@@ -201,50 +214,7 @@ const processPayin = async (data) => {
     }
 
 
-    // Create user transaction
-    const userTransaction = new UserTransaction({
-      user: {
-        id: new mongoose.Types.ObjectId(user_id),
-        user_id: user_id,
-      },
-      beneficiary_details: {
-        name: name || '',
-        email: email || '',
-        mobile: phone || ''
-      },
-      transaction_id: data.transaction_id,
-      amount: order_amount,
-      transaction_type: 'payin',
-      reference_id: reference_id,
-      status: 'pending',
-      charges: {
-        admin_charge: adminCharge,
-        agent_charge: agentCharge,
-        total_charges: totalCharges
-      },
-      gst_amount: parseFloat(gstAmount),
-      platform_fee: parseFloat(platformFee),
-      gateway_response: {
-        utr: null,
-        status: 'pending',
-        message: 'Payin request initiated',
-        merchant_response: null
-      },
-      balance: {
-        before: user.FinancialDetail.wallet,
-        after: user.FinancialDetail.wallet
-      },
-      merchant_details: {
-        merchant_name: user.MerchantDetail.payin_merchant_name,
-        merchant_callback_url: user.MerchantDetail.payin_callback
-      },
-      remark: 'Payin request initiated',
-      metadata: {
-        requested_ip: clientIp
-      },
-      created_by: new mongoose.Types.ObjectId(user_id),
-      created_by_model: user.user_type
-    });
+
 
     // Create payin transaction
     const payinTransaction = new PayinTransaction({
@@ -288,7 +258,6 @@ const processPayin = async (data) => {
 
     // Parallelize transaction creation
     await Promise.all([
-      userTransaction.save(),
       payinTransaction.save(),
       TransactionCharges.create({
         transaction_type: 'payin',
@@ -351,20 +320,6 @@ const processPayin = async (data) => {
             }
           }
         ),
-        UserTransaction.updateOne(
-          { reference_id },
-          {
-            $set: {
-              status: 'payin_qr_generated',
-              gateway_response: {
-                utr: null,
-                status: 'payin_qr_generated',
-                message: 'Payin qr string generated',
-                merchant_response: result.data.apitxnid
-              }
-            }
-          }
-        ),
         TransactionCharges.update(
           {
             transaction_utr: result.data.apitxnid,
@@ -386,10 +341,6 @@ const processPayin = async (data) => {
       // Parallelize failed status updates
       await Promise.all([
         PayinTransaction.updateOne(
-          { reference_id },
-          { $set: { status: 'failed' } }
-        ),
-        UserTransaction.updateOne(
           { reference_id },
           { $set: { status: 'failed' } }
         ),
