@@ -128,10 +128,20 @@ stop_all() {
     pm2 delete all || true
 }
 
-# Function to restart all processes
+# Function to restart only this app's processes
 restart_all() {
-    echo "Restarting all processes..."
-    pm2 restart all
+    echo "Restarting app processes..."
+    for proc in payment-gateway-api payment-gateway-callback-worker payment-gateway-frontend; do
+        if pm2 show "$proc" &>/dev/null; then
+            pm2 restart "$proc"
+        else
+            echo "$proc not running, skipping"
+        fi
+    done
+    # Also restart any active v2 deploy instances
+    pm2 jlist 2>/dev/null | grep -o '"name":"payment-gateway-v2[^"]*"' | sed 's/"name":"//;s/"//' | while read -r name; do
+        pm2 restart "$name"
+    done
 }
 
 # Function to show status
