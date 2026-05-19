@@ -1,132 +1,57 @@
 const { logger } = require('../utils/logger');
 const { User, UserStatus, MerchantDetails, MerchantCharges, MerchantModeCharges, FinancialDetails, UserIPs, TransactionCharges, PlatformCharges } = require('../models');
 const PayinTransaction = require('../models/payinTransaction.model');
-const UserTransaction = require('../models/userTransaction.model');
+const HdfcCustomer = require('../models/HdfcCustomer.model');
 const mongoose = require('mongoose');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
+const { createId } = require('@paralleldrive/cuid2');
 const axios = require('axios');
 const os = require('os');
 const dns = require('dns');
 const http = require('http');
 const https = require('https');
 
-/**
- * Get the server's IP address
- * @returns {string} The server's IP address
- */
 const getServerIp = () => {
   const interfaces = os.networkInterfaces();
   for (const interfaceName in interfaces) {
-    const addresses = interfaces[interfaceName];
-    for (const address of addresses) {
-      // Skip internal (loopback) and non-IPv4 addresses
-      if (!address.internal && address.family === 'IPv4') {
-        return address.address;
-      }
+    for (const address of interfaces[interfaceName]) {
+      if (!address.internal && address.family === 'IPv4') return address.address;
     }
   }
-  // Fallback to localhost if no external IP found
   return '127.0.0.1';
 };
 
-/**
- * Create HTTP/HTTPS agents that force IPv4
- * @returns {Object} Object containing httpAgent and httpsAgent
- */
 const createIPv4Agents = () => {
-  // Custom lookup function that forces IPv4
-  const lookup = (hostname, options, callback) => {
-    dns.lookup(hostname, { family: 4, ...options }, callback);
-  };
-
+  const lookup = (hostname, options, callback) => dns.lookup(hostname, { family: 4, ...options }, callback);
   return {
-    httpAgent: new http.Agent({
-      family: 4,
-      lookup: lookup
-    }),
-    httpsAgent: new https.Agent({
-      family: 4,
-      lookup: lookup
-    })
+    httpAgent: new http.Agent({ family: 4, lookup }),
+    httpsAgent: new https.Agent({ family: 4, lookup })
   };
 };
 
-/**
- * Process a payin request
- * @param {Object} data - Payin request data
- * @returns {Promise<Object>} - Processing result
- */
 const processPayin = async (data) => {
   try {
-    logger.info('Starting to process payin request', {
-      transaction_id: data.transaction_id,
-      data
-    });
+    logger.info('Starting to process payin request', { transaction_id: data.transaction_id });
 
-    const {
-      user_id,
-      order_amount,
-      name,
-      email,
-      phone,
-      reference_id,
-      clientIp
-    } = data;
+    const { user_id, order_amount, name, email, phone, reference_id, clientIp } = data;
 
-    // Fetch user and all related data
-    const user = await User.findByPk(user_id, {
-      include: [
-        { model: UserStatus },
-        { model: MerchantDetails },
-        { model: MerchantCharges },
-        { model: MerchantModeCharges },
-        { model: FinancialDetails },
-        { model: UserIPs }
-      ]
-    });
+    // Fetch user, platform charges, and duplicate check all in parallel
+    const [user, platformCharges, existingTransaction] = await Promise.all([
+      User.findByPk(user_id, {
+        include: [
+          { model: UserStatus },
+          { model: MerchantDetails },
+          { model: MerchantCharges },
+          { model: MerchantModeCharges },
+          { model: FinancialDetails },
+          { model: UserIPs }
+        ]
+      }),
+      PlatformCharges.findOne({ where: { is_active: true } }),
+      PayinTransaction.findOne({ reference_id }, { _id: 1, status: 1 }).lean()
+    ]);
 
-    if (!user) {
-      throw new Error('User not found');
-    }
-
-    // Validate IP whitelist
-    const isIpWhitelisted = user.UserIPs.some(ip => ip.ip_address === clientIp && ip.is_active);
-    if (!isIpWhitelisted) {
-      throw new Error(`User IP address ${clientIp} is not whitelisted`);
-    }
-
-    // Validate amount
-    if (order_amount < 100) {
-      throw new Error('Minimum payin amount is 100');
-    }
-
-    // Validate reference ID
-    if (reference_id.length < 12 || reference_id.length > 25) {
-      throw new Error('Reference number must be between 12 and 25 digits');
-    }
-
-    // Validate user status
-    if (user.UserStatus.status === 0) {
-      throw new Error('User is not active');
-    }
-
-    if (!user.UserStatus.payin_status) {
-      throw new Error('User payin functionality is disabled');
-    }
-
-    if (user.UserStatus.bank_deactive) {
-      throw new Error('Bank is deactivated your ip due to security reasons');
-    }
-
-    if (user.UserStatus.tecnical_issue) {
-      throw new Error('Technical issue please try again later');
-    }
-
-    // Check for duplicate transaction
-    const existingTransaction = await PayinTransaction.findOne(
-      { reference_id },
-      { _id: 1, status: 1 }
-    ).lean();
+    if (!user) throw new Error('User not found');
 
     if (existingTransaction) {
       return {
@@ -135,326 +60,159 @@ const processPayin = async (data) => {
       };
     }
 
-    // Find charge brackets
-    const chargeBrackets = await MerchantCharges.findAll({
-      where: { user_id },
-      order: [['start_amount', 'ASC']]
-    });
+    // Validations
+    const isIpWhitelisted = user.UserIPs.some(ip => ip.ip_address === clientIp && ip.is_active);
+    if (!isIpWhitelisted) throw new Error(`User IP address ${clientIp} is not whitelisted`);
 
-    if (!chargeBrackets || chargeBrackets.length === 0) {
-      throw new Error('No charge brackets found for the user');
-    }
+    if (order_amount < 100) throw new Error('Minimum payin amount is 100');
+    if (reference_id.length < 12 || reference_id.length > 25) throw new Error('Reference number must be between 12 and 25 digits');
 
-    // Find applicable charge bracket
-    const applicableBracket = chargeBrackets.find(bracket => {
-      const startAmount = parseFloat(bracket.start_amount);
-      const endAmount = parseFloat(bracket.end_amount);
-      return order_amount >= startAmount && order_amount <= endAmount;
-    });
+    const userStatus = user.UserStatus;
+    if (userStatus.status === 0) throw new Error('User is not active');
+    if (!userStatus.payin_status) throw new Error('User payin functionality is disabled');
+    if (userStatus.bank_deactive) throw new Error('Bank is deactivated your ip due to security reasons');
+    if (userStatus.tecnical_issue) throw new Error('Technical issue please try again later');
 
-    if (!applicableBracket) {
-      throw new Error('No charge bracket found for the given amount');
-    }
+    // Use already-fetched MerchantCharges from user includes — no extra DB call
+    const chargeBrackets = (user.MerchantCharges || []).slice().sort((a, b) => a.start_amount - b.start_amount);
+    if (!chargeBrackets.length) throw new Error('No charge brackets found for the user');
+
+    const applicableBracket = chargeBrackets.find(b =>
+      order_amount >= parseFloat(b.start_amount) && order_amount <= parseFloat(b.end_amount)
+    );
+    if (!applicableBracket) throw new Error('No charge bracket found for the given amount');
 
     // Calculate charges
-    let adminCharge = 0;
-    let agentCharge = 0;
-    let gstAmount = 0;
-    let platformFee = 0;
+    const adminCharge = applicableBracket.admin_payin_charge_type === 'percentage'
+      ? (order_amount * parseFloat(applicableBracket.admin_payin_charge)) / 100
+      : parseFloat(applicableBracket.admin_payin_charge);
 
-    if (applicableBracket.admin_payin_charge_type === 'percentage') {
-      adminCharge = (order_amount * parseFloat(applicableBracket.admin_payin_charge)) / 100;
-    } else {
-      adminCharge = parseFloat(applicableBracket.admin_payin_charge);
-    }
-
-    if (applicableBracket.agent_payin_charge_type === 'percentage') {
-      agentCharge = (order_amount * parseFloat(applicableBracket.agent_payin_charge)) / 100;
-    } else {
-      agentCharge = parseFloat(applicableBracket.agent_payin_charge);
-    }
+    const agentCharge = applicableBracket.agent_payin_charge_type === 'percentage'
+      ? (order_amount * parseFloat(applicableBracket.agent_payin_charge)) / 100
+      : parseFloat(applicableBracket.agent_payin_charge);
 
     const totalCharges = parseFloat(adminCharge);
+    const platformFee = platformCharges?.charge ? (totalCharges * parseFloat(platformCharges.charge)) / 100 : 0;
+    const gstAmount = platformCharges?.gst ? (totalCharges * parseFloat(platformCharges.gst)) / 100 : 0;
 
-    // Fetch platform charges from database
-    const platformCharges = await PlatformCharges.findOne({
-      where: { is_active: true }
-    });
-
-    if (platformCharges?.charge) {
-      platformFee = (totalCharges * parseFloat(platformCharges.charge)) / 100;
-    }
-
-    if (platformCharges?.gst) {
-      gstAmount = (totalCharges * parseFloat(platformCharges.gst)) / 100;
-    }
-
-    // Initialize wallet if it's null
+    // Initialize wallet if needed
     if (!user.FinancialDetail || user.FinancialDetail.wallet === null) {
-      await FinancialDetails.create({
-        user_id: user_id,
-        wallet: 0,
-        settlement: 0,
-        lien: 0,
-        rolling_reserve: 0
-      });
+      await FinancialDetails.create({ user_id, wallet: 0, settlement: 0, lien: 0, rolling_reserve: 0 });
     }
 
-
-    // Create user transaction
-    const userTransaction = await UserTransaction.create({
-      user: {
-        id: new mongoose.Types.ObjectId(user_id),
-        user_id: user_id,
-      },
-      beneficiary_details: {
-        name: name || '',
-        email: email || '',
-        mobile: phone || ''
-      },
-      transaction_id: data.transaction_id,
-      amount: order_amount,
-      transaction_type: 'payin',
-      reference_id: reference_id,
-      status: 'pending',
-      charges: {
-        admin_charge: adminCharge,
-        agent_charge: agentCharge,
-        total_charges: totalCharges
-      },
-      gst_amount: parseFloat(gstAmount),
-      platform_fee: parseFloat(platformFee),
-      gateway_response: {
-        utr: null,
+    // Create PayinTransaction and TransactionCharges in parallel
+    await Promise.all([
+      PayinTransaction.create({
+        transaction_id: data.transaction_id,
+        user: {
+          id: new mongoose.Types.ObjectId(user_id),
+          user_id: user_id.toString(),
+          name: user.name || '',
+          email: user.email || '',
+          mobile: user.mobile || '',
+          userType: user.user_type || ''
+        },
+        amount: order_amount,
+        gst_amount: parseFloat(gstAmount),
+        platform_fee: parseFloat(platformFee),
+        charges: { admin_charge: adminCharge, agent_charge: agentCharge, total_charges: totalCharges },
+        beneficiary_details: {
+          beneficiary_name: name || '',
+          beneficiary_email: email || '',
+          beneficiary_phone: phone || ''
+        },
+        reference_id,
         status: 'pending',
-        message: 'Payin request initiated',
-        merchant_response: null
-      },
-      balance: {
-        before: user.FinancialDetail.wallet,
-        after: user.FinancialDetail.wallet
-      },
-      merchant_details: {
-        merchant_name: user.MerchantDetail.payin_merchant_name,
-        merchant_callback_url: user.MerchantDetail.payin_callback
-      },
-      remark: 'Payin request initiated',
-      metadata: {
-        requested_ip: clientIp
-      },
-      created_by: new mongoose.Types.ObjectId(user_id),
-      created_by_model: user.user_type
-    });
-    await userTransaction.save();
-
-    // Create payin transaction
-    const payinTransaction = await PayinTransaction.create({
-      transaction_id: data.transaction_id,
-      user: {
-        id: new mongoose.Types.ObjectId(user_id),
-        user_id: user_id.toString(),
-        name: user.name || '',
-        email: user.email || '',
-        mobile: user.mobile || '',
-        userType: user.user_type || ''
-      },
-      amount: order_amount,
-      gst_amount: parseFloat(gstAmount),
-      platform_fee: parseFloat(platformFee),
-      charges: {
-        admin_charge: adminCharge,
-        agent_charge: agentCharge,
-        total_charges: totalCharges
-      },
-      beneficiary_details: {
-        beneficiary_name: name || '',
-        beneficiary_email: email || '',
-        beneficiary_phone: phone || ''
-      },
-      reference_id: reference_id,
-      status: 'pending',
-      gateway_response: {
-        utr: null,
+        gateway_response: { utr: null, status: 'pending', message: 'Payin request initiated', merchant_response: null },
+        metadata: { requested_ip: clientIp },
+        remark: 'Payin request initiated',
+        created_by: new mongoose.Types.ObjectId(user_id),
+        created_by_model: user.user_type || 'User'
+      }),
+      TransactionCharges.create({
+        transaction_type: 'payin',
+        reference_id,
+        transaction_amount: parseFloat(order_amount),
+        transaction_utr: null,
+        merchant_charge: parseFloat(adminCharge),
+        agent_charge: parseFloat(agentCharge),
+        total_charges: parseFloat(totalCharges),
+        gst_amount: parseFloat(gstAmount),
+        platform_fee: parseFloat(platformFee),
+        user_id: parseInt(user_id),
         status: 'pending',
-        message: 'Payin request initiated',
-        merchant_response: null
-      },
-      metadata: {
-        requested_ip: clientIp
-      },
-      remark: 'Payin request initiated',
-      created_by: new mongoose.Types.ObjectId(user_id),
-      created_by_model: user.user_type || 'User'
-    });
-    await payinTransaction.save();
-    await TransactionCharges.create({
-      transaction_type: 'payin',
-      reference_id: reference_id,
-      transaction_amount: parseFloat(order_amount),
-      transaction_utr: null,
-      merchant_charge: parseFloat(adminCharge),
-      agent_charge: parseFloat(agentCharge),
-      total_charges: parseFloat(totalCharges),
-      gst_amount: parseFloat(gstAmount),
-      platform_fee: parseFloat(platformFee),
-      user_id: parseInt(user_id),
-      status: 'pending',
-      metadata: {
-        merchant_response: null,
-        requested_ip: clientIp
-      }
-    });
-    logger.debug('DEBUG: Starting payment processing', {
-      reference_id,
-      timestamp: new Date().toISOString()
-    });
+        metadata: { merchant_response: null, requested_ip: clientIp }
+      })
+    ]);
 
-    const payinData = {
-      user_id,
-      order_amount,
-      name,
-      email,
-      phone,
-      reference_id,
-      clientIp
-    };
+    const payinData = { user_id, order_amount, name, email, phone, reference_id, clientIp, address: data.address || {} };
+    const merchantName = user.MerchantDetail.payin_merchant_name;
 
     let result;
-    const serverIp = getServerIp();
-    console.log("this is my ip address", serverIp);
-    if (user.MerchantDetail.payin_merchant_name == "Unpay") {
-      result = await unpayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee);
-    } else if (user.MerchantDetail.payin_merchant_name == "Spay") {
+    if (merchantName === 'Unpay') {
+      result = await unpayPayin(payinData);
+    } else if (merchantName === 'Spay') {
       result = await spayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee);
-    } else if (user.MerchantDetail.payin_merchant_name == "SpayIcici") {
-      result = await spayPayinIcici(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee);
-    }
-    else {
+    } else if (merchantName === 'SpayIcici') {
+      result = await spayPayinIcici(payinData);
+    } else if (merchantName === 'HDFC') {
+      result = await hdfcPayin(payinData);
+    } else {
       throw new Error('Invalid merchant name');
     }
-    console.log("result", result);
-    logger.debug('DEBUG: Payment processing completed', {
-      reference_id,
-      success: result?.success,
-      timestamp: new Date().toISOString()
-    });
 
-    console.log("this is the returned result", result)
-    logger.debug('DEBUG: Payment processing completed', {
-      reference_id,
-      success: result?.success,
-      timestamp: new Date().toISOString()
-    });
+    logger.info('Payment gateway response', { reference_id, statuscode: result?.statuscode });
 
-    // Update transaction status
-    if (result?.statuscode == "TXN" || result?.data?.statuscode == "TXNS") {
-      logger.debug('DEBUG: Updating transaction status to completed', {
-        reference_id,
-        timestamp: new Date().toISOString()
-      });
-
-      await PayinTransaction.updateOne(
-        { reference_id },
-        {
-          $set: {
-            status: 'payin_qr_generated',
-            gateway_response: {
-              utr: null,
+    if (result?.statuscode === 'TXN' || result?.data?.statuscode === 'TXNS') {
+      await Promise.all([
+        PayinTransaction.updateOne(
+          { reference_id },
+          {
+            $set: {
               status: 'payin_qr_generated',
-              message: 'Payin qr string generated',
-              merchant_response: result.data.apitxnid
+              gateway_response: {
+                utr: null,
+                status: 'payin_qr_generated',
+                message: 'Payin qr string generated',
+                merchant_response: result.data.apitxnid
+              }
             }
           }
-        }
-      );
-      await UserTransaction.updateOne(
-        { reference_id },
-        {
-          $set: {
-            status: 'payin_qr_generated',
-            gateway_response: {
-              utr: null,
-              status: 'payin_qr_generated',
-              message: 'Payin qr string generated',
-              merchant_response: result.data.apitxnid
-            }
-          }
-        }
-      );
-      await TransactionCharges.update(
-        {
-          transaction_utr: result.data.apitxnid,
-          status: 'pending'
-        },
-        {
-          where: {
-            reference_id: reference_id
-          }
-        }
-      );
+        ),
+        TransactionCharges.update(
+          { transaction_utr: result.data.apitxnid, status: 'pending' },
+          { where: { reference_id } }
+        )
+      ]);
       return {
         success: true,
         reference_id: result.data.apitxnid,
         payment_url: encodeURI(result.data.qrString)
       };
     } else {
-      await PayinTransaction.updateOne(
-        { reference_id },
-        { $set: { status: 'failed' } }
-      );
-      await UserTransaction.updateOne(
-        { reference_id },
-        { $set: { status: 'failed' } }
-      );
-      await TransactionCharges.update(
-        {
-          status: 'failed'
-        },
-        {
-          where: {
-            reference_id: reference_id
-          }
-        }
-      );
-      logger.error('DEBUG: Payin request failed', {
-        reference_id,
-        status: 'failed',
-        message: result.message,
-        timestamp: new Date().toISOString()
-      });
-      return {
-        success: false,
-        message: 'Payin request failed'
-      };
+      await Promise.all([
+        PayinTransaction.updateOne({ reference_id }, { $set: { status: 'failed' } }),
+        TransactionCharges.update({ status: 'failed' }, { where: { reference_id } })
+      ]);
+      logger.error('Payin request failed', { reference_id, message: result?.message });
+      return { success: false, message: 'Payin request failed' };
     }
   } catch (error) {
-    logger.error('Error processing payin request', {
-      error: error.message,
-      stack: error.stack
-    });
-    return {
-      success: false,
-      message: error.message
-    };
+    logger.error('Error processing payin request', { error: error.message, stack: error.stack });
+    return { success: false, message: error.message };
   }
 };
 
-const unpayPayin = async (payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp) => {
+const unpayPayin = async (payinData) => {
   try {
     const { order_amount, reference_id } = payinData;
 
-    // Get merchant details from database
-    const merchantDetails = await MerchantDetails.findOne({ where: { user_id } });
-    if (!merchantDetails) {
-      throw new Error('Merchant details not found');
-    }
     const aesKey = "XRUhoLqUBgmZFLdWT5PiuNQnGhI9l6Pc";
     const aesIV = "oR21lVkifQEBNRQS";
     const apiKey = "QPf0uqDt0EjQqkseizXyr1Ydn21HF9cOiQEFtjrV";
     const partnerId = "4071";
     const webhookUrl = "https://dashboard.accuzpay.in/api/payments/unpay/callback";
-    console.log("webhookUrl", webhookUrl);
-    // Prepare request body
+
     const requestBody = {
       partner_id: partnerId,
       amount: parseInt(order_amount),
@@ -463,105 +221,58 @@ const unpayPayin = async (payinData, adminCharge, agentCharge, totalCharges, use
     };
 
     const encryptedRequestBody = await encryptText(JSON.stringify(requestBody), aesKey, aesIV);
-
-    // Create IPv4 agents to force IPv4 connection
     const { httpAgent, httpsAgent } = createIPv4Agents();
 
-    // Make API request to Unpay using axios with IPv4 agents
     const response = await axios.post(
       'https://unpay.in/tech/api/next/upi/request/qr',
+      { body: encryptedRequestBody },
       {
-        body: encryptedRequestBody
-      },
-      {
-      headers: {
-        'accept': 'application/json',
-        'api-key': apiKey,
-        'content-type': 'application/json'
-      },
-        httpAgent: httpAgent,
-        httpsAgent: httpsAgent
+        headers: {
+          'accept': 'application/json',
+          'api-key': apiKey,
+          'content-type': 'application/json'
+        },
+        httpAgent,
+        httpsAgent
       }
     );
 
     const result = response.data;
-
-    if (response.status !== 200) {
-      throw new Error(`upn error: ${result.message || 'Unknown error'}`);
-    }
-    console.log("this is the result of unpay payin", result);
-    if (result.statuscode == "TXN") {
+    if (result.statuscode === 'TXN') {
       return {
         statuscode: result.statuscode,
         message: result.message,
-        data: {
-          apitxnid: result.data?.apitxnid,
-          qrString: result.data?.qrString,
-        }
-      };
-    } else {
-      return {
-        statuscode: result.statuscode,
-        message: result.message,
-        data: result.data
+        data: { apitxnid: result.data?.apitxnid, qrString: result.data?.qrString }
       };
     }
-
+    return { statuscode: result.statuscode, message: result.message, data: result.data };
   } catch (error) {
-    logger.error('Error processing payin request', {
-      error: error.message,
-      stack: error.stack
-    });
+    logger.error('Error processing unpay payin', { error: error.message, stack: error.stack });
     throw error;
   }
 };
 
 const spayPayin = async (payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee) => {
   try {
-    // Validate required fields
     if (!payinData.name || !payinData.email || !payinData.phone || !payinData.order_amount) {
       throw new Error('Missing required fields: name, email, mobile, or amount');
     }
 
-    // Generate unique transaction ID
-
     const requestBody = {
-      token: "JPi2bq7JPPaiEaFDBp0WtGcVTEjTMG", // Make sure to set this in your environment variables
+      token: "JPi2bq7JPPaiEaFDBp0WtGcVTEjTMG",
       apitxnid: payinData.reference_id,
       name: payinData.name,
       email: payinData.email,
       mobile: payinData.phone,
       amount: payinData.order_amount.toString(),
-      return_url: "https://api.zentexpay.in/api/payments/spay/callback" // Make sure to set this in your environment variables
+      return_url: "https://api.zentexpay.in/api/payments/spay/callback"
     };
 
     const response = await axios.post('https://dashboard.spay.live/api/upiintent/vp2/create', requestBody, {
-      headers: {
-        'Content-Type': 'application/json'
-      }
+      headers: { 'Content-Type': 'application/json' }
     });
 
     if (response.data.statuscode === 'TXNS') {
-      // Store transaction details in your database
-      const transactionData = {
-        user_id,
-        transaction_id: payinData.reference_id,
-        amount: payinData.order_amount,
-        admin_charge: adminCharge,
-        agent_charge: agentCharge,
-        total_charges: totalCharges,
-        gst_amount: gstAmount,
-        platform_fee: platformFee,
-        client_ip: clientIp,
-        payment_link: response.data.payment_link,
-        status: 'PENDING',
-        payment_provider: 'SPAY',
-        created_at: new Date()
-      };
-
-      // Save transaction to database (implement your database save logic here)
-      // await Transaction.create(transactionData);
-
       return {
         success: true,
         data: {
@@ -571,46 +282,89 @@ const spayPayin = async (payinData, adminCharge, agentCharge, totalCharges, user
           apitxnid: payinData.reference_id
         }
       };
-    } else {
-      throw new Error(response.data.message || 'Payment initiation failed');
     }
+    throw new Error(response.data.message || 'Payment initiation failed');
   } catch (error) {
-    // Handle specific error cases
     if (error.response) {
-      switch (error.response.status) {
-        case 400:
-          throw new Error('Missing required fields');
-        case 401:
-          throw new Error('Invalid amount format');
-        case 409:
-          throw new Error('Transaction ID already exists');
-        case 500:
-          throw new Error('Internal server error');
-        default:
-          throw new Error(error.response.data.message || 'Payment initiation failed');
-      }
+      const statusMap = { 400: 'Missing required fields', 401: 'Invalid amount format', 409: 'Transaction ID already exists', 500: 'Internal server error' };
+      throw new Error(statusMap[error.response.status] || error.response.data?.message || 'Payment initiation failed');
     }
     throw error;
   }
 };
 
-const spayPayinIcici = async (payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee) => {
+const spayPayinIcici = async (payinData) => {
   try {
-    // Validate required fields
     if (!payinData.name || !payinData.email || !payinData.phone || !payinData.order_amount) {
       throw new Error('Missing required fields: name, email, mobile, or amount');
     }
-
+    throw new Error('SpayIcici not implemented');
   } catch (error) {
-    logger.error('Error processing payin request', {
-      error: error.message,
-      stack: error.stack
-    });
+    logger.error('Error processing spayPayinIcici', { error: error.message, stack: error.stack });
     throw error;
   }
 };
 
+const resolveHdfcCustomerId = async (phone, email) => {
+  const cleanPhone = phone?.replace(/\D/g, '').slice(-10);
 
-module.exports = {
-  processPayin
-}; 
+  if (cleanPhone?.length === 10) {
+    const existing = await HdfcCustomer.findOne({ phone: cleanPhone });
+    if (existing) return existing.customerId;
+  }
+
+  if (email) {
+    const existing = await HdfcCustomer.findOne({ email });
+    if (existing) return existing.customerId;
+  }
+
+  const customerId = createId();
+  await HdfcCustomer.create({
+    phone:      cleanPhone || null,
+    email:      email      || null,
+    customerId,
+  });
+  return customerId;
+};
+
+const hdfcPayin = async (payinData) => {
+  const { order_amount, name, email, phone, reference_id, address } = payinData;
+
+  const customerId = await resolveHdfcCustomerId(phone, email);
+
+  const response = await axios.post(
+    `${process.env.ECOMMERCE_API_URL}/api/v1/payments/hdfc/pg-initiate`,
+    {
+      reference_id,
+      amount:       order_amount,
+      name:         name  || '',
+      email:        email || '',
+      phone:        phone || '',
+      customerId,
+      callback_url: `${process.env.ACCUZPAY_BASE_URL}/api/payments/hdfc/callback`,
+      address:      address || {},
+    },
+    {
+      headers: {
+        'x-api-key':    process.env.HDFC_SHARED_SECRET,
+        'Content-Type': 'application/json',
+      },
+      timeout: 30000,
+    }
+  );
+
+  if (!response.data.success || !response.data.upiIntentUri) {
+    throw new Error(response.data.message || 'HDFC payment initiation failed');
+  }
+
+  return {
+    statuscode: 'TXN',
+    message:    'UPI intent generated',
+    data: {
+      apitxnid: reference_id,
+      qrString: response.data.upiIntentUri,
+    },
+  };
+};
+
+module.exports = { processPayin };

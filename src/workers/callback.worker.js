@@ -32,64 +32,24 @@ mongoose.connect(config.mongodb.uri, {
 // Process callback jobs
 callbackQueue.process(async function (job) {
   const startTime = Date.now();
-  let timeout = null; // Declare timeout at function scope
+  let timeout = null;
   try {
-    logger.info('Processing callback job', {
-      jobId: job.id,
-      data: job.data,
-      attempts: job.attemptsMade
-    });
+    logger.info('Processing callback job', { jobId: job.id, attempts: job.attemptsMade });
 
-    // Set job timeout - increased to 5 minutes to handle slow operations
     timeout = setTimeout(() => {
-      logger.error('Job processing timeout - taking too long', {
-        jobId: job.id,
-        attempts: job.attemptsMade,
-        data: job.data
-      });
+      logger.error('Job processing timeout', { jobId: job.id });
       throw new Error('Job processing timeout');
-    }, 300000); // 5 minutes timeout
+    }, 300000);
 
-    const {
-      statuscode,
-      status,
-      amount,
-      apitxnid,
-      txnid,
-      utr,
-      message
-    } = job.data;
+    const { statuscode, amount, apitxnid, txnid, utr, message } = job.data;
 
-    // Map Unpay status to our status format
     const mappedStatus = (statuscode === 'TXN' || statuscode === 'SUCCESS') ? 'completed' : 'failed';
 
+    const payinTransaction = await PayinTransaction.findOne({ reference_id: apitxnid });
 
-    // Find transactions once - use Promise.all for parallel execution
-    logger.info('Starting database lookups', { jobId: job.id, apitxnid });
-    const [payinTransaction, userTransaction] = await Promise.all([
-      PayinTransaction.findOne({ reference_id: apitxnid }),
-      UserTransaction.findOne({ reference_id: apitxnid })
-    ]);
-    logger.info('Database lookups completed', { jobId: job.id, apitxnid });
-
-    logger.info('Transaction lookup results', {
-      jobId: job.id,
-      apitxnid,
-      payinTransactionFound: !!payinTransaction,
-      userTransactionFound: !!userTransaction,
-      payinTransactionId: payinTransaction?._id,
-      userTransactionId: userTransaction?._id
-    });
-
-    if (!payinTransaction || !userTransaction) {
-      logger.error('Transaction records not found', {
-        jobId: job.id,
-        apitxnid,
-        payinTransactionFound: !!payinTransaction,
-        userTransactionFound: !!userTransaction,
-        jobData: job.data
-      });
-      throw new Error('Transaction records not found');
+    if (!payinTransaction) {
+      logger.error('PayinTransaction not found', { jobId: job.id, apitxnid });
+      throw new Error('Transaction record not found');
     }
 
     const userId = payinTransaction.user.user_id;
@@ -103,195 +63,77 @@ callbackQueue.process(async function (job) {
       }
     };
 
-    // Handle completed transaction
     if (mappedStatus === 'completed') {
-      // Ensure all values are numbers with defaults
-      const beforeBalance = parseFloat(userTransaction.balance?.before || 0);
       const transactionAmount = parseFloat(amount || 0);
       const adminCharge = parseFloat(payinTransaction.charges?.admin_charge || 0);
       const platformFee = parseFloat(payinTransaction.platform_fee || 0);
       const gstAmount = parseFloat(payinTransaction.gst_amount || 0);
-
-      // Calculate new balance
-      const newBalance = beforeBalance + transactionAmount - adminCharge - platformFee - gstAmount;
-
-      // Update user transaction balance
-      await UserTransaction.updateOne(
-        { reference_id: apitxnid },
-        {
-          $set: {
-            'balance.after': newBalance
-          }
-        }
-      );
-
-      // Update financial details
-      const financialDetails = await FinancialDetails.findOne({
-        where: { user_id: userId }
-      });
-
       const amountToAdd = transactionAmount - adminCharge - platformFee - gstAmount;
 
+      const financialDetails = await FinancialDetails.findOne({ where: { user_id: userId } });
       if (financialDetails) {
-        await financialDetails.increment('wallet', {
-          by: amountToAdd
-        });
+        await financialDetails.increment('wallet', { by: amountToAdd });
       } else {
-        await FinancialDetails.create({
-          user_id: userId,
-          wallet: amountToAdd,
-          settlement: 0,
-          lien: 0,
-          rolling_reserve: 0
-        });
+        await FinancialDetails.create({ user_id: userId, wallet: amountToAdd, settlement: 0, lien: 0, rolling_reserve: 0 });
       }
 
-      logger.info('Updated wallet balance in FinancialDetails', {
-        user_id: userId,
-        amount: amount,
-        reference_id: apitxnid,
-        action: financialDetails ? 'incremented' : 'created'
-      });
+      logger.info('Wallet updated', { user_id: userId, amountToAdd, reference_id: apitxnid });
     }
 
-    // Update all transaction records in a single session
-    logger.info('Starting transaction updates', { jobId: job.id, apitxnid });
-    const session = await mongoose.startSession();
-    try {
-      await session.withTransaction(async () => {
-        await Promise.all([
-          PayinTransaction.updateOne(
-            { reference_id: apitxnid },
-            { $set: updateData }
-          ),
-          UserTransaction.updateOne(
-            { reference_id: apitxnid },
-            { $set: updateData }
-          ),
-          TransactionCharges.update(
-            {
-              status: mappedStatus,
-              transaction_utr: utr
-            },
-            {
-              where: { reference_id: apitxnid },
-              returning: true
-            }
-          )
-        ]);
-      });
-    } finally {
-      await session.endSession();
-    }
-    logger.info('Transaction updates completed', { jobId: job.id, apitxnid });
+    // Update PayinTransaction and TransactionCharges in parallel
+    await Promise.all([
+      PayinTransaction.updateOne({ reference_id: apitxnid }, { $set: updateData }),
+      TransactionCharges.update(
+        { status: mappedStatus, transaction_utr: utr },
+        { where: { reference_id: apitxnid } }
+      )
+    ]);
+    logger.info('Transaction records updated', { jobId: job.id, apitxnid, status: mappedStatus });
 
-    // Get merchant details early for potential parallel processing
-    logger.info('Starting merchant details lookup', { jobId: job.id, userId });
-    const merchantDetails = await MerchantDetails.findOne({
-      where: {
-        user_id: parseInt(userId, 10)
-      }
-    });
-    logger.info('Merchant details lookup completed', { jobId: job.id, userId, hasCallback: !!merchantDetails?.payin_callback });
+    const merchantDetails = await MerchantDetails.findOne({ where: { user_id: parseInt(userId, 10) } });
 
     if (merchantDetails?.payin_callback) {
-      logger.info('Starting merchant callback process', { jobId: job.id, callbackUrl: merchantDetails.payin_callback });
-      // Retry configuration - optimized for faster processing
-      const maxRetries = 2; // Reduced from 3 to 2
-      const baseDelay = 1000; // Reduced from 2 seconds to 1 second
+      const maxRetries = 2;
+      const baseDelay = 1000;
       let lastError;
 
-      // Add a timeout for the entire callback process (30 seconds max)
       const callbackTimeout = setTimeout(() => {
-        logger.warn('Merchant callback process timeout - skipping callback', {
-          jobId: job.id,
-          apitxnid,
-          callbackUrl: merchantDetails.payin_callback
-        });
-      }, 30000); // 30 seconds max for entire callback process
+        logger.warn('Merchant callback timeout - skipping', { jobId: job.id, apitxnid });
+      }, 30000);
+
+      const callbackData = {
+        reference_id: apitxnid,
+        transaction_id: txnid,
+        amount,
+        status: mappedStatus,
+        utr,
+        message: message || 'Transaction processed',
+        timestamp: new Date().toISOString()
+      };
 
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-          logger.info(`Starting callback attempt ${attempt}/${maxRetries}`, { jobId: job.id, apitxnid });
-
-          let callbackData;
-          if (statuscode === 'SUCCESS') {
-            callbackData = {
-              reference_id: apitxnid,
-              amount: amount,
-              status: mappedStatus,
-              utr: utr,
-              message: message || 'Transaction processed',
-              timestamp: new Date().toISOString()
-            };
-          } else {
-            callbackData = {
-              reference_id: apitxnid,
-              transaction_id: txnid,
-              amount: amount,
-              status: mappedStatus,
-              utr: utr,
-              message: message || 'Transaction processed',
-              timestamp: new Date().toISOString()
-            };
-          }
-
-          console.log("this is callback data", callbackData)
-
           const response = await axios.post(merchantDetails.payin_callback, callbackData, {
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            timeout: 5000 // Reduced from 10 seconds to 5 seconds
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 5000
           });
 
-          logger.info('Callback sent successfully to merchant', {
-            reference_id: apitxnid,
-            callback_url: merchantDetails.payin_callback,
-            response_status: response.status,
-            attempt: attempt
-          });
-
-          // Clear callback timeout and break out of retry loop
+          logger.info('Merchant callback sent', { reference_id: apitxnid, status: response.status, attempt });
           clearTimeout(callbackTimeout);
           break;
-
         } catch (error) {
           lastError = error;
-
-          logger.warn('Callback attempt failed', {
-            reference_id: apitxnid,
-            callback_url: merchantDetails.payin_callback,
-            error: error.message,
-            attempt: attempt,
-            maxRetries: maxRetries
-          });
-
-          // If this is the last attempt, log the final error
+          logger.warn('Callback attempt failed', { reference_id: apitxnid, error: error.message, attempt });
           if (attempt === maxRetries) {
-            logger.error('Failed to send callback to merchant after all retries', {
-              reference_id: apitxnid,
-              callback_url: merchantDetails.payin_callback,
-              error: error.message,
-              totalAttempts: maxRetries
-            });
-            // Clear callback timeout on final failure
+            logger.error('Merchant callback failed after all retries', { reference_id: apitxnid, error: error.message });
             clearTimeout(callbackTimeout);
           } else {
-            // Wait before retrying with exponential backoff
-            const delay = baseDelay * Math.pow(2, attempt - 1);
-            logger.info(`Retrying callback in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`, {
-              reference_id: apitxnid
-            });
-            await new Promise(resolve => setTimeout(resolve, delay));
+            await new Promise(resolve => setTimeout(resolve, baseDelay * Math.pow(2, attempt - 1)));
           }
         }
       }
     } else {
-      logger.warn('No callback URL found for merchant', {
-        reference_id: apitxnid,
-        user_id: userId
-      });
+      logger.warn('No payin callback URL for merchant', { reference_id: apitxnid, user_id: userId });
     }
 
     // Clear timeout on successful completion

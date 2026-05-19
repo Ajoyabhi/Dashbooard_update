@@ -2,8 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { auth } = require('../middleware/auth.middleware');
 const { checkRole } = require('../middleware/role.middleware');
-const { initiatePayment, getTransactionStatus, handleUnpayCallback, handleSpayCallback, 
-  handleSpayPayoutCallback, handlePhilpayPayoutCallback } = require('../controllers/payment.controller');
+const { initiatePayment, getTransactionStatus, handleUnpayCallback, handleSpayCallback,
+  handleSpayPayoutCallback, handlePhilpayPayoutCallback, hdfcCallback } = require('../controllers/payment.controller');
 const { initiatePayout , getPayoutTransactionStatus, handleBalanceCheck} = require('../controllers/payment.payout');
 
 
@@ -52,6 +52,9 @@ router.post('/spay/payout/callback', handleSpayPayoutCallback);
 // Philpay callback route - no authentication needed as it's called by Philpay
 router.get('/philpay/payout/callback', handlePhilpayPayoutCallback);
 router.post('/philpay/payout/callback', handlePhilpayPayoutCallback);
+
+// HDFC callback — called by ecommerce after HDFC notifies payment result
+router.post('/hdfc/callback', hdfcCallback);
 
 router.get('/balanceCheck', 
   auth, 

@@ -4,7 +4,6 @@ const { logger } = require('../utils/logger');
 const { processPayin } = require('../services/payment.service');
 const { callbackQueue, philpayPayoutQueue, createRedisClient } = require('../config/queue.config');
 const PayinTransaction = require('../models/payinTransaction.model');
-const { UserTransaction } = require('../models/userTransaction.model');
 const { MerchantDetails } = require('../models');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
 /**
@@ -219,7 +218,8 @@ const initiatePayment = async (req, res) => {
       email,
       phone,
       reference_id,
-      clientIp
+      clientIp,
+      address: req.body.address || {}
     });
 
     // Send response
@@ -548,6 +548,31 @@ const handlePhilpayPayoutCallback = async (req, res) => {
   }
 };
 
+const hdfcCallback = async (req, res) => {
+  try {
+    const apiKey = req.headers['x-api-key'];
+    if (!apiKey || apiKey !== process.env.HDFC_SHARED_SECRET) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const { reference_id, status, utr, amount } = req.body;
+    if (!reference_id || !status) {
+      return res.status(400).json({ success: false, message: 'Missing reference_id or status' });
+    }
+
+    await callbackQueue.add(
+      { statuscode: status, apitxnid: reference_id, utr: utr || null, amount, message: 'HDFC UPI payment' },
+      { attempts: 3, backoff: { type: 'exponential', delay: 5000 } }
+    );
+
+    logger.info('HDFC callback queued', { reference_id, status });
+    return res.status(200).json({ received: true });
+  } catch (error) {
+    logger.error('HDFC callback error', { error: error.message });
+    return res.status(500).json({ success: false, message: 'Internal error' });
+  }
+};
+
 module.exports = {
   initiatePayment,
   handleUnpayCallback,
@@ -557,7 +582,8 @@ module.exports = {
   validatePaymentRequestpayin,
   handleSpayCallback,
   handleSpayPayoutCallback,
-  handlePhilpayPayoutCallback
+  handlePhilpayPayoutCallback,
+  hdfcCallback
 };
 
 
