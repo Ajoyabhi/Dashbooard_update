@@ -313,15 +313,10 @@ const resolveHdfcCustomerId = async (phone, email) => {
     if (existing) return existing.customerId;
   }
 
-  if (cleanPhone?.length === 10) {
-    const existing = await HdfcCustomer.findOne({ phone: cleanPhone });
-    if (existing) return existing.customerId;
-  }
-
   const customerId = randomUUID();
   await HdfcCustomer.create({
-    phone:      cleanPhone || null,
-    email:      email      || null,
+    phone: cleanPhone || null,
+    email: email || null,
     customerId,
   });
   return customerId;
@@ -336,17 +331,17 @@ const hdfcPayin = async (payinData) => {
     `${process.env.ECOMMERCE_API_URL}/api/v1/payments/hdfc/pg-initiate`,
     {
       reference_id,
-      amount:       order_amount,
-      name:         name  || '',
-      email:        email || '',
-      phone:        phone || '',
+      amount: order_amount,
+      name: name || '',
+      email: email || '',
+      phone: phone || '',
       customerId,
       callback_url: `${process.env.ACCUZPAY_BASE_URL}/api/payments/hdfc/callback`,
-      address:      address || {},
+      address: address || {},
     },
     {
       headers: {
-        'x-api-key':    process.env.HDFC_SHARED_SECRET,
+        'x-api-key': process.env.HDFC_SHARED_SECRET,
         'Content-Type': 'application/json',
       },
       timeout: 30000,
@@ -359,7 +354,7 @@ const hdfcPayin = async (payinData) => {
 
   return {
     statuscode: 'TXN',
-    message:    'UPI intent generated',
+    message: 'UPI intent generated',
     data: {
       apitxnid: reference_id,
       qrString: response.data.upiIntentUri,
