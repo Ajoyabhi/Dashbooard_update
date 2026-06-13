@@ -42,13 +42,18 @@ const validatePaymentRequest = (req) => {
 
 const validatePaymentRequestpayin = (req) => {
   const errors = [];
-  const { name, order_amount, email, phone, reference_id } = req.body;
+  const { name, order_amount, email, phone, reference_id, address } = req.body;
 
   if (!name) errors.push('Name is required');
   if (!order_amount) errors.push('Order amount is required');
   if (!email) errors.push('Email is required');
   if (!phone) errors.push('Phone is required');
   if (!reference_id) errors.push('Order ID is required');
+  if (!address || typeof address !== 'object') {
+    errors.push('Address is required');
+  } else if (!address.pincode) {
+    errors.push('Address pincode is required');
+  }
 
   return {
     isValid: errors.length === 0,
@@ -191,7 +196,7 @@ const initiatePayment = async (req, res) => {
       });
     }
 
-    const { name, order_amount, email, phone, reference_id } = req.body;
+    const { name, order_amount, email, phone, reference_id, address } = req.body;
     const user_id = req.user.id;
     const clientIp = getClientIp(req);
     const transaction_id = uuidv4();
@@ -219,7 +224,7 @@ const initiatePayment = async (req, res) => {
       phone,
       reference_id,
       clientIp,
-      address: req.body.address || {}
+      address,
     });
 
     // Send response

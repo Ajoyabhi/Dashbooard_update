@@ -99,9 +99,59 @@ export default function DevelopmentDocs() {
   "name": "John Doe",
   "email": "john@example.com",
   "phone": "9876543210",
-  "reference_id": "TXN123456"
+  "reference_id": "TXN123456",
+  "address": {
+    "line1": "123 Main Street",
+    "line2": "Apt 4B",
+    "city": "Mumbai",
+    "state": "Maharashtra",
+    "pincode": "400001",
+    "country": "India"
+  }
 }`}
                 </pre>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-neutral-900 mb-2">Parameters</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+                  <thead className="bg-gray-100 text-gray-700">
+                    <tr>
+                      <th className="text-left px-4 py-2 font-semibold">Parameter</th>
+                      <th className="text-left px-4 py-2 font-semibold">Type</th>
+                      <th className="text-left px-4 py-2 font-semibold">Required</th>
+                      <th className="text-left px-4 py-2 font-semibold">Description</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {[
+                      { param: 'order_amount', type: 'number', required: 'Yes', desc: 'Amount to be charged (in paise)' },
+                      { param: 'name',         type: 'string', required: 'Yes', desc: "Customer's full name" },
+                      { param: 'email',        type: 'string', required: 'Yes', desc: "Customer's email address" },
+                      { param: 'phone',        type: 'string', required: 'Yes', desc: "Customer's phone number (10 digits)" },
+                      { param: 'reference_id', type: 'string', required: 'Yes', desc: 'Unique reference ID (12-25 alphanumeric characters)' },
+                      { param: 'address',          type: 'object', required: 'Yes', desc: "Customer's billing address" },
+                      { param: 'address.pincode',  type: 'string', required: 'Yes', desc: '6-digit postal/PIN code' },
+                      { param: 'address.line1',    type: 'string', required: 'No',  desc: 'Street address line 1' },
+                      { param: 'address.line2',    type: 'string', required: 'No',  desc: 'Street address line 2 (apartment, suite, etc.)' },
+                      { param: 'address.city',     type: 'string', required: 'No',  desc: 'City name' },
+                      { param: 'address.state',    type: 'string', required: 'No',  desc: 'State name' },
+                      { param: 'address.country',  type: 'string', required: 'No',  desc: 'Country name (default: India)' },
+                    ].map(({ param, type, required, desc }) => (
+                      <tr key={param} className="bg-white hover:bg-gray-50">
+                        <td className="px-4 py-2 font-mono text-indigo-700">{param}</td>
+                        <td className="px-4 py-2 text-gray-600">{type}</td>
+                        <td className="px-4 py-2">
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${required === 'Yes' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
+                            {required}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-gray-600">{desc}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
             <div>
@@ -116,7 +166,15 @@ export default function DevelopmentDocs() {
   "name": "John Doe",
   "email": "john@example.com",
   "phone": "9876543210",
-  "reference_id": "TXN123456"
+  "reference_id": "TXN123456",
+  "address": {
+    "line1": "123 Main Street",
+    "line2": "Apt 4B",
+    "city": "Mumbai",
+    "state": "Maharashtra",
+    "pincode": "400001",
+    "country": "India"
+  }
 }'`}
                 </pre>
               </div>
@@ -241,6 +299,7 @@ export default function DevelopmentDocs() {
             <li><span className="font-mono">reference_id</span> can be any character between 12 to 25 alphanumeric string.</li>
             <li>Amounts should be strings.</li>
             <li>Phone numbers must be exactly 10 digits.</li>
+            <li>The <span className="font-mono">address</span> object is required for payin. At minimum, <span className="font-mono">address.pincode</span> must be provided.</li>
             <li>Always include <span className="font-mono">Content-Type: application/json</span> in requests with bodies.</li>
             <li>Get your JWT token from <Link className="text-indigo-600 hover:underline" to="/user/developer-settings">Developer Settings</Link>.</li>
           </ul>

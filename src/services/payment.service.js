@@ -4,7 +4,7 @@ const PayinTransaction = require('../models/payinTransaction.model');
 const HdfcCustomer = require('../models/HdfcCustomer.model');
 const mongoose = require('mongoose');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
-const { createId } = require('@paralleldrive/cuid2');
+const { randomUUID } = require('crypto');
 const axios = require('axios');
 const os = require('os');
 const dns = require('dns');
@@ -308,17 +308,17 @@ const spayPayinIcici = async (payinData) => {
 const resolveHdfcCustomerId = async (phone, email) => {
   const cleanPhone = phone?.replace(/\D/g, '').slice(-10);
 
-  if (cleanPhone?.length === 10) {
-    const existing = await HdfcCustomer.findOne({ phone: cleanPhone });
-    if (existing) return existing.customerId;
-  }
-
   if (email) {
     const existing = await HdfcCustomer.findOne({ email });
     if (existing) return existing.customerId;
   }
 
-  const customerId = createId();
+  if (cleanPhone?.length === 10) {
+    const existing = await HdfcCustomer.findOne({ phone: cleanPhone });
+    if (existing) return existing.customerId;
+  }
+
+  const customerId = randomUUID();
   await HdfcCustomer.create({
     phone:      cleanPhone || null,
     email:      email      || null,
