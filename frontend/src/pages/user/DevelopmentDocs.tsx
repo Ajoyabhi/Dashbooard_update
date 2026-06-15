@@ -292,6 +292,99 @@ export default function DevelopmentDocs() {
           </div>
         </div>
 
+        {/* Webhook / Callback */}
+        <div className="card p-6">
+          <h2 className="text-2xl font-bold font-display text-neutral-900 mb-2">
+            Webhook / Callback Notifications
+          </h2>
+          <p className="text-neutral-600 mb-6">
+            AccuzPay sends an HTTP <span className="font-mono font-semibold">POST</span> request to your registered callback URL whenever a transaction status changes. Configure your callback URLs in <Link className="text-indigo-600 hover:underline" to="/user/developer-settings">Developer Settings</Link>.
+          </p>
+
+          <div className="space-y-6">
+
+            {/* Payin Callback */}
+            <div>
+              <h3 className="text-lg font-semibold text-neutral-900 mb-1">Payin Callback Payload</h3>
+              <p className="text-sm text-neutral-500 mb-3">Sent when a payin transaction is completed or failed.</p>
+              <div className="bg-neutral-100 rounded-xl p-4">
+                <pre className="text-sm text-neutral-800 overflow-x-auto">
+{`{
+  "reference_id": "PAYO454789251396",
+  "amount": "100",
+  "status": "completed",
+  "utr": "UTR123456789",
+  "message": "Transaction processed",
+  "timestamp": "2026-06-15T10:30:00.000Z"
+}`}
+                </pre>
+              </div>
+            </div>
+
+            {/* Payout Callback */}
+            <div>
+              <h3 className="text-lg font-semibold text-neutral-900 mb-1">Payout Callback Payload</h3>
+              <p className="text-sm text-neutral-500 mb-3">Sent when a payout transaction succeeds or fails.</p>
+              <div className="bg-neutral-100 rounded-xl p-4">
+                <pre className="text-sm text-neutral-800 overflow-x-auto">
+{`{
+  "reference_id": "PAYOUT123456",
+  "amount": 500,
+  "status": "success",
+  "utr": "UTR123456789",
+  "message": "Transaction processed",
+  "timestamp": "2026-06-15T10:30:00.000Z"
+}`}
+                </pre>
+              </div>
+            </div>
+
+            {/* Status values */}
+            <div>
+              <h3 className="text-lg font-semibold text-neutral-900 mb-3">Callback Fields</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+                  <thead className="bg-gray-100 text-gray-700">
+                    <tr>
+                      <th className="text-left px-4 py-2 font-semibold">Field</th>
+                      <th className="text-left px-4 py-2 font-semibold">Type</th>
+                      <th className="text-left px-4 py-2 font-semibold">Description</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {[
+                      { field: 'reference_id', type: 'string', desc: 'Your unique reference ID sent during transaction initiation' },
+                      { field: 'amount',       type: 'number', desc: 'Transaction amount' },
+                      { field: 'status',       type: 'string', desc: 'Transaction status: completed / failed (payin) or success / failed (payout)' },
+                      { field: 'utr',          type: 'string', desc: 'Unique Transaction Reference from the bank. null if failed' },
+                      { field: 'message',      type: 'string', desc: 'Human-readable status message' },
+                      { field: 'timestamp',    type: 'string', desc: 'ISO 8601 timestamp of when the callback was sent' },
+                    ].map(({ field, type, desc }) => (
+                      <tr key={field} className="bg-white hover:bg-gray-50">
+                        <td className="px-4 py-2 font-mono text-indigo-700">{field}</td>
+                        <td className="px-4 py-2 text-gray-600">{type}</td>
+                        <td className="px-4 py-2 text-gray-600">{desc}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Best practices */}
+            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+              <h3 className="text-sm font-semibold text-indigo-800 mb-2">Best Practices</h3>
+              <ul className="list-disc pl-5 text-sm text-indigo-700 space-y-1">
+                <li>Always return a <span className="font-mono">200 OK</span> response from your callback endpoint, otherwise AccuzPay will retry.</li>
+                <li>Verify the <span className="font-mono">reference_id</span> against your own records before updating transaction status.</li>
+                <li>Do not rely solely on the callback — use the <strong>Check Transaction Status</strong> API as a fallback.</li>
+                <li>Your callback endpoint must respond within <strong>5 seconds</strong> to avoid a timeout.</li>
+              </ul>
+            </div>
+
+          </div>
+        </div>
+
         {/* Notes */}
         <div className="bg-white p-6 rounded-lg shadow-card border border-gray-200">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Notes & Requirements</h2>

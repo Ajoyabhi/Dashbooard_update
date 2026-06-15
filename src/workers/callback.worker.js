@@ -383,7 +383,6 @@ philpayPayoutQueue.process(async function (job) {
           } else {
             callbackData = {
               reference_id: job.data.data.object.merchant_order_id,
-              transaction_id: job.data.data.object.merchant_order_id,
               amount: job.data.data.object.amount / 100,
               status: job.data.data.object.status,
               utr: job.data.data.object.bank_reference_id,
