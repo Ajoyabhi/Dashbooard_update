@@ -409,15 +409,28 @@ const getTransactionStatus = async (req, res) => {
       const result = response.data;
       logger.info('HDFC pg-check response', { result, reference_id: searchTransactionId });
 
+      // Normalize HDFC status to match callback payload format (completed / failed / pending)
+      const normalizeHdfcStatus = (hdfcStatus) => {
+        if (!hdfcStatus) return 'pending';
+        const s = hdfcStatus.toUpperCase();
+        if (s === 'TXN' || s === 'CHARGED') return 'completed';
+        if (['FAILED', 'FAILURE', 'CANCELLED', 'CANCEL', 'ABORTED', 'ERROR'].includes(s)) return 'failed';
+        return 'pending'; // PENDING, PENDING_VBV, AUTHORIZATION_FAILED, etc.
+      };
+
       return res.status(200).json({
         success: true,
         transaction: {
-          amount: result.amount ?? transaction.amount,
           reference_id: result.reference_id ?? transaction.reference_id,
-          paymentStatus: result.status || 'unknown',
-          hdfc_status: result.hdfc_status || null,
+          amount: result.amount ?? transaction.amount,
+          status: normalizeHdfcStatus(result.status),
           utr: result.utr || null,
-          hdfcOrderId: result.hdfcOrderId || null
+          message: result.status === 'TXN' || result.hdfc_status === 'CHARGED'
+            ? 'Transaction processed'
+            : result.status === 'pending' || result.status?.toUpperCase().includes('PENDING')
+              ? 'Transaction is pending'
+              : 'Transaction failed',
+          timestamp: transaction.updatedAt || transaction.createdAt || new Date().toISOString()
         }
       });
     }
