@@ -380,7 +380,7 @@ const getTransactionStatus = async (req, res) => {
       });
     }
 
-    // Get merchant details
+    // Get merchant details to determine which gateway to query
     const merchantDetails = await MerchantDetails.findOne({ where: { user_id } });
     if (!merchantDetails) {
       return res.status(404).json({
@@ -388,8 +388,43 @@ const getTransactionStatus = async (req, res) => {
         message: 'Merchant details not found'
       });
     }
+
+    const merchantName = merchantDetails.payin_merchant_name;
+    logger.info('Checking transaction status', { reference_id: searchTransactionId, merchantName });
+
+    if (merchantName === 'HDFC') {
+      // GET /api/v1/payments/hdfc/pg-check?reference_id=... (API contract v1.0)
+      const response = await axios.get(
+        `${process.env.ECOMMERCE_API_URL}/api/v1/payments/hdfc/pg-check`,
+        {
+          params: { reference_id: searchTransactionId },
+          headers: {
+            'x-api-key': process.env.HDFC_SHARED_SECRET,
+            'Content-Type': 'application/json'
+          },
+          timeout: 30000
+        }
+      );
+
+      const result = response.data;
+      logger.info('HDFC pg-check response', { result, reference_id: searchTransactionId });
+
+      return res.status(200).json({
+        success: true,
+        transaction: {
+          amount: result.amount ?? transaction.amount,
+          reference_id: result.reference_id ?? transaction.reference_id,
+          paymentStatus: result.status || 'unknown',
+          hdfc_status: result.hdfc_status || null,
+          utr: result.utr || null,
+          hdfcOrderId: result.hdfcOrderId || null
+        }
+      });
+    }
+
+    // Default: Unpay gateway
     const requestBody = {
-      partner_id: "4071", // Get this from merchant details or config
+      partner_id: "4071",
       apitxnid: searchTransactionId
     };
     const aesKey = "XRUhoLqUBgmZFLdWT5PiuNQnGhI9l6Pc";
@@ -397,13 +432,12 @@ const getTransactionStatus = async (req, res) => {
     const apiKey = "QPf0uqDt0EjQqkseizXyr1Ydn21HF9cOiQEFtjrV";
     const encryptedRequestBody = await encryptText(JSON.stringify(requestBody), aesKey, aesIV);
 
-
     // Make API request to Unpay
     const response = await fetch('https://unpay.in/tech/api/next/upi/request/qrstatus', {
       method: 'POST',
       headers: {
         'accept': 'application/json',
-        'api-key': apiKey, // Get from config
+        'api-key': apiKey,
         'content-type': 'application/json'
       },
       body: JSON.stringify({
