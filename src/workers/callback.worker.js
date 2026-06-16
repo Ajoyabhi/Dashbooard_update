@@ -120,6 +120,12 @@ callbackQueue.process(async function (job) {
 
           logger.info('Merchant callback sent', { reference_id: apitxnid, status: response.status, attempt });
           clearTimeout(callbackTimeout);
+
+          await PayinTransaction.updateOne(
+            { reference_id: apitxnid },
+            { $set: { 'metadata.callback_received_at': new Date() } }
+          );
+
           break;
         } catch (error) {
           lastError = error;
