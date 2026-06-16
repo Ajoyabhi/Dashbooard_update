@@ -3,6 +3,9 @@ const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 const PayoutTransaction = require('../models/payoutTransaction.model');
 const PayinTransaction = require('../models/payinTransaction.model');
+const axios = require('axios');
+const { encryptText } = require('../merchant_payin_payout/utils_payout');
+const { logger } = require('../utils/logger');
 // const Wallet = require('../models/wallet.model');
 const Transaction = require('../models/transaction.model');
 const UserTransaction = require('../models/userTransaction.model');
@@ -3348,5 +3351,80 @@ module.exports = {
     getPayoutFailedHistory,
     downloadPayoutFailedHistory,
     getLastNDaysTransactionDetails,
-    invalidateLast5DaysCache
+    invalidateLast5DaysCache,
+    adminCheckPayinStatus
+};
+
+const adminCheckPayinStatus = async (req, res) => {
+    try {
+        const { reference_id } = req.params;
+        if (!reference_id) {
+            return res.status(400).json({ success: false, message: 'Reference ID is required' });
+        }
+
+        const transaction = await PayinTransaction.findOne({ reference_id });
+        if (!transaction) {
+            return res.status(404).json({ success: false, message: 'Transaction not found' });
+        }
+
+        const merchantDetails = await MerchantDetails.findOne({ where: { user_id: transaction.user.user_id } });
+        const merchantName = merchantDetails?.payin_merchant_name;
+
+        logger.info('Admin check payin status', { reference_id, merchantName });
+
+        if (merchantName === 'HDFC') {
+            const response = await axios.get(
+                `${process.env.ECOMMERCE_API_URL}/api/v1/payments/hdfc/pg-check`,
+                {
+                    params: { reference_id },
+                    headers: { 'x-api-key': process.env.HDFC_SHARED_SECRET, 'Content-Type': 'application/json' },
+                    timeout: 30000
+                }
+            );
+            const result = response.data;
+            return res.status(200).json({
+                success: true,
+                transaction: {
+                    amount: result.amount ?? transaction.amount,
+                    reference_id: result.reference_id ?? transaction.reference_id,
+                    paymentStatus: result.status || 'unknown',
+                    hdfc_status: result.hdfc_status || null,
+                    utr: result.utr || null,
+                }
+            });
+        }
+
+        // Default: Unpay gateway
+        const requestBody = { partner_id: "4071", apitxnid: reference_id };
+        const aesKey = "XRUhoLqUBgmZFLdWT5PiuNQnGhI9l6Pc";
+        const aesIV = "oR21lVkifQEBNRQS";
+        const apiKey = "QPf0uqDt0EjQqkseizXyr1Ydn21HF9cOiQEFtjrV";
+        const encryptedBody = await encryptText(JSON.stringify(requestBody), aesKey, aesIV);
+
+        const response = await fetch('https://unpay.in/tech/api/next/upi/request/qrstatus', {
+            method: 'POST',
+            headers: { 'accept': 'application/json', 'api-key': apiKey, 'content-type': 'application/json' },
+            body: JSON.stringify({ body: encryptedBody })
+        });
+
+        const result = await response.json();
+        if (!response.ok || !result.data) {
+            return res.status(502).json({ success: false, message: 'Invalid response from payment gateway' });
+        }
+
+        return res.status(200).json({
+            success: true,
+            transaction: {
+                amount: transaction.amount,
+                reference_id: transaction.reference_id,
+                paymentStatus: result.data.paymentStatus || 'unknown',
+                payerVpa: result.data.payerVpa || null,
+                npciTxnId: result.data.npciTxnId || null,
+                utr: result.data.rrnNumber || null
+            }
+        });
+    } catch (error) {
+        logger.error('Admin check payin status error', { error: error.message });
+        res.status(500).json({ success: false, message: 'Error checking transaction status' });
+    }
 };

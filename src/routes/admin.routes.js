@@ -48,7 +48,8 @@ const {
   deleteTrashTransactions,
   getPayoutFailedHistory,
   downloadPayoutFailedHistory,
-  getLastNDaysTransactionDetails
+  getLastNDaysTransactionDetails,
+  adminCheckPayinStatus
 } = require('../controllers/admin.controller');
 const { registerUser } = require('../controllers/auth.controller');
 const { auth, authorize } = require('../middleware/auth.middleware');
@@ -136,7 +137,7 @@ router.get('/wallet-transactions', getWalletTransactions);
 router.get('/payout-transactions', getPayoutTransactions);
 
 router.get('/payin-transactions', getPayinTransactions);
-
+router.get('/payin-transactions/:reference_id/check-status', adminCheckPayinStatus);
 
 // payout , payin, wallet transaction report downlaod route
 router.get('/payin-transactions/download', getPayinTransactionsDownload);
