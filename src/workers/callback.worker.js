@@ -52,6 +52,13 @@ callbackQueue.process(async function (job) {
       throw new Error('Transaction record not found');
     }
 
+    // Idempotency guard — skip wallet credit if already completed
+    if (payinTransaction.status === 'completed') {
+      logger.warn('Duplicate callback received for already-completed transaction, skipping', { jobId: job.id, apitxnid });
+      clearTimeout(timeout);
+      return { success: true, reference_id: apitxnid, status: 'completed', skipped: true };
+    }
+
     const userId = payinTransaction.user.user_id;
     const updateData = {
       status: mappedStatus,
