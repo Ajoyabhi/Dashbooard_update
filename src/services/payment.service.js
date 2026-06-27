@@ -64,7 +64,7 @@ const processPayin = async (data) => {
     const isIpWhitelisted = user.UserIPs.some(ip => ip.ip_address === clientIp && ip.is_active);
     if (!isIpWhitelisted) throw new Error(`User IP address ${clientIp} is not whitelisted`);
 
-    if (order_amount < 100) throw new Error('Minimum payin amount is 100');
+    // if (order_amount < 100) throw new Error('Minimum payin amount is 100');
     if (reference_id.length < 12 || reference_id.length > 25) throw new Error('Reference number must be between 12 and 25 digits');
 
     const userStatus = user.UserStatus;
