@@ -394,7 +394,7 @@ const airpayPayin = async (payinData) => {
     statuscode: 'TXN',
     message: 'UPI intent generated',
     data: {
-      apitxnid: response.data.ap_transaction_id || reference_id,
+      apitxnid: response.data.reference_id || reference_id,
       qrString: response.data.upi_intent_uri,
       airpay_order_id: response.data.airpay_order_id,
     },
