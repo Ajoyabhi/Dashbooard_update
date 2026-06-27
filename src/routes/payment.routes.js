@@ -3,7 +3,7 @@ const router = express.Router();
 const { auth } = require('../middleware/auth.middleware');
 const { checkRole } = require('../middleware/role.middleware');
 const { initiatePayment, getTransactionStatus, handleUnpayCallback, handleSpayCallback,
-  handleSpayPayoutCallback, handlePhilpayPayoutCallback, hdfcCallback } = require('../controllers/payment.controller');
+  handleSpayPayoutCallback, handlePhilpayPayoutCallback, hdfcCallback, airpayCallback } = require('../controllers/payment.controller');
 const { initiatePayout , getPayoutTransactionStatus, handleBalanceCheck} = require('../controllers/payment.payout');
 
 
@@ -55,6 +55,9 @@ router.post('/philpay/payout/callback', handlePhilpayPayoutCallback);
 
 // HDFC callback — called by ecommerce after HDFC notifies payment result
 router.post('/hdfc/callback', hdfcCallback);
+
+// AirPay callback — called by anpamart backend after AirPay IPN is verified
+router.post('/airpay/callback', airpayCallback);
 
 router.get('/balanceCheck', 
   auth, 

@@ -157,6 +157,8 @@ const processPayin = async (data) => {
       result = await spayPayinIcici(payinData);
     } else if (merchantName === 'HDFC') {
       result = await hdfcPayin(payinData);
+    } else if (merchantName === 'AirPay') {
+      result = await airpayPayin(payinData);
     } else {
       throw new Error('Invalid merchant name');
     }
@@ -358,6 +360,43 @@ const hdfcPayin = async (payinData) => {
     data: {
       apitxnid: reference_id,
       qrString: response.data.upiIntentUri,
+    },
+  };
+};
+
+const airpayPayin = async (payinData) => {
+  const { order_amount, name, email, phone, reference_id } = payinData;
+
+  const response = await axios.post(
+    `${process.env.ECOMMERCE_API_URL}/api/v1/payments/airpay/ap-initiate`,
+    {
+      reference_id,
+      amount: order_amount,
+      name: name || '',
+      email: email || '',
+      phone: phone || '',
+      customerId: payinData.user_id?.toString() || '',
+    },
+    {
+      headers: {
+        'x-api-key': process.env.AIRPAY_SHARED_SECRET,
+        'Content-Type': 'application/json',
+      },
+      timeout: 30000,
+    }
+  );
+
+  if (!response.data.success || !response.data.upi_intent_uri) {
+    throw new Error(response.data.message || 'AirPay payment initiation failed');
+  }
+
+  return {
+    statuscode: 'TXN',
+    message: 'UPI intent generated',
+    data: {
+      apitxnid: response.data.ap_transaction_id || reference_id,
+      qrString: response.data.upi_intent_uri,
+      airpay_order_id: response.data.airpay_order_id,
     },
   };
 };

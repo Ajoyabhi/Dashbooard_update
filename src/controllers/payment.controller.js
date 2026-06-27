@@ -392,6 +392,44 @@ const getTransactionStatus = async (req, res) => {
     const merchantName = merchantDetails.payin_merchant_name;
     logger.info('Checking transaction status', { reference_id: searchTransactionId, merchantName });
 
+    if (merchantName === 'AirPay') {
+      const response = await axios.get(
+        `${process.env.ECOMMERCE_API_URL}/api/v1/payments/airpay/ap-check`,
+        {
+          params: { reference_id: searchTransactionId },
+          headers: { 'x-api-key': process.env.AIRPAY_SHARED_SECRET },
+          timeout: 30000,
+        }
+      );
+
+      const result = response.data;
+      logger.info('AirPay ap-check response', { result, reference_id: searchTransactionId });
+
+      const normalizeAirpayStatus = (s) => {
+        if (!s) return 'pending';
+        const u = s.toUpperCase();
+        if (u === 'TXN') return 'completed';
+        if (u === 'FAILED') return 'failed';
+        return 'pending';
+      };
+
+      return res.status(200).json({
+        success: true,
+        transaction: {
+          reference_id: result.reference_id ?? transaction.reference_id,
+          amount: result.amount ?? transaction.amount,
+          status: normalizeAirpayStatus(result.status),
+          utr: result.utr || null,
+          message: result.status === 'TXN'
+            ? 'Transaction processed'
+            : result.status === 'PENDING'
+              ? 'Transaction is pending'
+              : 'Transaction failed',
+          timestamp: transaction.updatedAt || transaction.createdAt || new Date().toISOString()
+        }
+      });
+    }
+
     if (merchantName === 'HDFC') {
       // GET /api/v1/payments/hdfc/pg-check?reference_id=... (API contract v1.0)
       const response = await axios.get(
@@ -625,6 +663,38 @@ const hdfcCallback = async (req, res) => {
   }
 };
 
+const airpayCallback = async (req, res) => {
+  try {
+    const apiKey = req.headers['x-api-key'];
+    if (!apiKey || apiKey !== process.env.AIRPAY_SHARED_SECRET) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const { reference_id, status, utr, amount, ap_transaction_id } = req.body;
+    if (!reference_id || !status) {
+      return res.status(400).json({ success: false, message: 'Missing reference_id or status' });
+    }
+
+    await callbackQueue.add(
+      {
+        statuscode: status,
+        apitxnid: reference_id,
+        utr: utr || null,
+        amount,
+        message: 'AirPay UPI payment',
+        txnid: ap_transaction_id || null,
+      },
+      { attempts: 3, backoff: { type: 'exponential', delay: 5000 } }
+    );
+
+    logger.info('AirPay callback queued', { reference_id, status });
+    return res.status(200).json({ received: true });
+  } catch (error) {
+    logger.error('AirPay callback error', { error: error.message });
+    return res.status(500).json({ success: false, message: 'Internal error' });
+  }
+};
+
 module.exports = {
   initiatePayment,
   handleUnpayCallback,
@@ -635,7 +705,8 @@ module.exports = {
   handleSpayCallback,
   handleSpayPayoutCallback,
   handlePhilpayPayoutCallback,
-  hdfcCallback
+  hdfcCallback,
+  airpayCallback
 };
 
 

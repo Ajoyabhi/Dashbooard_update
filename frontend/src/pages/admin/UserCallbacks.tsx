@@ -216,6 +216,7 @@ export default function UserCallbacks() {
                   <option value="Spay">Spay</option>
                   <option value="SpayIcici">SpayIcici</option>
                   <option value="HDFC">HDFC</option>
+                  <option value="AirPay">AirPay</option>
                   <option value="Philpay">Philpay</option>
                 </select>
               </div>
