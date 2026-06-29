@@ -447,21 +447,24 @@ const getTransactionStatus = async (req, res) => {
       const normalizeHdfcStatus = (hdfcStatus) => {
         if (!hdfcStatus) return 'pending';
         const s = hdfcStatus.toUpperCase();
-        if (s === 'TXN' || s === 'CHARGED') return 'completed';
-        if (['FAILED', 'FAILURE', 'CANCELLED', 'CANCEL', 'ABORTED', 'ERROR'].includes(s)) return 'failed';
-        return 'pending'; // PENDING, PENDING_VBV, AUTHORIZATION_FAILED, etc.
+        if (s === 'TXN' || s === 'CHARGED') return 'success';
+        if (['FAILED', 'FAILURE', 'CANCELLED', 'CANCEL', 'ABORTED', 'ERROR',
+             'AUTHORIZATION_FAILED', 'JUSPAY_DECLINED', 'PAYMENT_FAILED'].includes(s)) return 'failed';
+        return 'pending';
       };
 
+      const normalizedStatus = normalizeHdfcStatus(result.status);
       return res.status(200).json({
         success: true,
         transaction: {
           reference_id: result.reference_id ?? transaction.reference_id,
           amount: result.amount ?? transaction.amount,
-          status: normalizeHdfcStatus(result.status),
+          paymentStatus: normalizedStatus,
           utr: result.utr || null,
-          message: result.status === 'TXN' || result.hdfc_status === 'CHARGED'
+          payerVpa: result.payer_vpa || null,
+          message: normalizedStatus === 'success'
             ? 'Transaction processed'
-            : result.status === 'pending' || result.status?.toUpperCase().includes('PENDING')
+            : normalizedStatus === 'pending'
               ? 'Transaction is pending'
               : 'Transaction failed',
           timestamp: transaction.updatedAt || transaction.createdAt || new Date().toISOString()

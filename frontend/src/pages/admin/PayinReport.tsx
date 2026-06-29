@@ -485,6 +485,12 @@ export default function PayinReport() {
                     <span className="text-sm font-mono text-gray-800">{statusCheckResult.payerVpa}</span>
                   </div>
                 )}
+                {statusCheckResult.hdfc_status && (
+                  <div className="flex justify-between items-center px-4 py-3">
+                    <span className="text-sm text-gray-500">Gateway Code</span>
+                    <span className="text-xs font-mono text-gray-500">{statusCheckResult.hdfc_status}</span>
+                  </div>
+                )}
                 {statusCheckResult.npciTxnId && (
                   <div className="flex justify-between items-center px-4 py-3">
                     <span className="text-sm text-gray-500">NPCI Txn ID</span>

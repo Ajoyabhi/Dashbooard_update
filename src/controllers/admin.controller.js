@@ -3315,15 +3315,20 @@ const adminCheckPayinStatus = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Transaction not found' });
         }
 
-        // Use gateway stored on the transaction — immune to merchant config changes
-        // Fall back to current MerchantDetails for old transactions without gateway_name
+        // Use gateway stored on the transaction — immune to merchant config changes.
+        // For old transactions without gateway_name, default to HDFC (all pre-AirPay transactions
+        // were HDFC/Unpay/Spay; using current MerchantDetails would route to the wrong gateway
+        // if the merchant has since been switched).
         let merchantName = transaction.metadata?.gateway_name;
         if (!merchantName) {
             const merchantDetails = await MerchantDetails.findOne({ where: { user_id: transaction.user.user_id } });
-            merchantName = merchantDetails?.payin_merchant_name;
+            const currentGateway = merchantDetails?.payin_merchant_name;
+            // Only trust current config if AirPay (new gateway — no legacy transactions).
+            // For everything else fall back to HDFC as the safe default for old records.
+            merchantName = currentGateway === 'AirPay' ? 'HDFC' : (currentGateway || 'HDFC');
         }
 
-        logger.info('Admin check payin status', { reference_id, merchantName, source: transaction.metadata?.gateway_name ? 'transaction' : 'merchant_details' });
+        logger.info('Admin check payin status', { reference_id, merchantName, source: transaction.metadata?.gateway_name ? 'transaction' : 'inferred' });
 
         if (merchantName === 'AirPay') {
             const response = await axios.get(
@@ -3358,14 +3363,23 @@ const adminCheckPayinStatus = async (req, res) => {
                 }
             );
             const result = response.data;
+            const normalizeHdfcStatus = (s) => {
+                if (!s) return 'pending';
+                const u = s.toUpperCase();
+                if (u === 'TXN' || u === 'CHARGED') return 'success';
+                if (['FAILED', 'FAILURE', 'CANCELLED', 'CANCEL', 'ABORTED', 'ERROR',
+                     'AUTHORIZATION_FAILED', 'JUSPAY_DECLINED', 'PAYMENT_FAILED'].includes(u)) return 'failed';
+                return 'pending';
+            };
             return res.status(200).json({
                 success: true,
                 transaction: {
                     amount: result.amount ?? transaction.amount,
                     reference_id: result.reference_id ?? transaction.reference_id,
-                    paymentStatus: result.status || 'unknown',
-                    hdfc_status: result.hdfc_status || null,
+                    paymentStatus: normalizeHdfcStatus(result.status),
+                    hdfc_status: result.status || null,
                     utr: result.utr || null,
+                    payerVpa: result.payer_vpa || null,
                 }
             });
         }
