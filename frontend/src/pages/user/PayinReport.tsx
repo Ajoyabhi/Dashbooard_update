@@ -279,7 +279,7 @@ export default function PayinReport() {
       header: 'Actions',
       accessor: 'status',
       cell: (value: string, row: PayinRecord) => {
-        const canCheck = value === 'pending' || value === 'failed';
+        const canCheck = value === 'pending' || value === 'failed' || value === 'payin_qr_generated';
         if (!canCheck) return <span className="text-xs text-gray-400">—</span>;
         return (
           <button
@@ -379,7 +379,7 @@ export default function PayinReport() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Gateway Status Check</h3>
+              <h3 className="text-lg font-semibold text-gray-900">Payment Status</h3>
               <button onClick={() => setStatusModalOpen(false)} className="text-gray-400 hover:text-gray-600">
                 <X className="h-5 w-5" />
               </button>
@@ -392,7 +392,7 @@ export default function PayinReport() {
             {statusCheckLoading && (
               <div className="flex items-center justify-center py-8">
                 <RefreshCw className="h-6 w-6 animate-spin text-primary-600" />
-                <span className="ml-2 text-sm text-gray-600">Checking with gateway...</span>
+                <span className="ml-2 text-sm text-gray-600">Checking payment status...</span>
               </div>
             )}
 
@@ -405,7 +405,7 @@ export default function PayinReport() {
             {statusCheckResult && !statusCheckLoading && (
               <div className="rounded-lg border border-gray-200 divide-y divide-gray-100">
                 <div className="flex justify-between items-center px-4 py-3">
-                  <span className="text-sm text-gray-500">Gateway Status</span>
+                  <span className="text-sm text-gray-500">Payment Status</span>
                   <span className={`text-sm font-semibold px-2.5 py-0.5 rounded-full ${getGatewayStatusColor(statusCheckResult.paymentStatus)}`}>
                     {statusCheckResult.paymentStatus}
                   </span>
@@ -432,12 +432,6 @@ export default function PayinReport() {
                   <div className="flex justify-between items-center px-4 py-3">
                     <span className="text-sm text-gray-500">Amount</span>
                     <span className="text-sm font-medium text-gray-800">{formatCurrency(statusCheckResult.amount)}</span>
-                  </div>
-                )}
-                {statusCheckResult.ap_transaction_id && (
-                  <div className="flex justify-between items-center px-4 py-3">
-                    <span className="text-sm text-gray-500">AirPay Txn ID</span>
-                    <span className="text-sm font-mono text-gray-800">{statusCheckResult.ap_transaction_id}</span>
                   </div>
                 )}
               </div>

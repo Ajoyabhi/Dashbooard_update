@@ -380,17 +380,17 @@ const getTransactionStatus = async (req, res) => {
       });
     }
 
-    // Get merchant details to determine which gateway to query
-    const merchantDetails = await MerchantDetails.findOne({ where: { user_id } });
-    if (!merchantDetails) {
-      return res.status(404).json({
-        success: false,
-        message: 'Merchant details not found'
-      });
+    // Resolve gateway from the transaction itself first (source of truth),
+    // fall back to current MerchantDetails only for old transactions that predate gateway_name storage
+    let merchantName = transaction.metadata?.gateway_name;
+    if (!merchantName) {
+      const merchantDetails = await MerchantDetails.findOne({ where: { user_id } });
+      if (!merchantDetails) {
+        return res.status(404).json({ success: false, message: 'Merchant details not found' });
+      }
+      merchantName = merchantDetails.payin_merchant_name;
     }
-
-    const merchantName = merchantDetails.payin_merchant_name;
-    logger.info('Checking transaction status', { reference_id: searchTransactionId, merchantName });
+    logger.info('Checking transaction status', { reference_id: searchTransactionId, merchantName, source: transaction.metadata?.gateway_name ? 'transaction' : 'merchant_details' });
 
     if (merchantName === 'AirPay') {
       const response = await axios.get(

@@ -3315,10 +3315,15 @@ const adminCheckPayinStatus = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Transaction not found' });
         }
 
-        const merchantDetails = await MerchantDetails.findOne({ where: { user_id: transaction.user.user_id } });
-        const merchantName = merchantDetails?.payin_merchant_name;
+        // Use gateway stored on the transaction — immune to merchant config changes
+        // Fall back to current MerchantDetails for old transactions without gateway_name
+        let merchantName = transaction.metadata?.gateway_name;
+        if (!merchantName) {
+            const merchantDetails = await MerchantDetails.findOne({ where: { user_id: transaction.user.user_id } });
+            merchantName = merchantDetails?.payin_merchant_name;
+        }
 
-        logger.info('Admin check payin status', { reference_id, merchantName });
+        logger.info('Admin check payin status', { reference_id, merchantName, source: transaction.metadata?.gateway_name ? 'transaction' : 'merchant_details' });
 
         if (merchantName === 'AirPay') {
             const response = await axios.get(
