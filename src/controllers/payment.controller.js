@@ -405,24 +405,20 @@ const getTransactionStatus = async (req, res) => {
       const result = response.data;
       logger.info('AirPay ap-check response', { result, reference_id: searchTransactionId });
 
-      const normalizeAirpayStatus = (s) => {
-        if (!s) return 'pending';
-        const u = s.toUpperCase();
-        if (u === 'TXN') return 'completed';
-        if (u === 'FAILED') return 'failed';
-        return 'pending';
-      };
+      const statusMap = { TXN: 'success', FAILED: 'failed', PENDING: 'pending' };
+      const normalizedStatus = statusMap[result.status?.toUpperCase()] || result.status || 'unknown';
 
       return res.status(200).json({
         success: true,
         transaction: {
           reference_id: result.reference_id ?? transaction.reference_id,
           amount: result.amount ?? transaction.amount,
-          status: normalizeAirpayStatus(result.status),
+          paymentStatus: normalizedStatus,
           utr: result.utr || null,
-          message: result.status === 'TXN'
+          ap_transaction_id: result.ap_transaction_id || null,
+          message: normalizedStatus === 'success'
             ? 'Transaction processed'
-            : result.status === 'PENDING'
+            : normalizedStatus === 'pending'
               ? 'Transaction is pending'
               : 'Transaction failed',
           timestamp: transaction.updatedAt || transaction.createdAt || new Date().toISOString()

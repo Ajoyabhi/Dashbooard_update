@@ -3320,6 +3320,29 @@ const adminCheckPayinStatus = async (req, res) => {
 
         logger.info('Admin check payin status', { reference_id, merchantName });
 
+        if (merchantName === 'AirPay') {
+            const response = await axios.get(
+                `${process.env.ECOMMERCE_API_URL}/api/v1/payments/airpay/ap-check`,
+                {
+                    params: { reference_id },
+                    headers: { 'x-api-key': process.env.AIRPAY_SHARED_SECRET },
+                    timeout: 30000
+                }
+            );
+            const result = response.data;
+            const statusMap = { TXN: 'success', FAILED: 'failed', PENDING: 'pending' };
+            return res.status(200).json({
+                success: true,
+                transaction: {
+                    amount: result.amount ?? transaction.amount,
+                    reference_id: result.reference_id ?? transaction.reference_id,
+                    paymentStatus: statusMap[result.status?.toUpperCase()] || result.status || 'unknown',
+                    utr: result.utr || null,
+                    ap_transaction_id: result.ap_transaction_id || null,
+                }
+            });
+        }
+
         if (merchantName === 'HDFC') {
             const response = await axios.get(
                 `${process.env.ECOMMERCE_API_URL}/api/v1/payments/hdfc/pg-check`,

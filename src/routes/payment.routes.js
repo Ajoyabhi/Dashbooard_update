@@ -57,7 +57,9 @@ router.post('/philpay/payout/callback', handlePhilpayPayoutCallback);
 router.post('/hdfc/callback', hdfcCallback);
 
 // AirPay callback — called by anpamart backend after AirPay IPN is verified
+// registered at both paths: the doc-specified /rp/callback and the explicit /airpay/callback
 router.post('/airpay/callback', airpayCallback);
+router.post('/rp/callback', airpayCallback);
 
 router.get('/balanceCheck', 
   auth, 

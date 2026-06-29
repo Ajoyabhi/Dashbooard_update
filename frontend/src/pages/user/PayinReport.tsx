@@ -68,6 +68,7 @@ interface StatusCheckResult {
   payerVpa?: string | null;
   npciTxnId?: string | null;
   hdfc_status?: string | null;
+  ap_transaction_id?: string | null;
   amount?: number;
   reference_id?: string;
 }
@@ -431,6 +432,12 @@ export default function PayinReport() {
                   <div className="flex justify-between items-center px-4 py-3">
                     <span className="text-sm text-gray-500">Amount</span>
                     <span className="text-sm font-medium text-gray-800">{formatCurrency(statusCheckResult.amount)}</span>
+                  </div>
+                )}
+                {statusCheckResult.ap_transaction_id && (
+                  <div className="flex justify-between items-center px-4 py-3">
+                    <span className="text-sm text-gray-500">AirPay Txn ID</span>
+                    <span className="text-sm font-mono text-gray-800">{statusCheckResult.ap_transaction_id}</span>
                   </div>
                 )}
               </div>
