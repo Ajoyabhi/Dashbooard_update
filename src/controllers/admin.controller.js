@@ -3341,13 +3341,14 @@ const adminCheckPayinStatus = async (req, res) => {
             );
             const result = response.data;
             const statusMap = { TXN: 'success', FAILED: 'failed', PENDING: 'pending' };
+            const apStatus = statusMap[result.status?.toUpperCase()] || result.status || 'unknown';
             return res.status(200).json({
                 success: true,
                 transaction: {
                     amount: result.amount ?? transaction.amount,
                     reference_id: result.reference_id ?? transaction.reference_id,
-                    paymentStatus: statusMap[result.status?.toUpperCase()] || result.status || 'unknown',
-                    utr: result.utr || null,
+                    paymentStatus: apStatus,
+                    utr: apStatus === 'success' ? (result.utr || null) : null,
                     ap_transaction_id: result.ap_transaction_id || null,
                 }
             });
@@ -3371,15 +3372,16 @@ const adminCheckPayinStatus = async (req, res) => {
                      'AUTHORIZATION_FAILED', 'JUSPAY_DECLINED', 'PAYMENT_FAILED'].includes(u)) return 'failed';
                 return 'pending';
             };
+            const hdfcNormalized = normalizeHdfcStatus(result.status);
             return res.status(200).json({
                 success: true,
                 transaction: {
                     amount: result.amount ?? transaction.amount,
                     reference_id: result.reference_id ?? transaction.reference_id,
-                    paymentStatus: normalizeHdfcStatus(result.status),
+                    paymentStatus: hdfcNormalized,
                     hdfc_status: result.status || null,
-                    utr: result.utr || null,
-                    payerVpa: result.payer_vpa || null,
+                    utr: hdfcNormalized === 'success' ? (result.utr || null) : null,
+                    payerVpa: hdfcNormalized === 'success' ? (result.payer_vpa || null) : null,
                 }
             });
         }

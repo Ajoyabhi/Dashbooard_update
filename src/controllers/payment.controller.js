@@ -414,8 +414,7 @@ const getTransactionStatus = async (req, res) => {
           reference_id: result.reference_id ?? transaction.reference_id,
           amount: result.amount ?? transaction.amount,
           paymentStatus: normalizedStatus,
-          utr: result.utr || null,
-          ap_transaction_id: result.ap_transaction_id || null,
+          utr: normalizedStatus === 'success' ? (result.utr || null) : null,
           message: normalizedStatus === 'success'
             ? 'Transaction processed'
             : normalizedStatus === 'pending'
@@ -460,8 +459,8 @@ const getTransactionStatus = async (req, res) => {
           reference_id: result.reference_id ?? transaction.reference_id,
           amount: result.amount ?? transaction.amount,
           paymentStatus: normalizedStatus,
-          utr: result.utr || null,
-          payerVpa: result.payer_vpa || null,
+          utr: normalizedStatus === 'success' ? (result.utr || null) : null,
+          payerVpa: normalizedStatus === 'success' ? (result.payer_vpa || null) : null,
           message: normalizedStatus === 'success'
             ? 'Transaction processed'
             : normalizedStatus === 'pending'
