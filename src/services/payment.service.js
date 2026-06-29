@@ -100,6 +100,8 @@ const processPayin = async (data) => {
       await FinancialDetails.create({ user_id, wallet: 0, settlement: 0, lien: 0, rolling_reserve: 0 });
     }
 
+    const merchantName = user.MerchantDetail.payin_merchant_name;
+
     // Create PayinTransaction and TransactionCharges in parallel
     await Promise.all([
       PayinTransaction.create({
@@ -124,7 +126,7 @@ const processPayin = async (data) => {
         reference_id,
         status: 'pending',
         gateway_response: { utr: null, status: 'pending', message: 'Payin request initiated', merchant_response: null },
-        metadata: { requested_ip: clientIp },
+        metadata: { requested_ip: clientIp, gateway_name: merchantName },
         remark: 'Payin request initiated',
         created_by: new mongoose.Types.ObjectId(user_id),
         created_by_model: user.user_type || 'User'
@@ -146,7 +148,6 @@ const processPayin = async (data) => {
     ]);
 
     const payinData = { user_id, order_amount, name, email, phone, reference_id, clientIp, address: data.address || {} };
-    const merchantName = user.MerchantDetail.payin_merchant_name;
 
     let result;
     if (merchantName === 'Unpay') {

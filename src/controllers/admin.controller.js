@@ -3381,7 +3381,7 @@ const getGatewayStats = async (req, res) => {
     try {
         const { from, to } = req.query;
 
-        const matchStage = { transaction_type: 'payin' };
+        const matchStage = {};
         if (from || to) {
             matchStage.createdAt = {};
             if (from) matchStage.createdAt.$gte = new Date(from);
@@ -3392,11 +3392,11 @@ const getGatewayStats = async (req, res) => {
             }
         }
 
-        const stats = await UserTransaction.aggregate([
+        const stats = await PayinTransaction.aggregate([
             { $match: matchStage },
             {
                 $group: {
-                    _id: '$merchant_details.merchant_name.name',
+                    _id: '$metadata.gateway_name',
                     totalRequests: { $sum: 1 },
                     successfulRequests: {
                         $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] }
