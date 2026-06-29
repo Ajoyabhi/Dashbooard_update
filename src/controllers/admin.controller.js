@@ -3377,6 +3377,82 @@ const adminCheckPayinStatus = async (req, res) => {
     }
 };
 
+const getGatewayStats = async (req, res) => {
+    try {
+        const { from, to } = req.query;
+
+        const matchStage = { transaction_type: 'payin' };
+        if (from || to) {
+            matchStage.createdAt = {};
+            if (from) matchStage.createdAt.$gte = new Date(from);
+            if (to) {
+                const toDate = new Date(to);
+                toDate.setHours(23, 59, 59, 999);
+                matchStage.createdAt.$lte = toDate;
+            }
+        }
+
+        const stats = await UserTransaction.aggregate([
+            { $match: matchStage },
+            {
+                $group: {
+                    _id: '$merchant_details.merchant_name.name',
+                    totalRequests: { $sum: 1 },
+                    successfulRequests: {
+                        $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] }
+                    },
+                    failedRequests: {
+                        $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] }
+                    },
+                    pendingRequests: {
+                        $sum: { $cond: [{ $in: ['$status', ['pending', 'payin_qr_generated']] }, 1, 0] }
+                    },
+                    totalCollection: {
+                        $sum: { $cond: [{ $eq: ['$status', 'completed'] }, '$amount', 0] }
+                    },
+                    totalAttemptedAmount: { $sum: '$amount' },
+                    totalCharges: {
+                        $sum: { $cond: [{ $eq: ['$status', 'completed'] }, '$charges.total_charges', 0] }
+                    }
+                }
+            },
+            { $sort: { totalCollection: -1 } }
+        ]);
+
+        const formatted = stats.map(g => ({
+            gateway: g._id || 'Unknown',
+            totalRequests: g.totalRequests,
+            successfulRequests: g.successfulRequests,
+            failedRequests: g.failedRequests,
+            pendingRequests: g.pendingRequests,
+            successRate: g.totalRequests > 0
+                ? parseFloat(((g.successfulRequests / g.totalRequests) * 100).toFixed(2))
+                : 0,
+            totalCollection: parseFloat(g.totalCollection.toFixed(2)),
+            totalAttemptedAmount: parseFloat(g.totalAttemptedAmount.toFixed(2)),
+            totalCharges: parseFloat(g.totalCharges.toFixed(2))
+        }));
+
+        const overall = {
+            totalRequests: formatted.reduce((s, g) => s + g.totalRequests, 0),
+            successfulRequests: formatted.reduce((s, g) => s + g.successfulRequests, 0),
+            failedRequests: formatted.reduce((s, g) => s + g.failedRequests, 0),
+            pendingRequests: formatted.reduce((s, g) => s + g.pendingRequests, 0),
+            totalCollection: parseFloat(formatted.reduce((s, g) => s + g.totalCollection, 0).toFixed(2)),
+            totalAttemptedAmount: parseFloat(formatted.reduce((s, g) => s + g.totalAttemptedAmount, 0).toFixed(2)),
+            totalCharges: parseFloat(formatted.reduce((s, g) => s + g.totalCharges, 0).toFixed(2)),
+        };
+        overall.successRate = overall.totalRequests > 0
+            ? parseFloat(((overall.successfulRequests / overall.totalRequests) * 100).toFixed(2))
+            : 0;
+
+        res.status(200).json({ success: true, gateways: formatted, overall });
+    } catch (error) {
+        logger.error('Error fetching gateway stats', { error: error.message });
+        res.status(500).json({ success: false, message: 'Error fetching gateway stats' });
+    }
+};
+
 module.exports = {
     getAllUsers,
     getAllAgents,
@@ -3426,5 +3502,6 @@ module.exports = {
     downloadPayoutFailedHistory,
     getLastNDaysTransactionDetails,
     invalidateLast5DaysCache,
-    adminCheckPayinStatus
+    adminCheckPayinStatus,
+    getGatewayStats
 };

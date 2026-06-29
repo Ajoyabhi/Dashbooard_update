@@ -49,7 +49,8 @@ const {
   getPayoutFailedHistory,
   downloadPayoutFailedHistory,
   getLastNDaysTransactionDetails,
-  adminCheckPayinStatus
+  adminCheckPayinStatus,
+  getGatewayStats
 } = require('../controllers/admin.controller');
 const { registerUser } = require('../controllers/auth.controller');
 const { auth, authorize } = require('../middleware/auth.middleware');
@@ -171,5 +172,8 @@ router.get('/payout-failed-history/download', downloadPayoutFailedHistory);
 // Trash transaction management routes
 router.get('/trash-transactions/count', getTrashTransactionCount);
 router.delete('/trash-transactions/delete', deleteTrashTransactions);
+
+// Gateway stats
+router.get('/gateway-stats', getGatewayStats);
 
 module.exports = router; 

@@ -24,7 +24,8 @@ import {
   Layers,
   DollarSign,
   FileText,
-  UserPlus
+  UserPlus,
+  BarChart2
 } from 'lucide-react';
 
 // Mock Users
@@ -351,6 +352,7 @@ export const adminMenuItems: MenuItem[] = [
   { title: 'Manage User', path: '/admin/manage-user', icon: 'Users' },
   { title: 'Wallet Report', path: '/admin/wallet-report', icon: 'Wallet' },
   { title: 'Payin Report', path: '/admin/payin-report', icon: 'FileText' },
+  { title: 'Gateway Analytics', path: '/admin/gateway-stats', icon: 'BarChart2' },
   { title: 'Payout Report', path: '/admin/payout-report', icon: 'FileText' },
   { title: 'Make Payout Failed', path: '/admin/make-payout-failed', icon: 'FileText' },
   { title: 'Trash Report', path: '/admin/trash-payin-payout-report', icon: 'FileText' },
@@ -397,6 +399,7 @@ export const getIconByName = (iconName: string) => {
     ArrowUpRight,
     CreditCard,
     BarChart3,
+    BarChart2,
     UserCog,
     RotateCcw,
     Settings,
