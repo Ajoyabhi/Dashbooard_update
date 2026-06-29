@@ -71,7 +71,7 @@ export default function GatewayStats() {
       const params: Record<string, string> = {};
       if (from) params.from = from;
       if (to) params.to = to;
-      const { data } = await api.get('/api/admin/gateway-stats', { params });
+      const { data } = await api.get('/admin/gateway-stats', { params });
       if (data.success) {
         setStats(data.gateways);
         setOverall(data.overall);
