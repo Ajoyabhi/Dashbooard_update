@@ -63,7 +63,8 @@ const payinTransactionSchema = new mongoose.Schema({
   },
   metadata: {
     requested_ip: String,
-    callback_received_at: Date
+    callback_received_at: Date,
+    gateway_name: String
   },
   remark: String,
   created_by: {

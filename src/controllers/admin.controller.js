@@ -3377,6 +3377,53 @@ const adminCheckPayinStatus = async (req, res) => {
     }
 };
 
+const resendPayinWebhook = async (req, res) => {
+    try {
+        const { reference_id } = req.params;
+        const transaction = await PayinTransaction.findOne({ reference_id });
+
+        if (!transaction) {
+            return res.status(404).json({ success: false, message: 'Transaction not found' });
+        }
+        if (transaction.status !== 'completed') {
+            return res.status(400).json({ success: false, message: `Transaction is not completed (status: ${transaction.status})` });
+        }
+
+        const userId = transaction.user.user_id;
+        const merchantDetails = await MerchantDetails.findOne({ where: { user_id: parseInt(userId, 10) } });
+
+        if (!merchantDetails?.payin_callback) {
+            return res.status(400).json({ success: false, message: 'No callback URL configured for this merchant' });
+        }
+
+        const callbackData = {
+            reference_id,
+            transaction_id: transaction.gateway_response?.merchant_response || null,
+            amount: transaction.amount,
+            status: 'completed',
+            utr: transaction.gateway_response?.utr || null,
+            message: 'Transaction processed',
+            timestamp: new Date().toISOString()
+        };
+
+        const response = await axios.post(merchantDetails.payin_callback, callbackData, {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 10000
+        });
+
+        await PayinTransaction.updateOne(
+            { reference_id },
+            { $set: { 'metadata.callback_received_at': new Date() } }
+        );
+
+        logger.info('Manual webhook resent', { reference_id, status: response.status, admin: req.user?.id });
+        return res.status(200).json({ success: true, message: 'Webhook resent successfully', http_status: response.status });
+    } catch (error) {
+        logger.error('Error resending webhook', { error: error.message, reference_id: req.params.reference_id });
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 const getGatewayStats = async (req, res) => {
     try {
         const { from, to } = req.query;
@@ -3503,5 +3550,6 @@ module.exports = {
     getLastNDaysTransactionDetails,
     invalidateLast5DaysCache,
     adminCheckPayinStatus,
-    getGatewayStats
+    getGatewayStats,
+    resendPayinWebhook
 };

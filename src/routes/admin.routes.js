@@ -50,7 +50,8 @@ const {
   downloadPayoutFailedHistory,
   getLastNDaysTransactionDetails,
   adminCheckPayinStatus,
-  getGatewayStats
+  getGatewayStats,
+  resendPayinWebhook
 } = require('../controllers/admin.controller');
 const { registerUser } = require('../controllers/auth.controller');
 const { auth, authorize } = require('../middleware/auth.middleware');
@@ -175,5 +176,37 @@ router.delete('/trash-transactions/delete', deleteTrashTransactions);
 
 // Gateway stats
 router.get('/gateway-stats', getGatewayStats);
+
+// Manual webhook resend for stuck completed transactions
+router.post('/payin/:reference_id/resend-webhook', resendPayinWebhook);
+
+// Callback queue health
+router.get('/queue/health', async (req, res) => {
+  try {
+    const { callbackQueue } = require('../config/queue.config');
+    const [counts, failed, active, waiting] = await Promise.all([
+      callbackQueue.getJobCounts(),
+      callbackQueue.getFailed(0, 10),
+      callbackQueue.getActive(),
+      callbackQueue.getWaiting(0, 5),
+    ]);
+    res.json({
+      success: true,
+      counts,
+      active: active.map(j => ({ id: j.id, reference_id: j.data?.apitxnid, attempts: j.attemptsMade, since: new Date(j.processedOn).toISOString() })),
+      waiting: waiting.map(j => ({ id: j.id, reference_id: j.data?.apitxnid, queued_at: new Date(j.timestamp).toISOString() })),
+      last10Failed: failed.map(j => ({
+        id: j.id,
+        reference_id: j.data?.apitxnid,
+        attempts: j.attemptsMade,
+        reason: j.failedReason,
+        failed_at: new Date(j.finishedOn).toISOString(),
+        data: j.data,
+      })),
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 module.exports = router; 

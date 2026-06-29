@@ -44,6 +44,7 @@ interface PayinRecord {
   };
   metadata?: {
     callback_received_at?: string;
+    gateway_name?: string;
   };
   remark: string;
   createdAt: string;
@@ -262,6 +263,26 @@ export default function PayinReport() {
       cell: (value: PayinRecord['gateway_response']) => (
         <span className="font-mono text-sm">{value.utr || 'N/A'}</span>
       ),
+    },
+    {
+      header: 'Gateway',
+      accessor: 'metadata',
+      cell: (value: PayinRecord['metadata']) => {
+        const gw = value?.gateway_name;
+        const colorMap: Record<string, string> = {
+          Unpay:     'bg-violet-100 text-violet-700',
+          Spay:      'bg-blue-100 text-blue-700',
+          SpayIcici: 'bg-indigo-100 text-indigo-700',
+          HDFC:      'bg-sky-100 text-sky-700',
+          AirPay:    'bg-emerald-100 text-emerald-700',
+        };
+        const cls = gw ? (colorMap[gw] ?? 'bg-gray-100 text-gray-600') : 'bg-gray-100 text-gray-400';
+        return (
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${cls}`}>
+            {gw || '—'}
+          </span>
+        );
+      },
     },
     {
       header: 'Status',

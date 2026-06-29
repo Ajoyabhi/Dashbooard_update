@@ -52,61 +52,63 @@ callbackQueue.process(async function (job) {
       throw new Error('Transaction record not found');
     }
 
-    // Idempotency guard — skip wallet credit if already completed
-    if (payinTransaction.status === 'completed') {
-      logger.warn('Duplicate callback received for already-completed transaction, skipping', { jobId: job.id, apitxnid });
-      clearTimeout(timeout);
-      return { success: true, reference_id: apitxnid, status: 'completed', skipped: true };
-    }
-
     const userId = payinTransaction.user.user_id;
-    const updateData = {
-      status: mappedStatus,
-      gateway_response: {
-        utr,
+    const alreadyCompleted = payinTransaction.status === 'completed';
+
+    // Only credit wallet if not already done
+    if (!alreadyCompleted) {
+      const updateData = {
         status: mappedStatus,
-        message: message || 'Transaction processed',
-        raw_response: job.data
+        gateway_response: {
+          utr,
+          status: mappedStatus,
+          message: message || 'Transaction processed',
+          raw_response: job.data
+        }
+      };
+
+      if (mappedStatus === 'completed') {
+        const transactionAmount = parseFloat(amount || 0);
+        const adminCharge = parseFloat(payinTransaction.charges?.admin_charge || 0);
+        const platformFee = parseFloat(payinTransaction.platform_fee || 0);
+        const gstAmount = parseFloat(payinTransaction.gst_amount || 0);
+        const amountToAdd = transactionAmount - adminCharge - platformFee - gstAmount;
+
+        const financialDetails = await FinancialDetails.findOne({ where: { user_id: userId } });
+        if (financialDetails) {
+          await financialDetails.increment('wallet', { by: amountToAdd });
+        } else {
+          await FinancialDetails.create({ user_id: userId, wallet: amountToAdd, settlement: 0, lien: 0, rolling_reserve: 0 });
+        }
+        logger.info('Wallet updated', { user_id: userId, amountToAdd, reference_id: apitxnid });
       }
-    };
 
-    if (mappedStatus === 'completed') {
-      const transactionAmount = parseFloat(amount || 0);
-      const adminCharge = parseFloat(payinTransaction.charges?.admin_charge || 0);
-      const platformFee = parseFloat(payinTransaction.platform_fee || 0);
-      const gstAmount = parseFloat(payinTransaction.gst_amount || 0);
-      const amountToAdd = transactionAmount - adminCharge - platformFee - gstAmount;
-
-      const financialDetails = await FinancialDetails.findOne({ where: { user_id: userId } });
-      if (financialDetails) {
-        await financialDetails.increment('wallet', { by: amountToAdd });
-      } else {
-        await FinancialDetails.create({ user_id: userId, wallet: amountToAdd, settlement: 0, lien: 0, rolling_reserve: 0 });
-      }
-
-      logger.info('Wallet updated', { user_id: userId, amountToAdd, reference_id: apitxnid });
+      await Promise.all([
+        PayinTransaction.updateOne({ reference_id: apitxnid }, { $set: updateData }),
+        TransactionCharges.update(
+          { status: mappedStatus, transaction_utr: utr },
+          { where: { reference_id: apitxnid } }
+        )
+      ]);
+      logger.info('Transaction records updated', { jobId: job.id, apitxnid, status: mappedStatus });
+    } else {
+      logger.warn('Wallet already credited — skipping, will still attempt webhook', { jobId: job.id, apitxnid });
     }
 
-    // Update PayinTransaction and TransactionCharges in parallel
-    await Promise.all([
-      PayinTransaction.updateOne({ reference_id: apitxnid }, { $set: updateData }),
-      TransactionCharges.update(
-        { status: mappedStatus, transaction_utr: utr },
-        { where: { reference_id: apitxnid } }
-      )
-    ]);
-    logger.info('Transaction records updated', { jobId: job.id, apitxnid, status: mappedStatus });
+    // Always attempt webhook — even if wallet was already credited
+    // Skip only if webhook was already successfully delivered
+    const webhookAlreadySent = !!payinTransaction.metadata?.callback_received_at;
+    if (webhookAlreadySent) {
+      logger.info('Webhook already delivered, skipping', { jobId: job.id, apitxnid });
+      clearTimeout(timeout);
+      return { success: true, reference_id: apitxnid, status: mappedStatus, skipped: true };
+    }
 
     const merchantDetails = await MerchantDetails.findOne({ where: { user_id: parseInt(userId, 10) } });
 
     if (merchantDetails?.payin_callback) {
-      const maxRetries = 2;
+      const maxRetries = 3;
       const baseDelay = 1000;
-      let lastError;
-
-      const callbackTimeout = setTimeout(() => {
-        logger.warn('Merchant callback timeout - skipping', { jobId: job.id, apitxnid });
-      }, 30000);
 
       const callbackData = {
         reference_id: apitxnid,
@@ -118,32 +120,32 @@ callbackQueue.process(async function (job) {
         timestamp: new Date().toISOString()
       };
 
+      let webhookSent = false;
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           const response = await axios.post(merchantDetails.payin_callback, callbackData, {
             headers: { 'Content-Type': 'application/json' },
-            timeout: 5000
+            timeout: 10000
           });
-
           logger.info('Merchant callback sent', { reference_id: apitxnid, status: response.status, attempt });
-          clearTimeout(callbackTimeout);
 
           await PayinTransaction.updateOne(
             { reference_id: apitxnid },
             { $set: { 'metadata.callback_received_at': new Date() } }
           );
-
+          webhookSent = true;
           break;
         } catch (error) {
-          lastError = error;
           logger.warn('Callback attempt failed', { reference_id: apitxnid, error: error.message, attempt });
-          if (attempt === maxRetries) {
-            logger.error('Merchant callback failed after all retries', { reference_id: apitxnid, error: error.message });
-            clearTimeout(callbackTimeout);
-          } else {
+          if (attempt < maxRetries) {
             await new Promise(resolve => setTimeout(resolve, baseDelay * Math.pow(2, attempt - 1)));
           }
         }
+      }
+
+      if (!webhookSent) {
+        // Throw so Bull retries the whole job — webhook delivery is mandatory
+        throw new Error(`Merchant webhook delivery failed for ${apitxnid} after ${maxRetries} attempts`);
       }
     } else {
       logger.warn('No payin callback URL for merchant', { reference_id: apitxnid, user_id: userId });
