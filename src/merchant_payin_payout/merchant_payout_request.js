@@ -6,6 +6,7 @@ const winston = require('winston');
 const { encryptText } = require('./utils_payout');
 const axios = require('axios');
 const crypto = require('crypto');
+const FormData = require('form-data');
 require('dotenv').config();
 
 
@@ -597,8 +598,218 @@ async function philpayPayout(payoutData) {
     }
 }
 
+async function xlitepayPayout(payoutData) {
+    const startTime = Date.now();
+    logger.info('Starting xlitepayPayout process', { reference: payoutData.reference_id });
+    try {
+        const baseUrl = process.env.XLITEPAY_BASE_URL;
+        const token = process.env.XLITEPAY_TOKEN;
+        if (!baseUrl || !token) {
+            throw new Error('Xlitepay credentials or base URL not set in environment variables');
+        }
+
+        const form = new FormData();
+        form.append('orderid', payoutData.reference_id);
+        form.append('amount', String(payoutData.amount));
+        form.append('number', payoutData.beneficiary_details.account_number);
+        form.append('ifsc', payoutData.beneficiary_details.account_ifsc);
+        form.append('name', payoutData.beneficiary_details.beneficiary_name);
+        form.append('mobile', payoutData.beneficiary_details.mobile);
+
+        logger.info('Preparing payout request for Xlitepay', { reference: payoutData.reference_id });
+
+        let result;
+        try {
+            const response = await axios.post(`${baseUrl}/api/payout/initiate`, form, {
+                headers: {
+                    token,
+                    ...form.getHeaders()
+                }
+            });
+            result = response.data;
+        } catch (err) {
+            result = err.response ? err.response.data : { status: 'error', message: err.message };
+        }
+        console.log("=======================================================")
+        console.log("This is part of result", result);
+        console.log("=======================================================")
+
+        logger.info('Received response from Xlitepay API', { status: result.status, message: result.message });
+
+        const apiLog = await ApiLogs.create({
+            request: JSON.stringify({ orderid: payoutData.reference_id, amount: payoutData.amount, number: payoutData.beneficiary_details.account_number, ifsc: payoutData.beneficiary_details.account_ifsc, name: payoutData.beneficiary_details.beneficiary_name, mobile: payoutData.beneficiary_details.mobile }),
+            response: JSON.stringify(result),
+            service: 'PAYOUT',
+            service_api: 'XLITEPAY',
+            status: (result.status === 'success' || result.statuscode === '200') ? 'success' : 'error',
+            error_message: result.message || null,
+            execution_time: Date.now() - startTime
+        });
+        await apiLog.save();
+        logger.info('API log created', { logId: apiLog._id });
+
+        if (result.status === 'success' || result.statuscode === '200') {
+            const utr = result.utr || null;
+
+            await TransactionCharges.update(
+                {
+                    status: 'completed',
+                    transaction_utr: utr
+                },
+                {
+                    where: {
+                        reference_id: payoutData.reference_id
+                    }
+                }
+            );
+            logger.info('Transaction charges stored', { reference: payoutData.reference_id });
+
+            await UserTransaction.updateOne(
+                { reference_id: payoutData.reference_id },
+                {
+                    $set: {
+                        status: 'success',
+                        gateway_response: {
+                            merchant_response: payoutData.reference_id,
+                            status: 'success',
+                            message: result.message,
+                            utr: utr
+                        }
+                    }
+                }
+            );
+            logger.info('User transaction updated', { reference: payoutData.reference_id });
+
+            await PayoutTransaction.updateOne(
+                { reference_id: payoutData.reference_id },
+                {
+                    $set: {
+                        status: 'success',
+                        gateway_response: {
+                            merchant_response: payoutData.reference_id,
+                            status: 'success',
+                            message: result.message,
+                            utr: utr
+                        }
+                    }
+                }
+            );
+            logger.info('Payout transaction updated', { reference: payoutData.reference_id });
+
+            return {
+                data: {
+                    status: 'success',
+                    message: result.message,
+                    utr: utr,
+                    apitxnid: payoutData.reference_id
+                },
+                status: 200
+            };
+        } else {
+            await TransactionCharges.update(
+                {
+                    status: 'failed',
+                    transaction_utr: null
+                },
+                {
+                    where: {
+                        reference_id: payoutData.reference_id
+                    }
+                }
+            );
+
+            const userFinancial = await FinancialDetails.findOne({
+                where: { user_id: payoutData.user_id }
+            });
+            if (userFinancial) {
+                const newSettlement = parseFloat(userFinancial.settlement) + parseFloat(payoutData.amountToDeduct || 0);
+                await FinancialDetails.update(
+                    { settlement: newSettlement },
+                    { where: { user_id: payoutData.user_id } }
+                );
+            }
+
+            await UserTransaction.updateOne(
+                { reference_id: payoutData.reference_id },
+                {
+                    $set: {
+                        status: 'failed',
+                        gateway_response: {
+                            merchant_response: JSON.stringify(result),
+                            status: 'failed',
+                            message: result.message
+                        }
+                    }
+                }
+            );
+            logger.info('User transaction updated to failed', { reference: payoutData.reference_id });
+
+            await PayoutTransaction.updateOne(
+                { reference_id: payoutData.reference_id },
+                {
+                    $set: {
+                        status: 'failed',
+                        gateway_response: {
+                            merchant_response: JSON.stringify(result),
+                            status: 'failed',
+                            message: result.message
+                        }
+                    }
+                }
+            );
+            logger.info('Payout transaction updated to failed', { reference: payoutData.reference_id });
+
+            return {
+                data: {
+                    status: 'failed',
+                    message: result.message || 'Payout processing failed',
+                    apitxnid: payoutData.reference_id
+                },
+                status: 200
+            };
+        }
+    } catch (error) {
+        logger.error('Error in xlitepayPayout', {
+            error: error.message,
+            stack: error.stack,
+            reference: payoutData.reference_id
+        });
+
+        return {
+            data: {
+                status: 'error',
+                message: error.message
+            },
+            status: 500
+        };
+    }
+}
+
+async function xlitepayBalanceCheck() {
+    const baseUrl = process.env.XLITEPAY_BASE_URL;
+    const token = process.env.XLITEPAY_TOKEN;
+    const merchantId = process.env.XLITEPAY_MERCHANT_ID;
+    if (!baseUrl || !token || !merchantId) {
+        throw new Error('Xlitepay credentials or base URL not set in environment variables');
+    }
+
+    const form = new FormData();
+    form.append('merchant_id', merchantId);
+
+    const response = await axios.post(`${baseUrl}/api/check-balance`, form, {
+        headers: {
+            token,
+            ...form.getHeaders()
+        }
+    });
+
+    return response.data;
+}
+
 module.exports = {
     unpayPayout,
     spayPayout,
-    philpayPayout
-}   
+    philpayPayout,
+    xlitepayPayout,
+    xlitepayBalanceCheck
+}

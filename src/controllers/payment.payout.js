@@ -8,12 +8,12 @@ const { validatePaymentRequest } = require('../controllers/payment.controller');
 const PayoutTransaction = require('../models/payoutTransaction.model');
 const UserTransaction = require('../models/userTransaction.model');
 const { Op } = require('sequelize');
-const { unpayPayout, spayPayout, philpayPayout } = require('../merchant_payin_payout/merchant_payout_request');
+const { unpayPayout, spayPayout, philpayPayout, xlitepayPayout } = require('../merchant_payin_payout/merchant_payout_request');
 const getClientIp = require('../utils/getClientIp');
 const mongoose = require('mongoose');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
 const axios = require('axios');
-const { unpayTransactionStatus, spayTransactionStatus, philpayTransactionStatus } = require('../transactionStatusCheck/TransactionCheck');
+const { unpayTransactionStatus, spayTransactionStatus, philpayTransactionStatus, xlitepayTransactionStatus } = require('../transactionStatusCheck/TransactionCheck');
 
 /**
  * Initiate a payout
@@ -455,6 +455,37 @@ const initiatePayout = async (req, res) => {
           });
         }
       }
+      else if (user.MerchantDetail.payout_merchant_name === 'Xlitepay') {
+        const payoutData = {
+          reference_id,
+          user_id,
+          amount,
+          amountToDeduct,
+          beneficiary_details: {
+            account_number,
+            account_ifsc,
+            bank_name,
+            beneficiary_name,
+            mobile: user.mobile
+          }
+        };
+        result = await xlitepayPayout(payoutData);
+        console.log("this is result of xlitepay payout", result)
+        if (result?.status == 200 && result.data.status === 'success') {
+          return res.status(200).json({
+            success: true,
+            message: result.data.message || 'Payout is processing',
+            utr: result.data.utr,
+            reference_id: result.data.apitxnid
+          });
+        } else {
+          return res.status(400).json({
+            success: false,
+            message: result?.data?.message || 'Payout processing failed',
+            reference_id: result?.data?.apitxnid || reference_id
+          });
+        }
+      }
 
     } catch (error) {
       logger.error('Error processing payout', { error: error.message });
@@ -510,6 +541,9 @@ const getPayoutTransactionStatus = async (req, res) => {
         result = { ...result, data: { ...result.data, response: { ...sanitized, amount: adjustedAmount } } };
       }
       // console.log("this is result of philpay payout", result)
+    }else if(user.MerchantDetail.payout_merchant_name === 'Xlitepay'){
+      result = await xlitepayTransactionStatus(transaction_id);
+      console.log("this is result of xlitepay payout", result)
     }
     if(result.status === 200){
       return res.status(200).json({

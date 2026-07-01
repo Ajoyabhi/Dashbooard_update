@@ -1,6 +1,7 @@
 const axios = require('axios');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
 const crypto = require('crypto');
+const FormData = require('form-data');
 
 
 const unpayTransactionStatus = async (transaction_id) => {
@@ -133,8 +134,54 @@ const philpayTransactionStatus = async (transaction_id) => {
 }   
 
 
+const xlitepayTransactionStatus = async (transaction_id) => {
+  const baseUrl = process.env.XLITEPAY_BASE_URL;
+  const token = process.env.XLITEPAY_TOKEN;
+
+  if (!baseUrl || !token) {
+    throw new Error('Xlitepay credentials or base URL not set in environment variables');
+  }
+
+  const form = new FormData();
+  form.append('orderid', transaction_id);
+
+  try {
+    const response = await axios.post(`${baseUrl}/api/payout/checkstatus`, form, {
+      headers: {
+        token,
+        ...form.getHeaders()
+      }
+    });
+    const result = response.data;
+
+    const s = (result.status || '').toLowerCase();
+    let derived = 'pending';
+    if (s === 'success') derived = 'success';
+    else if (s === 'failed') derived = 'failed';
+
+    return {
+      data: {
+        status: derived,
+        response: result
+      },
+      status: 200
+    };
+  } catch (err) {
+    const statusCode = err.response?.status || 500;
+    const result = err.response ? err.response.data : { message: err.message };
+    return {
+      data: {
+        status: 'error',
+        response: result
+      },
+      status: statusCode
+    };
+  }
+}
+
 module.exports = {
   unpayTransactionStatus,
   spayTransactionStatus,
-  philpayTransactionStatus
+  philpayTransactionStatus,
+  xlitepayTransactionStatus
 }
