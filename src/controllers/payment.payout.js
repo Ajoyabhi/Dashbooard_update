@@ -21,534 +21,534 @@ const { unpayTransactionStatus, spayTransactionStatus, philpayTransactionStatus,
  * @param {Object} res - Express response object
  */
 const initiatePayout = async (req, res) => {
-    try {
-      // Validate request
-      const validationResult = validatePaymentRequest(req);
-      setValidationResult(req, validationResult);
-      if (!validationResult.isValid) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Invalid request', 
-          errors: validationResult.errors 
-        });
-      }
-  
-      const { account_number, account_ifsc, bank_name, beneficiary_name, request_type, amount, reference_id } = req.body;
-
-      const user_id = req.user.id;
-        // Fetch user and all related data
-      const user = await User.findByPk(user_id, {
-            include: [
-                { model: UserStatus },
-                { model: MerchantDetails },
-                { model: MerchantCharges },
-                { model: MerchantModeCharges },
-                { model: FinancialDetails },
-                { model: UserIPs }
-        ]
-        });
-
-        const clientIp = getClientIp(req);
-        console.log('Client IP:', clientIp);
-
-        const isIpWhitelisted = user.UserIPs.some(ip => ip.ip_address === clientIp && ip.is_active);
-        if (!isIpWhitelisted) {
-            return res.status(400).json({
-                success: false,
-                message: `User IP address ${clientIp} is not whitelisted`
-            });
-        }
-
-      if (amount < 100) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Minimum payout amount is 100' 
-        });
-      }
-      // Get financial details for the user
-      const financialDetails = await FinancialDetails.findOne({
-        where: { user_id: user_id }
-      });
-
-      if (!financialDetails) {
-        return res.status(400).json({
-          success: false,
-          message: 'Financial details not found for user'
-        });
-      }
-      const settlementAmount = parseFloat(financialDetails.settlement);
-      const requestedAmount = parseFloat(amount);
-
-      if (isNaN(settlementAmount) || isNaN(requestedAmount)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid amount values'
-        });
-      }
-
-      if (settlementAmount < requestedAmount) {
-        return res.status(400).json({
-          success: false,
-          message: 'Insufficient balance',
-          details: {
-            available: settlementAmount,
-            requested: requestedAmount
-          }
-        });
-      }
-
-      if (reference_id.length < 12 || reference_id.length > 25) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Reference number must be between 12 and 25 digits' 
-        });
-      }
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: 'User not found'
-        });
-      }
-      if (user.UserStatus.status === 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'User is not active'
-        });
-      }
-      if (user.UserStatus && !user.UserStatus.payout_status) {
-        return res.status(403).json({
-          success: false,
-          message: 'User payout functionality is disabled'
-        });
-      }
-      if (user.FinancialDetails && user.FinancialDetails.settlement < amount) {
-        return res.status(400).json({
-          success: false,
-          message: 'Insufficient balance'
-        });
-      }
-      if (user.UserStatus.bank_deactive) {
-        return res.status(400).json({
-          success: false,
-          message: 'Bank is deactivated your ip due to security reasons'
-        });
-      }
-      if (user.UserStatus.tecnical_issue) {
-        return res.status(400).json({
-          success: false,
-          message: 'Technical issue please try again later'
-        });
-      }
-
-      // Check for duplicate transaction with optimized query
-      const existingTransaction = await PayoutTransaction.findOne(
-        { reference_id },
-        { _id: 1, status: 1 }
-      ).lean();
-
-      if (existingTransaction) {
-        logger.warn('Duplicate transaction attempt', {
-          reference_id,
-          existing_status: existingTransaction.status
-        });
-        
-        return res.status(400).json({
-          success: false,
-          message: 'Transaction already exists',
-          transaction_id: existingTransaction._id,
-          status: existingTransaction.status
-        });
-      }
-
-      // Find all charge brackets for the user
-      const chargeBrackets = await MerchantCharges.findAll({
-        where: {
-          user_id: user_id
-        },
-        order: [['start_amount', 'ASC']]
-      });
-
-      if (!chargeBrackets || chargeBrackets.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'No charge brackets found for the user'
-        });
-      }
-
-      // Find the appropriate charge bracket for the amount
-      const applicableBracket = chargeBrackets.find(bracket => {
-        const startAmount = parseFloat(bracket.start_amount);
-        const endAmount = parseFloat(bracket.end_amount);
-        return amount >= startAmount && amount <= endAmount;
-      });
-
-      if (!applicableBracket) {
-        return res.status(400).json({
-          success: false,
-          message: 'No charge bracket found for the given amount'
-        });
-      }
-
-      // Calculate charges based on charge type
-      let adminCharge = 0;
-      let agentCharge = 0;
-      let gstAmount = 0;
-      let platformFee = 0;
-
-      // Calculate admin charge
-      if (applicableBracket.admin_payout_charge_type === 'percentage') {
-        adminCharge = (amount * parseFloat(applicableBracket.admin_payout_charge)) / 100;
-      } else {
-        adminCharge = parseFloat(applicableBracket.admin_payout_charge);
-      }
-
-      // Calculate agent charge
-      if (applicableBracket.agent_payout_charge_type === 'percentage') {
-        agentCharge = (amount * parseFloat(applicableBracket.agent_payout_charge)) / 100;
-      } else {
-        agentCharge = parseFloat(applicableBracket.agent_payout_charge);
-      }
-
-      // Calculate total charges first
-      const totalCharges = parseFloat(adminCharge);
-
-      // Fetch platform charges from database
-      const platformCharges = await PlatformCharges.findOne({
-        where: { is_active: true }
-      });
-
-      if(platformCharges?.charge){
-        platformFee = (totalCharges * parseFloat(platformCharges.charge)) / 100;
-      }
-
-      if(platformCharges?.gst){
-        gstAmount = (totalCharges * parseFloat(platformCharges.gst)) / 100;
-      }
-
-      // Update total charges to include platform fee and GST
-      const finalTotalCharges = totalCharges + parseFloat(gstAmount) + parseFloat(platformFee);
-      
-      // Calculate final amount to deduct (amount + charges)
-      const amountToDeduct = parseFloat(amount) + finalTotalCharges;
-      
-      // Calculate remaining balance
-      const user_balance_left = parseFloat(user.FinancialDetail.settlement) - amountToDeduct;
-      
-      // Update settlement in FinancialDetails using Sequelize
-      await FinancialDetails.update(
-        { settlement: user_balance_left },
-        { 
-          where: { user_id: user_id },
-          returning: true
-        }
-      );
-
-      let userTransaction = await UserTransaction.create({
-        user: {
-          id: new mongoose.Types.ObjectId(user_id),
-          user_id: user_id
-        },
-        transaction_id: uuidv4(),
-        amount: amount,
-        transaction_type: 'payout',
-        reference_id: reference_id,
-        status: 'pending',
-        charges: {
-          admin_charge: adminCharge,
-          agent_charge: agentCharge,
-          total_charges: totalCharges
-        },
-        gst_amount: gstAmount,
-        platform_fee: platformFee,
-        balance: {
-          before: user.FinancialDetail.settlement,
-          after: user_balance_left
-        },
-        merchant_details: {
-          merchant_name: user.MerchantDetail.payout_merchant_name,
-          merchant_callback_url: user.MerchantDetail.payout_callback
-        },
-        remark: 'Payout request initiated',
-        metadata: {
-          requested_ip: clientIp
-        },
-        created_by: new mongoose.Types.ObjectId(user_id),
-        created_by_model: user.user_type
-      });
-      await userTransaction.save();
-
-      let payoutTransaction = await PayoutTransaction.create({
-        transaction_id: uuidv4(),
-        user: {
-          id: new mongoose.Types.ObjectId(user_id),
-          user_id: user_id.toString(),
-          name: user.name || '',
-          email: user.email || '',
-          mobile: user.mobile || '',
-          userType: user.user_type || ''
-        },
-        amount: amount,
-        charges: {
-          admin_charge: adminCharge,
-          agent_charge: agentCharge,
-          total_charges: totalCharges
-        },
-        gst_amount: gstAmount,
-        platform_fee: platformFee,
-        beneficiary_details: {
-          account_number: account_number,
-          account_ifsc: account_ifsc,
-          bank_name: bank_name,
-          beneficiary_name: beneficiary_name
-        },
-        reference_id: reference_id,
-        status: 'pending',
-        gateway_response: {
-          reference_id: reference_id,
-          status: 'pending',
-          message: 'Payout request initiated',
-          raw_response: null
-        },
-        metadata: {
-          requested_ip: clientIp
-        },
-        remark: 'Payout request initiated',
-        created_by: new mongoose.Types.ObjectId(user_id),
-        created_by_model: user.user_type || 'User'
-      });
-      await payoutTransaction.save();
-
-      await TransactionCharges.create({
-        transaction_type: 'payout',
-        reference_id: reference_id,
-        transaction_amount: amount,
-        transaction_utr: null,
-        merchant_charge: adminCharge,
-        agent_charge: agentCharge,
-        total_charges: totalCharges,
-        gst_amount: gstAmount,
-        platform_fee: platformFee,
-        user_id: user_id,
-        status: 'pending',
-        metadata: {
-          merchant_response: null,
-          requested_ip: clientIp
-        }
-      });
-      let result;
-      if (user.MerchantDetail.payout_merchant_name === 'Unpay') {
-        const payoutData = {
-          reference_id,
-          user_id,
-          amount,
-          amountToDeduct,
-          beneficiary_details: {
-            account_number,
-            account_ifsc,
-            bank_name,
-            beneficiary_name,
-            mobile: user.mobile
-          }
-        };
-        result = await unpayPayout(payoutData);
-        if (result?.status == 200) {
-          await payoutTransaction.updateOne(
-            { reference_id: reference_id },
-            { $set: { status: "completed", gateway_response: { reference_id, status: "completed", message: result.data.message, merchant_response: result.data.txn_id } } }
-          );
-          await userTransaction.updateOne(
-            { reference_id: reference_id },
-            { $set: { status: "completed", gateway_response: { reference_id, status: "completed", message: result.data.message, merchant_response: result.data.txn_id } } }
-          );
-          await TransactionCharges.update(
-            {
-              status: 'completed',
-              merchant_response: result.data.txn_id
-            },
-            { where: { reference_id: reference_id } }
-          );
-          res.status(200).json({
-            // result od chnages
-            success: true,
-            result: result.data.message,
-            utr: result.data.utr,
-            reference_id: result.data.apitxnid
-          });
-        } else {
-          await payoutTransaction.updateOne(
-            { reference_id: reference_id },
-            { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result?.data?.message || 'Unknown error' } } }
-          );
-          await userTransaction.updateOne(
-            { reference_id: reference_id },
-            { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result?.data?.message || 'Unknown error' } } }
-          );
-          await TransactionCharges.update(
-            {
-              status: 'failed',
-              merchant_response: result.data.txn_id
-            },
-            { where: { reference_id: reference_id } }
-          );
-          res.status(400).json({
-            success: false,
-            message: 'Payout processing failed',
-            error: result?.data?.message || 'Unknown error',
-            utr: result.data.utr,
-            reference_id: result.data.apitxnid
-          });
-        }
-      }
-      else if (user.MerchantDetail.payout_merchant_name === 'SPay') {
-        console.log("this is payout data of spay", payoutData)
-        const payoutData = {
-          reference_id,
-          user_id,
-          amount,
-          amountToDeduct,
-          request_type,
-          beneficiary_details: {
-            account_number,
-            account_ifsc,
-            bank_name,
-            beneficiary_name,
-            mobile: user.mobile,
-            email: user.email,
-            address: user.address,
-            upi_on: user.upi_on || ''
-          }
-        };
-        result = await spayPayout(payoutData);
-        console.log("this is result of spay payout", result)
-      }
-      else if (user.MerchantDetail.payout_merchant_name === 'Philpay') {
-        const payoutData = {
-          reference_id,
-          user_id,
-          amount,
-          amountToDeduct,
-          request_type,
-          beneficiary_details: {
-            account_number,
-            account_ifsc,
-            bank_name,
-            beneficiary_name,
-            mobile: user.mobile,
-            email: user.email,
-            address: user.address
-          }
-        };
-        result = await philpayPayout(payoutData);
-        console.log("this is result of philpay payout", result)
-        if (result?.status == 200) {
-          return res.status(200).json({
-           success: true,
-           message: result.data.message || "Payout is processing",
-           merchant_order_id: result.data.merchant_order_id
-          });
-        }
-        else {
-          return res.status(400).json({
-            success: false,
-            message: result.data.message || 'Payout processing failed',
-            reference_id: result.data.apitxnid
-          });
-        }
-      }
-      else if (user.MerchantDetail.payout_merchant_name === 'Xlitepay') {
-        const payoutData = {
-          reference_id,
-          user_id,
-          amount,
-          amountToDeduct,
-          beneficiary_details: {
-            account_number,
-            account_ifsc,
-            bank_name,
-            beneficiary_name,
-            mobile: user.mobile
-          }
-        };
-        result = await xlitepayPayout(payoutData);
-        console.log("this is result of xlitepay payout", result)
-        if (result?.status == 200 && result.data.status === 'success') {
-          return res.status(200).json({
-            success: true,
-            message: result.data.message || 'Payout is processing',
-            utr: result.data.utr,
-            reference_id: result.data.apitxnid
-          });
-        } else {
-          return res.status(400).json({
-            success: false,
-            message: result?.data?.message || 'Payout processing failed',
-            reference_id: result?.data?.apitxnid || reference_id
-          });
-        }
-      }
-      else if (user.MerchantDetail.payout_merchant_name === 'BluSwap') {
-        const payoutData = {
-          reference_id,
-          user_id,
-          amount,
-          amountToDeduct,
-          request_type,
-          beneficiary_details: {
-            account_number,
-            account_ifsc,
-            bank_name,
-            beneficiary_name,
-            mobile: user.mobile,
-            email: user.email
-          }
-        };
-        result = await bluswapPayout(payoutData);
-        console.log("this is result of bluswap payout", result)
-        if (result?.status == 200 && result.data.status === 'processing') {
-          return res.status(200).json({
-            success: true,
-            message: result.data.message || 'Payout initiated, awaiting confirmation',
-            reference_id: result.data.apitxnid,
-            bluswap_transaction_id: result.data.bluswap_transaction_id
-          });
-        } else {
-          return res.status(400).json({
-            success: false,
-            message: result?.data?.message || 'Payout processing failed',
-            reference_id: result?.data?.apitxnid || reference_id
-          });
-        }
-      }
-
-    } catch (error) {
-      logger.error('Error processing payout', { error: error.message });
-      res.status(500).json({ 
-        success: false, 
-        message: 'Error processing payout' 
+  try {
+    // Validate request
+    const validationResult = validatePaymentRequest(req);
+    setValidationResult(req, validationResult);
+    if (!validationResult.isValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid request',
+        errors: validationResult.errors
       });
     }
+
+    const { account_number, account_ifsc, bank_name, beneficiary_name, request_type, amount, reference_id } = req.body;
+
+    const user_id = req.user.id;
+    // Fetch user and all related data
+    const user = await User.findByPk(user_id, {
+      include: [
+        { model: UserStatus },
+        { model: MerchantDetails },
+        { model: MerchantCharges },
+        { model: MerchantModeCharges },
+        { model: FinancialDetails },
+        { model: UserIPs }
+      ]
+    });
+
+    const clientIp = getClientIp(req);
+    console.log('Client IP:', clientIp);
+
+    const isIpWhitelisted = user.UserIPs.some(ip => ip.ip_address === clientIp && ip.is_active);
+    if (!isIpWhitelisted) {
+      return res.status(400).json({
+        success: false,
+        message: `User IP address ${clientIp} is not whitelisted`
+      });
+    }
+
+    // if (amount < 100) {
+    //   return res.status(400).json({ 
+    //     success: false, 
+    //     message: 'Minimum payout amount is 100' 
+    //   });
+    // }
+    // Get financial details for the user
+    const financialDetails = await FinancialDetails.findOne({
+      where: { user_id: user_id }
+    });
+
+    if (!financialDetails) {
+      return res.status(400).json({
+        success: false,
+        message: 'Financial details not found for user'
+      });
+    }
+    const settlementAmount = parseFloat(financialDetails.settlement);
+    const requestedAmount = parseFloat(amount);
+
+    if (isNaN(settlementAmount) || isNaN(requestedAmount)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid amount values'
+      });
+    }
+
+    if (settlementAmount < requestedAmount) {
+      return res.status(400).json({
+        success: false,
+        message: 'Insufficient balance',
+        details: {
+          available: settlementAmount,
+          requested: requestedAmount
+        }
+      });
+    }
+
+    if (reference_id.length < 12 || reference_id.length > 25) {
+      return res.status(400).json({
+        success: false,
+        message: 'Reference number must be between 12 and 25 digits'
+      });
+    }
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    if (user.UserStatus.status === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'User is not active'
+      });
+    }
+    if (user.UserStatus && !user.UserStatus.payout_status) {
+      return res.status(403).json({
+        success: false,
+        message: 'User payout functionality is disabled'
+      });
+    }
+    if (user.FinancialDetails && user.FinancialDetails.settlement < amount) {
+      return res.status(400).json({
+        success: false,
+        message: 'Insufficient balance'
+      });
+    }
+    if (user.UserStatus.bank_deactive) {
+      return res.status(400).json({
+        success: false,
+        message: 'Bank is deactivated your ip due to security reasons'
+      });
+    }
+    if (user.UserStatus.tecnical_issue) {
+      return res.status(400).json({
+        success: false,
+        message: 'Technical issue please try again later'
+      });
+    }
+
+    // Check for duplicate transaction with optimized query
+    const existingTransaction = await PayoutTransaction.findOne(
+      { reference_id },
+      { _id: 1, status: 1 }
+    ).lean();
+
+    if (existingTransaction) {
+      logger.warn('Duplicate transaction attempt', {
+        reference_id,
+        existing_status: existingTransaction.status
+      });
+
+      return res.status(400).json({
+        success: false,
+        message: 'Transaction already exists',
+        transaction_id: existingTransaction._id,
+        status: existingTransaction.status
+      });
+    }
+
+    // Find all charge brackets for the user
+    const chargeBrackets = await MerchantCharges.findAll({
+      where: {
+        user_id: user_id
+      },
+      order: [['start_amount', 'ASC']]
+    });
+
+    if (!chargeBrackets || chargeBrackets.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No charge brackets found for the user'
+      });
+    }
+
+    // Find the appropriate charge bracket for the amount
+    const applicableBracket = chargeBrackets.find(bracket => {
+      const startAmount = parseFloat(bracket.start_amount);
+      const endAmount = parseFloat(bracket.end_amount);
+      return amount >= startAmount && amount <= endAmount;
+    });
+
+    if (!applicableBracket) {
+      return res.status(400).json({
+        success: false,
+        message: 'No charge bracket found for the given amount'
+      });
+    }
+
+    // Calculate charges based on charge type
+    let adminCharge = 0;
+    let agentCharge = 0;
+    let gstAmount = 0;
+    let platformFee = 0;
+
+    // Calculate admin charge
+    if (applicableBracket.admin_payout_charge_type === 'percentage') {
+      adminCharge = (amount * parseFloat(applicableBracket.admin_payout_charge)) / 100;
+    } else {
+      adminCharge = parseFloat(applicableBracket.admin_payout_charge);
+    }
+
+    // Calculate agent charge
+    if (applicableBracket.agent_payout_charge_type === 'percentage') {
+      agentCharge = (amount * parseFloat(applicableBracket.agent_payout_charge)) / 100;
+    } else {
+      agentCharge = parseFloat(applicableBracket.agent_payout_charge);
+    }
+
+    // Calculate total charges first
+    const totalCharges = parseFloat(adminCharge);
+
+    // Fetch platform charges from database
+    const platformCharges = await PlatformCharges.findOne({
+      where: { is_active: true }
+    });
+
+    if (platformCharges?.charge) {
+      platformFee = (totalCharges * parseFloat(platformCharges.charge)) / 100;
+    }
+
+    if (platformCharges?.gst) {
+      gstAmount = (totalCharges * parseFloat(platformCharges.gst)) / 100;
+    }
+
+    // Update total charges to include platform fee and GST
+    const finalTotalCharges = totalCharges + parseFloat(gstAmount) + parseFloat(platformFee);
+
+    // Calculate final amount to deduct (amount + charges)
+    const amountToDeduct = parseFloat(amount) + finalTotalCharges;
+
+    // Calculate remaining balance
+    const user_balance_left = parseFloat(user.FinancialDetail.settlement) - amountToDeduct;
+
+    // Update settlement in FinancialDetails using Sequelize
+    await FinancialDetails.update(
+      { settlement: user_balance_left },
+      {
+        where: { user_id: user_id },
+        returning: true
+      }
+    );
+
+    let userTransaction = await UserTransaction.create({
+      user: {
+        id: new mongoose.Types.ObjectId(user_id),
+        user_id: user_id
+      },
+      transaction_id: uuidv4(),
+      amount: amount,
+      transaction_type: 'payout',
+      reference_id: reference_id,
+      status: 'pending',
+      charges: {
+        admin_charge: adminCharge,
+        agent_charge: agentCharge,
+        total_charges: totalCharges
+      },
+      gst_amount: gstAmount,
+      platform_fee: platformFee,
+      balance: {
+        before: user.FinancialDetail.settlement,
+        after: user_balance_left
+      },
+      merchant_details: {
+        merchant_name: user.MerchantDetail.payout_merchant_name,
+        merchant_callback_url: user.MerchantDetail.payout_callback
+      },
+      remark: 'Payout request initiated',
+      metadata: {
+        requested_ip: clientIp
+      },
+      created_by: new mongoose.Types.ObjectId(user_id),
+      created_by_model: user.user_type
+    });
+    await userTransaction.save();
+
+    let payoutTransaction = await PayoutTransaction.create({
+      transaction_id: uuidv4(),
+      user: {
+        id: new mongoose.Types.ObjectId(user_id),
+        user_id: user_id.toString(),
+        name: user.name || '',
+        email: user.email || '',
+        mobile: user.mobile || '',
+        userType: user.user_type || ''
+      },
+      amount: amount,
+      charges: {
+        admin_charge: adminCharge,
+        agent_charge: agentCharge,
+        total_charges: totalCharges
+      },
+      gst_amount: gstAmount,
+      platform_fee: platformFee,
+      beneficiary_details: {
+        account_number: account_number,
+        account_ifsc: account_ifsc,
+        bank_name: bank_name,
+        beneficiary_name: beneficiary_name
+      },
+      reference_id: reference_id,
+      status: 'pending',
+      gateway_response: {
+        reference_id: reference_id,
+        status: 'pending',
+        message: 'Payout request initiated',
+        raw_response: null
+      },
+      metadata: {
+        requested_ip: clientIp
+      },
+      remark: 'Payout request initiated',
+      created_by: new mongoose.Types.ObjectId(user_id),
+      created_by_model: user.user_type || 'User'
+    });
+    await payoutTransaction.save();
+
+    await TransactionCharges.create({
+      transaction_type: 'payout',
+      reference_id: reference_id,
+      transaction_amount: amount,
+      transaction_utr: null,
+      merchant_charge: adminCharge,
+      agent_charge: agentCharge,
+      total_charges: totalCharges,
+      gst_amount: gstAmount,
+      platform_fee: platformFee,
+      user_id: user_id,
+      status: 'pending',
+      metadata: {
+        merchant_response: null,
+        requested_ip: clientIp
+      }
+    });
+    let result;
+    if (user.MerchantDetail.payout_merchant_name === 'Unpay') {
+      const payoutData = {
+        reference_id,
+        user_id,
+        amount,
+        amountToDeduct,
+        beneficiary_details: {
+          account_number,
+          account_ifsc,
+          bank_name,
+          beneficiary_name,
+          mobile: user.mobile
+        }
+      };
+      result = await unpayPayout(payoutData);
+      if (result?.status == 200) {
+        await payoutTransaction.updateOne(
+          { reference_id: reference_id },
+          { $set: { status: "completed", gateway_response: { reference_id, status: "completed", message: result.data.message, merchant_response: result.data.txn_id } } }
+        );
+        await userTransaction.updateOne(
+          { reference_id: reference_id },
+          { $set: { status: "completed", gateway_response: { reference_id, status: "completed", message: result.data.message, merchant_response: result.data.txn_id } } }
+        );
+        await TransactionCharges.update(
+          {
+            status: 'completed',
+            merchant_response: result.data.txn_id
+          },
+          { where: { reference_id: reference_id } }
+        );
+        res.status(200).json({
+          // result od chnages
+          success: true,
+          result: result.data.message,
+          utr: result.data.utr,
+          reference_id: result.data.apitxnid
+        });
+      } else {
+        await payoutTransaction.updateOne(
+          { reference_id: reference_id },
+          { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result?.data?.message || 'Unknown error' } } }
+        );
+        await userTransaction.updateOne(
+          { reference_id: reference_id },
+          { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result?.data?.message || 'Unknown error' } } }
+        );
+        await TransactionCharges.update(
+          {
+            status: 'failed',
+            merchant_response: result.data.txn_id
+          },
+          { where: { reference_id: reference_id } }
+        );
+        res.status(400).json({
+          success: false,
+          message: 'Payout processing failed',
+          error: result?.data?.message || 'Unknown error',
+          utr: result.data.utr,
+          reference_id: result.data.apitxnid
+        });
+      }
+    }
+    else if (user.MerchantDetail.payout_merchant_name === 'SPay') {
+      console.log("this is payout data of spay", payoutData)
+      const payoutData = {
+        reference_id,
+        user_id,
+        amount,
+        amountToDeduct,
+        request_type,
+        beneficiary_details: {
+          account_number,
+          account_ifsc,
+          bank_name,
+          beneficiary_name,
+          mobile: user.mobile,
+          email: user.email,
+          address: user.address,
+          upi_on: user.upi_on || ''
+        }
+      };
+      result = await spayPayout(payoutData);
+      console.log("this is result of spay payout", result)
+    }
+    else if (user.MerchantDetail.payout_merchant_name === 'Philpay') {
+      const payoutData = {
+        reference_id,
+        user_id,
+        amount,
+        amountToDeduct,
+        request_type,
+        beneficiary_details: {
+          account_number,
+          account_ifsc,
+          bank_name,
+          beneficiary_name,
+          mobile: user.mobile,
+          email: user.email,
+          address: user.address
+        }
+      };
+      result = await philpayPayout(payoutData);
+      console.log("this is result of philpay payout", result)
+      if (result?.status == 200) {
+        return res.status(200).json({
+          success: true,
+          message: result.data.message || "Payout is processing",
+          merchant_order_id: result.data.merchant_order_id
+        });
+      }
+      else {
+        return res.status(400).json({
+          success: false,
+          message: result.data.message || 'Payout processing failed',
+          reference_id: result.data.apitxnid
+        });
+      }
+    }
+    else if (user.MerchantDetail.payout_merchant_name === 'Xlitepay') {
+      const payoutData = {
+        reference_id,
+        user_id,
+        amount,
+        amountToDeduct,
+        beneficiary_details: {
+          account_number,
+          account_ifsc,
+          bank_name,
+          beneficiary_name,
+          mobile: user.mobile
+        }
+      };
+      result = await xlitepayPayout(payoutData);
+      console.log("this is result of xlitepay payout", result)
+      if (result?.status == 200 && result.data.status === 'success') {
+        return res.status(200).json({
+          success: true,
+          message: result.data.message || 'Payout is processing',
+          utr: result.data.utr,
+          reference_id: result.data.apitxnid
+        });
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: result?.data?.message || 'Payout processing failed',
+          reference_id: result?.data?.apitxnid || reference_id
+        });
+      }
+    }
+    else if (user.MerchantDetail.payout_merchant_name === 'BluSwap') {
+      const payoutData = {
+        reference_id,
+        user_id,
+        amount,
+        amountToDeduct,
+        request_type,
+        beneficiary_details: {
+          account_number,
+          account_ifsc,
+          bank_name,
+          beneficiary_name,
+          mobile: user.mobile,
+          email: user.email
+        }
+      };
+      result = await bluswapPayout(payoutData);
+      console.log("this is result of bluswap payout", result)
+      if (result?.status == 200 && result.data.status === 'processing') {
+        return res.status(200).json({
+          success: true,
+          message: result.data.message || 'Payout initiated, awaiting confirmation',
+          reference_id: result.data.apitxnid,
+          bluswap_transaction_id: result.data.bluswap_transaction_id
+        });
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: result?.data?.message || 'Payout processing failed',
+          reference_id: result?.data?.apitxnid || reference_id
+        });
+      }
+    }
+
+  } catch (error) {
+    logger.error('Error processing payout', { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Error processing payout'
+    });
+  }
 };
 
 const getPayoutTransactionStatus = async (req, res) => {
   try {
     const user_id = req.user.id;
-        // Fetch user and all related data
+    // Fetch user and all related data
     const user = await User.findByPk(user_id, {
-          include: [
-              { model: UserStatus },
-              { model: MerchantDetails },
-              { model: MerchantCharges },
-              { model: MerchantModeCharges },
-              { model: FinancialDetails },
-              { model: UserIPs }
+      include: [
+        { model: UserStatus },
+        { model: MerchantDetails },
+        { model: MerchantCharges },
+        { model: MerchantModeCharges },
+        { model: FinancialDetails },
+        { model: UserIPs }
       ]
-      });
+    });
     const { transaction_id } = req.params;
 
 
     // Find transaction
     const transaction = await PayoutTransaction.findOne({
-      reference_id:transaction_id
+      reference_id: transaction_id
     });
 
     if (!transaction) {
@@ -558,13 +558,13 @@ const getPayoutTransactionStatus = async (req, res) => {
       });
     }
     let result;
-    if(user.MerchantDetail.payout_merchant_name === 'Unpay'){
+    if (user.MerchantDetail.payout_merchant_name === 'Unpay') {
       result = await unpayTransactionStatus(transaction_id);
       console.log("this is result of unpay payout", result)
-    }else if(user.MerchantDetail.payout_merchant_name === 'SPay'){
+    } else if (user.MerchantDetail.payout_merchant_name === 'SPay') {
       result = await spayTransactionStatus(transaction_id);
       console.log("this is result of spay payout", result)
-    }else if(user.MerchantDetail.payout_merchant_name === 'Philpay'){
+    } else if (user.MerchantDetail.payout_merchant_name === 'Philpay') {
       result = await philpayTransactionStatus(transaction_id);
       console.log("this is result of philpay payout", result)
       if (result && result.data && result.data.response && typeof result.data.response === 'object') {
@@ -574,21 +574,21 @@ const getPayoutTransactionStatus = async (req, res) => {
         result = { ...result, data: { ...result.data, response: { ...sanitized, amount: adjustedAmount } } };
       }
       // console.log("this is result of philpay payout", result)
-    }else if(user.MerchantDetail.payout_merchant_name === 'Xlitepay'){
+    } else if (user.MerchantDetail.payout_merchant_name === 'Xlitepay') {
       result = await xlitepayTransactionStatus(transaction_id);
       console.log("this is result of xlitepay payout", result)
-    }else if(user.MerchantDetail.payout_merchant_name === 'BluSwap'){
+    } else if (user.MerchantDetail.payout_merchant_name === 'BluSwap') {
       result = await bluswapTransactionStatus(transaction_id);
       console.log("this is result of bluswap payout", result)
     }
-    if(result.status === 200){
+    if (result.status === 200) {
       return res.status(200).json({
         success: true,
         message: 'Transaction status retrieved successfully',
         result: result
       });
     }
-    else{
+    else {
       return res.status(400).json({
         success: false,
         message: 'Transaction status not found'
@@ -634,7 +634,7 @@ const handleBalanceCheck = async (req, res) => {
     const financialDetails = await FinancialDetails.findOne({
       where: { user_id: user_id }
     });
-    if(!financialDetails){
+    if (!financialDetails) {
       return res.status(400).json({
         success: false,
         message: 'Financial details not found for user'
@@ -660,7 +660,7 @@ const handleBalanceCheck = async (req, res) => {
 }
 
 module.exports = {
-    initiatePayout,
-    getPayoutTransactionStatus,
-    handleBalanceCheck
+  initiatePayout,
+  getPayoutTransactionStatus,
+  handleBalanceCheck
 };
