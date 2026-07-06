@@ -11,8 +11,7 @@ export default defineConfig({
   },
   server: {
     port: 5175,
-    historyApiFallback: true,
-    proxy: {
+proxy: {
       '/api': {
         target: 'https://dashboard.accuzpay.in',
         changeOrigin: true,
