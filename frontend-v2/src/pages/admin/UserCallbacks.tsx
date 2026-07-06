@@ -1,146 +1,169 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { TextField, Button, Select, MenuItem, FormControl, InputLabel } from '@mui/material'
-import { ArrowLeft, Save, Play } from 'lucide-react'
+import { ArrowLeft, Save } from 'lucide-react'
 import api from '@/utils/axios'
 import toast from 'react-hot-toast'
 
-interface CallbackSettings {
-  payinUrl: string; payinMethod: string
-  payoutUrl: string; payoutMethod: string
-  payinMerchantName: string; payoutMerchantName: string
-}
+const PAYIN_MERCHANTS = ['Unpay', 'Spay', 'SpayIcici', 'HDFC', 'AirPay', 'Philpay']
+const PAYOUT_MERCHANTS = ['Unpay', 'Spay', 'Philpay', 'Xlitepay', 'BluSwap']
 
 export default function UserCallbacks() {
   const { userId } = useParams()
   const navigate = useNavigate()
-  const [settings, setSettings] = useState<CallbackSettings>({
-    payinUrl: '', payinMethod: 'POST', payoutUrl: '', payoutMethod: 'POST',
-    payinMerchantName: '', payoutMerchantName: '',
-  })
+
+  const [current, setCurrent] = useState({ payinUrl: '', payoutUrl: '', payinMerchant: '', payoutMerchant: '' })
+  const [payinUrl, setPayinUrl] = useState('')
+  const [payinMerchant, setPayinMerchant] = useState('')
+  const [payoutUrl, setPayoutUrl] = useState('')
+  const [payoutMerchant, setPayoutMerchant] = useState('')
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [testing, setTesting] = useState<'payin' | 'payout' | null>(null)
+  const [savingPayin, setSavingPayin] = useState(false)
+  const [savingPayout, setSavingPayout] = useState(false)
 
   useEffect(() => {
     api.get(`/admin/users/${userId}/callback`)
       .then((r) => {
         if (r.data.success) {
           const { payin_callback, payout_callback, payin_merchant_name, payout_merchant_name } = r.data.data
-          setSettings((p) => ({ ...p, payinUrl: payin_callback || '', payoutUrl: payout_callback || '', payinMerchantName: payin_merchant_name || '', payoutMerchantName: payout_merchant_name || '' }))
+          setCurrent({
+            payinUrl: payin_callback || '',
+            payoutUrl: payout_callback || '',
+            payinMerchant: payin_merchant_name || '',
+            payoutMerchant: payout_merchant_name || '',
+          })
         }
       })
       .catch(() => toast.error('Failed to load callback settings'))
       .finally(() => setLoading(false))
   }, [userId])
 
-  const handleSave = async () => {
-    setSaving(true)
+  const handlePayinSave = async () => {
+    setSavingPayin(true)
     try {
-      await api.post(`/admin/users/${userId}/callback`, {
-        payin_callback: settings.payinUrl, payin_method: settings.payinMethod,
-        payout_callback: settings.payoutUrl, payout_method: settings.payoutMethod,
-        payin_merchant_name: settings.payinMerchantName, payout_merchant_name: settings.payoutMerchantName,
+      const res = await api.post(`/admin/users/${userId}/callback/payin`, {
+        payinUrl, payinMerchantName: payinMerchant,
       })
-      toast.success('Callback settings saved')
-    } catch { toast.error('Failed to save') }
-    finally { setSaving(false) }
+      if (res.data.success) {
+        setCurrent((p) => ({ ...p, payinUrl: payinUrl || p.payinUrl, payinMerchant: payinMerchant || p.payinMerchant }))
+        setPayinUrl(''); setPayinMerchant('')
+        toast.success('Payin callback updated successfully')
+      } else {
+        toast.error(res.data.message || 'Failed to update')
+      }
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || 'Failed to update payin callback')
+    } finally { setSavingPayin(false) }
   }
 
-  const handleTest = async (type: 'payin' | 'payout') => {
-    setTesting(type)
+  const handlePayoutSave = async () => {
+    setSavingPayout(true)
     try {
-      await api.post(`/admin/users/${userId}/test-callback`, { type })
-      toast.success(`${type} callback test sent`)
-    } catch { toast.error('Test failed') }
-    finally { setTesting(null) }
+      const res = await api.post(`/admin/users/${userId}/callback/payout`, {
+        payoutUrl, payoutMerchantName: payoutMerchant,
+      })
+      if (res.data.success) {
+        setCurrent((p) => ({ ...p, payoutUrl: payoutUrl || p.payoutUrl, payoutMerchant: payoutMerchant || p.payoutMerchant }))
+        setPayoutUrl(''); setPayoutMerchant('')
+        toast.success('Payout callback updated successfully')
+      } else {
+        toast.error(res.data.message || 'Failed to update')
+      }
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || 'Failed to update payout callback')
+    } finally { setSavingPayout(false) }
   }
-
-  const set = (key: keyof CallbackSettings, val: string) => setSettings((p) => ({ ...p, [key]: val }))
 
   return (
     <div className="max-w-3xl space-y-5 animate-fade-in">
       <div className="flex items-center gap-3">
-        <button onClick={() => navigate(-1)} className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 transition-all"><ArrowLeft size={16} /></button>
+        <button onClick={() => navigate(-1)}
+          className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 transition-all">
+          <ArrowLeft size={16} />
+        </button>
         <div className="page-header mb-0">
           <h1 className="page-title">Callback Settings</h1>
-          <p className="page-subtitle">Configure payin & payout callback URLs</p>
+          <p className="page-subtitle">Configure payin & payout callback URLs and merchants</p>
         </div>
       </div>
 
-      <div className="space-y-4">
-        {/* Payin */}
+      {/* Current settings summary */}
+      {!loading && (
         <div className="bg-white rounded-2xl border border-slate-200 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />Payin Callback
-            </h3>
-            <Button size="small" variant="outlined" startIcon={<Play size={12} />}
-              disabled={!settings.payinUrl || testing === 'payin'}
-              onClick={() => handleTest('payin')}
-              sx={{ borderColor: '#E2E8F0', color: '#64748B', borderRadius: 2, fontSize: '0.7rem' }}>
-              {testing === 'payin' ? 'Testing...' : 'Test'}
-            </Button>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="sm:col-span-2">
-              <TextField fullWidth label="Payin Callback URL" value={settings.payinUrl}
-                onChange={(e) => set('payinUrl', e.target.value)} placeholder="https://your-domain.com/payin-callback" size="small" />
+          <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+            <span className="w-1 h-4 bg-[#1A2744] rounded-full" />Current Settings
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs font-medium text-slate-500 mb-1">Payin Callback</p>
+              <p className="text-sm text-slate-800 break-all">{current.payinUrl || <span className="text-slate-400">Not set</span>}</p>
+              <p className="text-xs text-slate-400 mt-0.5">Merchant: {current.payinMerchant || '—'}</p>
             </div>
-            <FormControl size="small">
-              <InputLabel>Method</InputLabel>
-              <Select value={settings.payinMethod} label="Method" onChange={(e) => set('payinMethod', e.target.value)}>
-                <MenuItem value="POST">POST</MenuItem>
-                <MenuItem value="GET">GET</MenuItem>
-              </Select>
-            </FormControl>
-            <div className="sm:col-span-3">
-              <TextField fullWidth label="Payin Merchant Name" value={settings.payinMerchantName}
-                onChange={(e) => set('payinMerchantName', e.target.value)} size="small" />
+            <div>
+              <p className="text-xs font-medium text-slate-500 mb-1">Payout Callback</p>
+              <p className="text-sm text-slate-800 break-all">{current.payoutUrl || <span className="text-slate-400">Not set</span>}</p>
+              <p className="text-xs text-slate-400 mt-0.5">Merchant: {current.payoutMerchant || '—'}</p>
             </div>
           </div>
         </div>
+      )}
 
-        {/* Payout */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-orange-500" />Payout Callback
-            </h3>
-            <Button size="small" variant="outlined" startIcon={<Play size={12} />}
-              disabled={!settings.payoutUrl || testing === 'payout'}
-              onClick={() => handleTest('payout')}
-              sx={{ borderColor: '#E2E8F0', color: '#64748B', borderRadius: 2, fontSize: '0.7rem' }}>
-              {testing === 'payout' ? 'Testing...' : 'Test'}
-            </Button>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="sm:col-span-2">
-              <TextField fullWidth label="Payout Callback URL" value={settings.payoutUrl}
-                onChange={(e) => set('payoutUrl', e.target.value)} placeholder="https://your-domain.com/payout-callback" size="small" />
-            </div>
-            <FormControl size="small">
-              <InputLabel>Method</InputLabel>
-              <Select value={settings.payoutMethod} label="Method" onChange={(e) => set('payoutMethod', e.target.value)}>
-                <MenuItem value="POST">POST</MenuItem>
-                <MenuItem value="GET">GET</MenuItem>
-              </Select>
-            </FormControl>
-            <div className="sm:col-span-3">
-              <TextField fullWidth label="Payout Merchant Name" value={settings.payoutMerchantName}
-                onChange={(e) => set('payoutMerchantName', e.target.value)} size="small" />
-            </div>
-          </div>
+      {/* Update Payin */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-5">
+        <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-500" />Update Payin Callback
+        </h3>
+        <div className="space-y-4">
+          <TextField
+            fullWidth size="small" label="Callback URL"
+            placeholder="Enter new payin callback URL"
+            value={payinUrl} onChange={(e) => setPayinUrl(e.target.value)}
+          />
+          <FormControl fullWidth size="small">
+            <InputLabel>Merchant Name</InputLabel>
+            <Select value={payinMerchant} label="Merchant Name" onChange={(e) => setPayinMerchant(e.target.value)}>
+              <MenuItem value="">Select Merchant</MenuItem>
+              {PAYIN_MERCHANTS.map((m) => <MenuItem key={m} value={m}>{m}</MenuItem>)}
+            </Select>
+          </FormControl>
+          <Button variant="contained" startIcon={<Save size={14} />}
+            onClick={handlePayinSave} disabled={savingPayin}
+            sx={{ bgcolor: '#1A2744', borderRadius: 2, '&:hover': { bgcolor: '#0E172A' } }}>
+            {savingPayin ? 'Updating...' : 'Update Payin Callback'}
+          </Button>
         </div>
       </div>
 
-      <div className="flex gap-3">
-        <Button variant="contained" startIcon={<Save size={15} />} onClick={handleSave} disabled={saving || loading}
-          sx={{ bgcolor: '#1A2744', borderRadius: 2, '&:hover': { bgcolor: '#0E172A' } }}>
-          {saving ? 'Saving...' : 'Save Settings'}
-        </Button>
-        <Button variant="outlined" onClick={() => navigate(-1)} sx={{ borderColor: '#E2E8F0', color: '#64748B', borderRadius: 2 }}>Cancel</Button>
+      {/* Update Payout */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-5">
+        <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-orange-500" />Update Payout Callback
+        </h3>
+        <div className="space-y-4">
+          <TextField
+            fullWidth size="small" label="Callback URL"
+            placeholder="Enter new payout callback URL"
+            value={payoutUrl} onChange={(e) => setPayoutUrl(e.target.value)}
+          />
+          <FormControl fullWidth size="small">
+            <InputLabel>Merchant Name</InputLabel>
+            <Select value={payoutMerchant} label="Merchant Name" onChange={(e) => setPayoutMerchant(e.target.value)}>
+              <MenuItem value="">Select Merchant</MenuItem>
+              {PAYOUT_MERCHANTS.map((m) => <MenuItem key={m} value={m}>{m}</MenuItem>)}
+            </Select>
+          </FormControl>
+          <Button variant="contained" startIcon={<Save size={14} />}
+            onClick={handlePayoutSave} disabled={savingPayout}
+            sx={{ bgcolor: '#1A2744', borderRadius: 2, '&:hover': { bgcolor: '#0E172A' } }}>
+            {savingPayout ? 'Updating...' : 'Update Payout Callback'}
+          </Button>
+        </div>
       </div>
+
+      <Button variant="outlined" onClick={() => navigate(-1)}
+        sx={{ borderColor: '#E2E8F0', color: '#64748B', borderRadius: 2 }}>
+        Back
+      </Button>
     </div>
   )
 }

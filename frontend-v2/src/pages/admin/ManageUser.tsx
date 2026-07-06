@@ -9,8 +9,9 @@ import toast from 'react-hot-toast'
 
 interface UserRow {
   id: string; name: string; username: string; email: string
-  userType: string; walletBalance: number; status: string; mobile: string
-  payin: boolean; payout: boolean; [key: string]: unknown
+  userType: string; walletBalance: number; settlement: number
+  status: string; mobile: string; payin: boolean; payout: boolean
+  [key: string]: unknown
 }
 
 export default function ManageUser() {
@@ -47,7 +48,8 @@ export default function ManageUser() {
       <Chip label={r.userType} size="small" variant="outlined"
         sx={{ fontSize: '0.7rem', fontWeight: 600, borderRadius: '6px', height: 22, borderColor: '#1A2744', color: '#1A2744' }} />
     )},
-    { key: 'walletBalance', label: 'Balance', align: 'right', render: (r) => <span className="font-semibold text-emerald-700">{formatCurrency(r.walletBalance)}</span> },
+    { key: 'walletBalance', label: 'Wallet Balance', align: 'right', render: (r) => <span className="font-semibold text-emerald-700">{formatCurrency(r.walletBalance)}</span> },
+    { key: 'settlement', label: 'Settlement Balance', align: 'right', render: (r) => <span className="font-semibold text-[#1A2744]">{formatCurrency(Number(r.settlement ?? 0))}</span> },
     { key: 'status', label: 'Status', render: (r) => (
       <Chip label={String(r.status)} size="small"
         color={r.status === 'active' ? 'success' : 'error'}
