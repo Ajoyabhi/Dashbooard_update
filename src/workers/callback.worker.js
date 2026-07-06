@@ -136,7 +136,13 @@ callbackQueue.process(async function (job) {
           webhookSent = true;
           break;
         } catch (error) {
-          logger.warn('Callback attempt failed', { reference_id: apitxnid, error: error.message, attempt });
+          logger.warn('Callback attempt failed', {
+            reference_id: apitxnid,
+            error: error.message,
+            response_status: error.response?.status,
+            response_body: error.response?.data,
+            attempt
+          });
           if (attempt < maxRetries) {
             await new Promise(resolve => setTimeout(resolve, baseDelay * Math.pow(2, attempt - 1)));
           }
@@ -432,6 +438,8 @@ philpayPayoutQueue.process(async function (job) {
             reference_id: job.data.data.object.merchant_order_id,
             callback_url: merchantDetails.payout_callback,
             error: error.message,
+            response_status: error.response?.status,
+            response_body: error.response?.data,
             attempt: attempt,
             maxRetries: maxRetries
           });
@@ -665,6 +673,8 @@ bluswapPayoutQueue.process(async function (job) {
             reference_id: referenceId,
             callback_url: merchantDetails.payout_callback,
             error: error.message,
+            response_status: error.response?.status,
+            response_body: error.response?.data,
             attempt: attempt,
             maxRetries: maxRetries
           });
