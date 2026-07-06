@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 45 93% 47%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 221 83% 53%;
+    --radius: 0.75rem;
+  }
+
+  * { @apply border-border; }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  html { scroll-behavior: smooth; }
+}
+
+@layer components {
+  .sidebar-link {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer;
+  }
+  .sidebar-link-active {
+    @apply bg-white/15 text-white shadow-sm;
+  }
+  .sidebar-link-inactive {
+    @apply text-slate-300 hover:bg-white/10 hover:text-white;
+  }
+  .stat-card {
+    @apply bg-white rounded-2xl border border-slate-100 shadow-sm p-6 transition-all duration-200 hover:shadow-md;
+  }
+  .page-header { @apply mb-6; }
+  .page-title { @apply text-2xl font-bold text-slate-800; }
+  .page-subtitle { @apply text-sm text-slate-500 mt-1; }
+}
+
+/* MUI overrides */
+.MuiDataGrid-root { border: none !important; font-family: 'Inter', sans-serif !important; }
+.MuiDataGrid-columnHeaders { background-color: #f8fafc !important; border-bottom: 2px solid #e2e8f0 !important; }
+.MuiDataGrid-columnHeaderTitle { font-weight: 600 !important; font-size: 0.75rem !important; text-transform: uppercase !important; letter-spacing: 0.05em !important; color: #64748b !important; }
+.MuiDataGrid-cell { border-bottom: 1px solid #f1f5f9 !important; font-size: 0.875rem !important; color: #1e293b !important; }
+.MuiDataGrid-row:hover { background-color: #f8fafc !important; }
+.MuiChip-root { font-family: 'Inter', sans-serif !important; font-weight: 500 !important; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #f1f5f9; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
