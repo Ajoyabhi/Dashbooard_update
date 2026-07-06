@@ -2,7 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
 const { logger } = require('../utils/logger');
 const { processPayin } = require('../services/payment.service');
-const { callbackQueue, philpayPayoutQueue, createRedisClient } = require('../config/queue.config');
+const { callbackQueue, philpayPayoutQueue, bluswapPayoutQueue, createRedisClient } = require('../config/queue.config');
 const PayinTransaction = require('../models/payinTransaction.model');
 const { MerchantDetails } = require('../models');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
@@ -636,6 +636,32 @@ const handlePhilpayPayoutCallback = async (req, res) => {
   }
 };
 
+const handleBluswapPayoutCallback = async (req, res) => {
+  try {
+    const callbackData = req.method === 'GET' ? req.query : req.body;
+    logger.info('Received BluSwap payout callback', {
+      method: req.method,
+      data: callbackData
+    });
+    console.log("this is callback data of bluswap payout", callbackData);
+    const job = await bluswapPayoutQueue.add(callbackData, {
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 5000
+      }
+    });
+    res.status(200).json({
+      success: true,
+      message: 'Callback processed successfully',
+      job_id: job.id
+    });
+  } catch (error) {
+    logger.error('Error processing BluSwap payout callback', { error: error.message });
+    res.status(500).json({ success: false, message: 'Error processing callback' });
+  }
+};
+
 const hdfcCallback = async (req, res) => {
   try {
     const apiKey = req.headers['x-api-key'];
@@ -703,6 +729,7 @@ module.exports = {
   handleSpayCallback,
   handleSpayPayoutCallback,
   handlePhilpayPayoutCallback,
+  handleBluswapPayoutCallback,
   hdfcCallback,
   airpayCallback
 };

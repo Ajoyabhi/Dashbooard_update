@@ -785,6 +785,205 @@ async function xlitepayPayout(payoutData) {
     }
 }
 
+async function createBluswapContact(payoutData) {
+    const baseUrl = process.env.BLUSWAP_BASE_URL;
+    const apiKey = process.env.BLUSWAP_API_KEY;
+    const ip = process.env.BLUSWAP_IP || '0.0.0.0';
+
+    const payload = {
+        bank_account_number: payoutData.beneficiary_details.account_number,
+        ifsc: payoutData.beneficiary_details.account_ifsc,
+        name: payoutData.beneficiary_details.beneficiary_name,
+        contact_number: payoutData.beneficiary_details.mobile,
+        email_id: payoutData.beneficiary_details.email,
+        account_type: payoutData.beneficiary_details.account_type || 'Savings'
+    };
+
+    const response = await axios.post(`${baseUrl}/contacts_for_cust`, payload, {
+        headers: {
+            'x-api-key': apiKey,
+            'X-Real-IP': ip,
+            'Content-Type': 'application/json'
+        }
+    });
+
+    return { data: response.data, request: payload };
+}
+
+async function bluswapPayout(payoutData) {
+    const startTime = Date.now();
+    logger.info('Starting bluswapPayout process', { reference: payoutData.reference_id });
+    try {
+        const baseUrl = process.env.BLUSWAP_BASE_URL;
+        const apiKey = process.env.BLUSWAP_API_KEY;
+        const ip = process.env.BLUSWAP_IP || '0.0.0.0';
+        const vaId = process.env.BLUSWAP_VA_ID;
+        if (!baseUrl || !apiKey || !vaId) {
+            throw new Error('BluSwap credentials or VA ID not set in environment variables');
+        }
+
+        // Beneficiary must be registered as a contact before a payout can be initiated
+        let contactResponse;
+        try {
+            contactResponse = await createBluswapContact(payoutData);
+        } catch (err) {
+            const errData = err.response ? err.response.data : { message: err.message };
+            await ApiLogs.create({
+                request: JSON.stringify({ step: 'create_contact', reference_id: payoutData.reference_id }),
+                response: JSON.stringify(errData),
+                service: 'PAYOUT',
+                service_api: 'BLUSWAP',
+                status: 'error',
+                error_message: errData.message || err.message,
+                execution_time: Date.now() - startTime
+            });
+            throw new Error(errData.message || 'Failed to create BluSwap contact');
+        }
+
+        const contactId = contactResponse.data?.data?.contact_id;
+        if (!contactId) {
+            throw new Error(contactResponse.data?.message || 'BluSwap contact creation did not return a contact_id');
+        }
+
+        const payload = {
+            order_id: payoutData.reference_id,
+            contact_id: contactId,
+            amount: Number(payoutData.amount).toFixed(2),
+            payment_mode: payoutData.request_type || 'IMPS',
+            description: payoutData.description || `Payout for ${payoutData.reference_id}`,
+            va_id: vaId
+        };
+
+        logger.info('Preparing payout request for BluSwap', { payload });
+
+        let result;
+        try {
+            const response = await axios.post(`${baseUrl}/merchants/initiate_pay_out_cust`, payload, {
+                headers: {
+                    'x-api-key': apiKey,
+                    'X-Real-IP': ip,
+                    'Content-Type': 'application/json'
+                }
+            });
+            result = response.data;
+        } catch (err) {
+            result = err.response ? err.response.data : { status: 'FAILED', message: err.message };
+        }
+        console.log("=======================================================")
+        console.log("This is part of result", result);
+        console.log("=======================================================")
+
+        logger.info('Received response from BluSwap API', { status: result.status, message: result.message });
+
+        const apiLog = await ApiLogs.create({
+            request: JSON.stringify(payload),
+            response: JSON.stringify(result),
+            service: 'PAYOUT',
+            service_api: 'BLUSWAP',
+            status: result.status === 'SUCCESS' ? 'success' : 'error',
+            error_message: result.message || null,
+            execution_time: Date.now() - startTime
+        });
+        await apiLog.save();
+        logger.info('API log created', { logId: apiLog._id });
+
+        if (result.status === 'SUCCESS') {
+            // BluSwap returns an INITIATED status here - actual settlement is confirmed
+            // later via the transaction status check, so we don't mark this completed yet.
+            const bluswapTransactionId = result.data?.bluswap_transaction_id || null;
+
+            await PayoutTransaction.updateOne(
+                { reference_id: payoutData.reference_id },
+                {
+                    $set: {
+                        status: 'processing',
+                        gateway_response: {
+                            merchant_response: bluswapTransactionId,
+                            status: 'processing',
+                            message: result.message,
+                            utr: null
+                        }
+                    }
+                }
+            );
+            logger.info('Payout transaction updated', { reference: payoutData.reference_id });
+
+            return {
+                data: {
+                    status: 'processing',
+                    message: result.message,
+                    utr: null,
+                    apitxnid: payoutData.reference_id,
+                    contact_id: contactId,
+                    bluswap_transaction_id: bluswapTransactionId
+                },
+                status: 200
+            };
+        } else {
+            await TransactionCharges.update(
+                {
+                    status: 'failed',
+                    transaction_utr: null
+                },
+                {
+                    where: {
+                        reference_id: payoutData.reference_id
+                    }
+                }
+            );
+
+            const userFinancial = await FinancialDetails.findOne({
+                where: { user_id: payoutData.user_id }
+            });
+            if (userFinancial) {
+                const newSettlement = parseFloat(userFinancial.settlement) + parseFloat(payoutData.amountToDeduct || 0);
+                await FinancialDetails.update(
+                    { settlement: newSettlement },
+                    { where: { user_id: payoutData.user_id } }
+                );
+            }
+
+            await PayoutTransaction.updateOne(
+                { reference_id: payoutData.reference_id },
+                {
+                    $set: {
+                        status: 'failed',
+                        gateway_response: {
+                            merchant_response: JSON.stringify(result),
+                            status: 'failed',
+                            message: result.message
+                        }
+                    }
+                }
+            );
+            logger.info('Payout transaction updated to failed', { reference: payoutData.reference_id });
+
+            return {
+                data: {
+                    status: 'failed',
+                    message: result.message || 'Payout processing failed',
+                    apitxnid: payoutData.reference_id
+                },
+                status: 200
+            };
+        }
+    } catch (error) {
+        logger.error('Error in bluswapPayout', {
+            error: error.message,
+            stack: error.stack,
+            reference: payoutData.reference_id
+        });
+
+        return {
+            data: {
+                status: 'error',
+                message: error.message
+            },
+            status: 500
+        };
+    }
+}
+
 async function xlitepayBalanceCheck() {
     const baseUrl = process.env.XLITEPAY_BASE_URL;
     const token = process.env.XLITEPAY_TOKEN;
@@ -811,5 +1010,6 @@ module.exports = {
     spayPayout,
     philpayPayout,
     xlitepayPayout,
-    xlitepayBalanceCheck
+    xlitepayBalanceCheck,
+    bluswapPayout
 }

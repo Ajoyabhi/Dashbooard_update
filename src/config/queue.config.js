@@ -253,6 +253,44 @@ philpayPayoutQueue.on('failed', (job, error) => {
   });
 });
 
+const bluswapPayoutQueue = new Bull('bluswapPayout', queueOptions);
+logger.info("BluSwap payout queue created with proper Redis configuration");
+
+bluswapPayoutQueue.on('error', (error) => {
+  logger.error('BluSwap payout queue error:', error);
+  // Attempt to recover from connection errors
+  if (error.message.includes('Connection is closed')) {
+    logger.info('Attempting to recover from connection error...');
+    bluswapPayoutQueue.resume();
+  }
+});
+
+bluswapPayoutQueue.on('ready', () => {
+  logger.info('BluSwap payout queue is ready and connected to Redis');
+});
+
+bluswapPayoutQueue.on('active', (job) => {
+  logger.info('BluSwap payout job started processing', {
+    jobId: job.id,
+    timestamp: new Date().toISOString()
+  });
+});
+
+bluswapPayoutQueue.on('completed', (job) => {
+  logger.info('BluSwap payout job completed', {
+    jobId: job.id,
+    timestamp: new Date().toISOString()
+  });
+});
+
+bluswapPayoutQueue.on('failed', (job, error) => {
+  logger.error('BluSwap payout job failed', {
+    jobId: job.id,
+    error: error.message,
+    timestamp: new Date().toISOString()
+  });
+});
+
 
 
 // Apply event handlers to all clients
@@ -266,12 +304,14 @@ process.on('SIGTERM', async () => {
   await callbackQueue.close();
   await payinQueue.close();
   await philpayPayoutQueue.close();
+  await bluswapPayoutQueue.close();
   process.exit(0);
 });
 
 module.exports = {
   callbackQueue,
   philpayPayoutQueue,
+  bluswapPayoutQueue,
   payinQueue,
   createRedisClient
 }; 
