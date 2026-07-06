@@ -156,6 +156,7 @@ export default function DevelopmentDocs() {
           { param: 'address',         type: 'object', required: 'Yes', desc: "Customer's billing address object" },
           { param: 'address.pincode', type: 'string', required: 'Yes', desc: '6-digit postal/PIN code' },
           { param: 'address.line1',   type: 'string', required: 'No',  desc: 'Street address line 1' },
+          { param: 'address.line2',   type: 'string', required: 'No',  desc: 'Street address line 2 (apartment, suite, etc.)' },
           { param: 'address.city',    type: 'string', required: 'No',  desc: 'City name' },
           { param: 'address.state',   type: 'string', required: 'No',  desc: 'State name' },
           { param: 'address.country', type: 'string', required: 'No',  desc: 'Country (default: India)' },

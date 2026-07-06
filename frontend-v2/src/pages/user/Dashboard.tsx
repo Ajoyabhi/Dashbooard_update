@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
 import { Select, MenuItem, FormControl, InputLabel, LinearProgress, Skeleton } from '@mui/material'
 import { Wallet, TrendingDown, TrendingUp, Activity, ArrowUpCircle, BadgeCheck, RefreshCw } from 'lucide-react'
+// BadgeCheck used in hero card settlement balance icon
 import StatCard from '@/components/ui/StatCard'
 import api from '@/utils/axios'
 import { formatCurrency } from '@/utils/formatUtils'
@@ -25,7 +26,24 @@ export default function UserDashboard() {
       const payload = dashRes.data?.data ?? dashRes.data
       setData(payload)
       const chart = chartRes.data?.data ?? chartRes.data
-      setChartData(Array.isArray(chart) ? chart : [])
+      setChartData(
+        Array.isArray(chart)
+          ? chart.map((item: Record<string, unknown>) => {
+              const payin = item.payin as Record<string, number> | undefined
+              const payout = item.payout as Record<string, number> | undefined
+              const dateStr = String(item.date ?? '')
+              const label = dateStr
+                ? new Date(dateStr).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })
+                : ''
+              return {
+                date: label,
+                payin: payin?.total_amount ?? 0,
+                payout: payout?.total_amount ?? 0,
+                count: (payin?.transaction_count ?? 0) + (payout?.transaction_count ?? 0),
+              }
+            })
+          : []
+      )
     } catch { /* empty */ }
     finally { setLoading(false); setRefreshing(false) }
   }
@@ -33,12 +51,12 @@ export default function UserDashboard() {
   useEffect(() => { fetchAll() }, [days])
 
   const d = data as Record<string, number | string> | null
-  // support both camelCase (API) and snake_case (legacy)
-  const balance = Number(d?.balance ?? d?.totalBalance ?? 0)
-  const totalPayin = Number(d?.totalPayin ?? d?.total_payin ?? 0)
-  const totalPayout = Number(d?.totalPayout ?? d?.total_payout ?? 0)
-  const todayPayin = Number(d?.todayPayin ?? d?.today_payin ?? 0)
-  const todayPayout = Number(d?.todayPayout ?? d?.today_payout ?? 0)
+  const walletBalance = Number(d?.wallet_balance ?? d?.walletBalance ?? 0)
+  const settlementBalance = Number(d?.settlement_balance ?? d?.settlementBalance ?? 0)
+  const totalPayin = Number(d?.total_payin ?? d?.totalPayin ?? 0)
+  const totalPayout = Number(d?.total_payout ?? d?.totalPayout ?? 0)
+  const todayPayin = Number(d?.today_payin ?? d?.todayPayin ?? 0)
+  const todayPayout = Number(d?.today_payout ?? d?.todayPayout ?? 0)
   const successRate = totalPayin > 0 ? Math.min(100, Math.round((Number(d?.successfulPayin ?? d?.successful_payin ?? totalPayin) / totalPayin) * 100)) : 0
 
   const stats = [
@@ -46,7 +64,6 @@ export default function UserDashboard() {
     { label: 'Total Payout', value: loading ? '—' : formatCurrency(totalPayout), icon: <TrendingUp size={20} />, iconBg: 'bg-orange-50', iconColor: 'text-orange-500' },
     { label: "Today's Payin", value: loading ? '—' : formatCurrency(todayPayin), icon: <Activity size={20} />, iconBg: 'bg-blue-50', iconColor: 'text-blue-600' },
     { label: "Today's Payout", value: loading ? '—' : formatCurrency(todayPayout), icon: <ArrowUpCircle size={20} />, iconBg: 'bg-yellow-50', iconColor: 'text-yellow-600' },
-    { label: 'Net Profit', value: loading ? '—' : formatCurrency(Number(d?.totalProfit ?? d?.total_profit ?? 0)), icon: <BadgeCheck size={20} />, iconBg: 'bg-purple-50', iconColor: 'text-purple-600' },
   ]
 
   return (
@@ -67,16 +84,32 @@ export default function UserDashboard() {
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-24 translate-x-20" />
         <div className="absolute bottom-0 right-20 w-40 h-40 bg-[#D4AF37]/10 rounded-full translate-y-16" />
         <div className="relative z-10">
-          <div className="flex items-center gap-2 mb-1">
-            <Wallet size={14} className="text-blue-300" />
-            <p className="text-blue-200 text-sm font-medium">Available Balance</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            {/* Wallet Balance */}
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Wallet size={14} className="text-blue-300" />
+                <p className="text-blue-200 text-sm font-medium">Wallet Balance</p>
+              </div>
+              {loading
+                ? <Skeleton variant="rectangular" width={180} height={36} sx={{ borderRadius: 2, bgcolor: 'rgba(255,255,255,0.1)' }} />
+                : <p className="text-3xl font-bold tracking-tight">{formatCurrency(walletBalance)}</p>
+              }
+            </div>
+            {/* Settlement Balance */}
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <BadgeCheck size={14} className="text-[#D4AF37]" />
+                <p className="text-[#D4AF37]/80 text-sm font-medium">Settlement Balance</p>
+              </div>
+              {loading
+                ? <Skeleton variant="rectangular" width={180} height={36} sx={{ borderRadius: 2, bgcolor: 'rgba(255,255,255,0.1)' }} />
+                : <p className="text-3xl font-bold tracking-tight text-[#D4AF37]">{formatCurrency(settlementBalance)}</p>
+              }
+            </div>
           </div>
-          {loading
-            ? <Skeleton variant="rectangular" width={200} height={40} sx={{ borderRadius: 2, bgcolor: 'rgba(255,255,255,0.1)' }} />
-            : <p className="text-4xl font-bold tracking-tight">{formatCurrency(balance)}</p>
-          }
 
-          <div className="mt-4 flex items-center gap-3 max-w-xs">
+          <div className="mt-5 flex items-center gap-3 max-w-xs">
             <span className="text-xs text-blue-200 whitespace-nowrap">Success Rate</span>
             <LinearProgress variant="determinate" value={successRate}
               sx={{ flex: 1, bgcolor: 'rgba(255,255,255,0.15)', '& .MuiLinearProgress-bar': { bgcolor: '#D4AF37' }, height: 6, borderRadius: 3 }} />
@@ -86,7 +119,7 @@ export default function UserDashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((s) => loading ? <div key={s.label} className="stat-card"><Skeleton height={100} /></div> : <StatCard key={s.label} {...s} />)}
       </div>
 

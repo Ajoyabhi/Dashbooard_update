@@ -24,11 +24,9 @@ export const adminMenu: NavItem[] = [
 export const userMenu: NavItem[] = [
   { label: 'Dashboard', path: '/user', icon: 'LayoutDashboard', section: 'Overview' },
   { label: 'Fund Request', path: '/user/fund-request', icon: 'Landmark', section: 'Finance' },
-  { label: 'Wallet Report', path: '/user/wallet-report', icon: 'Wallet', section: 'Reports' },
   { label: 'Payin Report', path: '/user/payin-report', icon: 'TrendingDown', section: 'Reports' },
   { label: 'Payout Report', path: '/user/payout-report', icon: 'TrendingUp', section: 'Reports' },
   { label: 'Failed History', path: '/user/payout-failed-history', icon: 'AlertCircle', section: 'Reports' },
-  { label: 'Wallet History', path: '/user/wallet-transaction-history', icon: 'History', section: 'Reports' },
   { label: 'Settlement', path: '/user/settlement-report', icon: 'BadgeCheck', section: 'Reports' },
   { label: 'Developer Settings', path: '/user/developer-settings', icon: 'Code2', section: 'Developer' },
   { label: 'API Docs', path: '/user/development-docs', icon: 'BookOpen', section: 'Developer' },
