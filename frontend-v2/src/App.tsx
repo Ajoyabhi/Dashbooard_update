@@ -74,6 +74,14 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
+            {/* Shared: profile + change-password (all authenticated roles) */}
+            <Route element={<ProtectedRoute allowedRoles={['admin', 'user', 'payin_payout', 'agent']} />}>
+              <Route element={<DashboardLayout />}>
+                <Route path="/profile" element={<Profile />} />
+                <Route path="/change-password" element={<ChangePassword />} />
+              </Route>
+            </Route>
+
             {/* Admin */}
             <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
               <Route element={<DashboardLayout />}>
@@ -97,8 +105,6 @@ export default function App() {
                 <Route path="/admin/chargeback-report" element={<AdminChargeBackReport />} />
                 <Route path="/admin/make-payout-failed" element={<AdminMakePayoutFailed />} />
                 <Route path="/admin/trash-payin-payout-report" element={<AdminTrashReport />} />
-                <Route path="/profile" element={<Profile />} />
-                <Route path="/change-password" element={<ChangePassword />} />
               </Route>
             </Route>
 
@@ -115,8 +121,6 @@ export default function App() {
                 <Route path="/user/wallet-transaction-history" element={<UserWalletHistory />} />
                 <Route path="/user/payout-failed-history" element={<UserPayoutFailedHistory />} />
                 <Route path="/user/development-docs" element={<UserDevelopmentDocs />} />
-                <Route path="/profile" element={<Profile />} />
-                <Route path="/change-password" element={<ChangePassword />} />
               </Route>
             </Route>
 
@@ -134,8 +138,6 @@ export default function App() {
                 <Route path="/agent/wallet-report" element={<AgentWalletReport />} />
                 <Route path="/agent/developer-settings" element={<AgentDeveloperSettings />} />
                 <Route path="/agent/development-docs" element={<AgentDevelopmentDocs />} />
-                <Route path="/profile" element={<Profile />} />
-                <Route path="/change-password" element={<ChangePassword />} />
               </Route>
             </Route>
 
