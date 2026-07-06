@@ -24,6 +24,8 @@ interface PayoutRecord {
     agent_charge: number;
     total_charges: number;
   };
+  gst_amount: number;
+  platform_fee: number;
   beneficiary_details: {
     account_number: string;
     account_ifsc: string;
@@ -249,16 +251,16 @@ export default function PayoutReport() {
     },
     {
       header: 'GST',
-      accessor: 'charges',
-      cell: (value: any) => (
-        <span className="text-gray-600">{formatCurrency(value.gst)}</span>
+      accessor: 'gst_amount',
+      cell: (value: number) => (
+        <span className="text-gray-600">{formatCurrency(value)}</span>
       ),
     },
     {
       header: 'Net Amount',
       accessor: 'amount',
       cell: (value: number, row: PayoutRecord) => (
-        <span className="font-medium">{formatCurrency(value + row.charges.total_charges)}</span>
+        <span className="font-medium">{formatCurrency(value + row.charges.total_charges + row.gst_amount + row.platform_fee)}</span>
       ),
     },
     {

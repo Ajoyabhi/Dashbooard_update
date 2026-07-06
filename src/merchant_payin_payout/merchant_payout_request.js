@@ -920,7 +920,7 @@ async function bluswapPayout(payoutData) {
                     utr: null,
                     apitxnid: payoutData.reference_id,
                     contact_id: contactId,
-                    bluswap_transaction_id: bluswapTransactionId
+                    transaction_id: bluswapTransactionId
                 },
                 status: 200
             };

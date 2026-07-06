@@ -37,6 +37,8 @@ export const truncateText = (text: string, maxLength: number): string => {
 export const getStatusColor = (status: string): string => {
   const statusColors: Record<string, string> = {
     completed: 'bg-success-100 text-success-800',
+    success: 'bg-success-100 text-success-800',
+    processing: 'bg-warning-100 text-warning-800',
     pending: 'bg-warning-100 text-warning-800',
     failed: 'bg-error-100 text-error-800',
     approved: 'bg-success-100 text-success-800',

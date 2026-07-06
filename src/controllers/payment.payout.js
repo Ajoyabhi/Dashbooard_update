@@ -509,7 +509,7 @@ const initiatePayout = async (req, res) => {
           success: true,
           message: result.data.message || 'Payout initiated, awaiting confirmation',
           reference_id: result.data.apitxnid,
-          bluswap_transaction_id: result.data.bluswap_transaction_id
+          transaction_id: result.data.transaction_id
         });
       } else {
         return res.status(400).json({

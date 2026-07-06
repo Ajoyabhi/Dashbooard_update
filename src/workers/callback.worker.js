@@ -540,7 +540,7 @@ bluswapPayoutQueue.process(async function (job) {
         { reference_id: referenceId },
         {
           $set: {
-            status: 'success',
+            status: 'completed',
             gateway_response: {
               merchant_response: bluswapTransactionId,
               status: 'success',

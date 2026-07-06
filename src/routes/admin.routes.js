@@ -183,26 +183,56 @@ router.post('/payin/:reference_id/resend-webhook', resendPayinWebhook);
 // Callback queue health
 router.get('/queue/health', async (req, res) => {
   try {
-    const { callbackQueue } = require('../config/queue.config');
-    const [counts, failed, active, waiting] = await Promise.all([
-      callbackQueue.getJobCounts(),
-      callbackQueue.getFailed(0, 10),
-      callbackQueue.getActive(),
-      callbackQueue.getWaiting(0, 5),
+    const { callbackQueue, philpayPayoutQueue, bluswapPayoutQueue } = require('../config/queue.config');
+
+    // Bull requires an explicit range for getFailed; cap it so a huge backlog can't blow up the request.
+    const MAX_FAILED_TO_SCAN = 2000;
+
+    const describeQueue = async (queue, getRef) => {
+      const counts = await queue.getJobCounts();
+      const [allFailed, active, waiting] = await Promise.all([
+        queue.getFailed(0, Math.min(counts.failed || 0, MAX_FAILED_TO_SCAN)),
+        queue.getActive(),
+        queue.getWaiting(0, 5),
+      ]);
+
+      const uniqueFailedReferenceIds = new Set(allFailed.map(j => getRef(j.data)).filter(Boolean)).size;
+
+      return {
+        counts,
+        uniqueFailedReferenceIds,
+        active: active.map(j => ({ id: j.id, reference_id: getRef(j.data), attempts: j.attemptsMade, since: j.processedOn ? new Date(j.processedOn).toISOString() : null })),
+        waiting: waiting.map(j => ({ id: j.id, reference_id: getRef(j.data), queued_at: new Date(j.timestamp).toISOString() })),
+        last10Failed: allFailed.slice(0, 10).map(j => ({
+          id: j.id,
+          reference_id: getRef(j.data),
+          attempts: j.attemptsMade,
+          reason: j.failedReason,
+          failed_at: j.finishedOn ? new Date(j.finishedOn).toISOString() : null,
+          data: j.data,
+        })),
+      };
+    };
+
+    const [payin, philpayPayout, bluswapPayout] = await Promise.all([
+      describeQueue(callbackQueue, 'apitxnid'),
+      describeQueue(philpayPayoutQueue, (data) => data?.data?.object?.merchant_order_id),
+      describeQueue(bluswapPayoutQueue, (data) => data?.data?.order_id),
     ]);
+
     res.json({
       success: true,
-      counts,
-      active: active.map(j => ({ id: j.id, reference_id: j.data?.apitxnid, attempts: j.attemptsMade, since: new Date(j.processedOn).toISOString() })),
-      waiting: waiting.map(j => ({ id: j.id, reference_id: j.data?.apitxnid, queued_at: new Date(j.timestamp).toISOString() })),
-      last10Failed: failed.map(j => ({
-        id: j.id,
-        reference_id: j.data?.apitxnid,
-        attempts: j.attemptsMade,
-        reason: j.failedReason,
-        failed_at: new Date(j.finishedOn).toISOString(),
-        data: j.data,
-      })),
+      note: 'Each queue accumulates failed jobs forever (removeOnFail: false) and the same transaction can be queued multiple times if the upstream gateway sends duplicate callbacks — counts.failed is a lifetime total of jobs, not distinct transactions. Use uniqueFailedReferenceIds for the deduplicated count.',
+      queues: {
+        payin,
+        philpayPayout,
+        bluswapPayout,
+      },
+      // Backward-compatible top-level fields mirroring the payin queue (previous shape of this endpoint)
+      counts: payin.counts,
+      active: payin.active,
+      waiting: payin.waiting,
+      last10Failed: payin.last10Failed,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
