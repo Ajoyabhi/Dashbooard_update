@@ -829,13 +829,16 @@ async function bluswapPayout(payoutData) {
         } catch (err) {
             const errData = err.response ? err.response.data : { message: err.message };
             await ApiLogs.create({
-                request: JSON.stringify({ step: 'create_contact', reference_id: payoutData.reference_id }),
-                response: JSON.stringify(errData),
-                service: 'PAYOUT',
-                service_api: 'BLUSWAP',
-                status: 'error',
-                error_message: errData.message || err.message,
-                execution_time: Date.now() - startTime
+                level: 'error',
+                message: `BluSwap create contact failed: ${errData.message || err.message}`,
+                metadata: {
+                    service: 'PAYOUT',
+                    service_api: 'BLUSWAP',
+                    step: 'create_contact',
+                    reference_id: payoutData.reference_id,
+                    response: errData,
+                    execution_time: Date.now() - startTime
+                }
             });
             throw new Error(errData.message || 'Failed to create BluSwap contact');
         }
@@ -876,15 +879,17 @@ async function bluswapPayout(payoutData) {
         logger.info('Received response from BluSwap API', { status: result.status, message: result.message });
 
         const apiLog = await ApiLogs.create({
-            request: JSON.stringify(payload),
-            response: JSON.stringify(result),
-            service: 'PAYOUT',
-            service_api: 'BLUSWAP',
-            status: result.status === 'SUCCESS' ? 'success' : 'error',
-            error_message: result.message || null,
-            execution_time: Date.now() - startTime
+            level: result.status === 'SUCCESS' ? 'info' : 'error',
+            message: `BluSwap payout ${result.status === 'SUCCESS' ? 'initiated' : 'failed'} for reference ${payoutData.reference_id}`,
+            metadata: {
+                service: 'PAYOUT',
+                service_api: 'BLUSWAP',
+                request: payload,
+                response: result,
+                error_message: result.message || null,
+                execution_time: Date.now() - startTime
+            }
         });
-        await apiLog.save();
         logger.info('API log created', { logId: apiLog._id });
 
         if (result.status === 'SUCCESS') {
