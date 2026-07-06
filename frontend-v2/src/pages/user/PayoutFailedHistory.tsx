@@ -90,7 +90,7 @@ export default function PayoutFailedHistory() {
         ...(startDate && { startDate }),
         ...(endDate && { endDate }),
       })
-      const res = await fetch(`${api.defaults.baseURL}/user/payout_failed_history/download?${params}`, {
+      const res = await window.fetch(`${api.defaults.baseURL}/user/payout_failed_history/download?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (!res.ok) throw new Error('Download failed')

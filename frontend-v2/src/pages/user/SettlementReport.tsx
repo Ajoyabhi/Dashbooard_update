@@ -93,7 +93,7 @@ export default function UserSettlementReport() {
         ...(startDate && { startDate }),
         ...(endDate && { endDate }),
       })
-      const res = await fetch(`${api.defaults.baseURL}/user/settlement-report/download?${params}`, {
+      const res = await window.fetch(`${api.defaults.baseURL}/user/settlement-report/download?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (!res.ok) throw new Error('Download failed')
