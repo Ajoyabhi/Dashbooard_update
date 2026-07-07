@@ -13,10 +13,10 @@ async function sendMerchantPayoutCallback(callbackUrl, callbackData) {
   const baseDelay = 2000;
 
   // Print the exact payload being POSTed so it's visible in the server terminal / PM2 logs.
-  console.log('===== Payout webhook send =====');
-  console.log('URL   :', callbackUrl);
-  console.log('BODY  :', JSON.stringify(callbackData, null, 2));
-  console.log('===============================');
+  // console.log('===== Payout webhook send =====');
+  // console.log('URL   :', callbackUrl);
+  // console.log('BODY  :', JSON.stringify(callbackData, null, 2));
+  // console.log('===============================');
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
