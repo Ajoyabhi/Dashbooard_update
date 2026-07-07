@@ -3345,10 +3345,15 @@ const adminCheckPayinStatus = async (req, res) => {
             return res.status(200).json({
                 success: true,
                 transaction: {
-                    amount: result.amount ?? transaction.amount,
                     reference_id: result.reference_id ?? transaction.reference_id,
-                    paymentStatus: apStatus,
+                    type: 'payin',
+                    status: apStatus,
+                    amount: result.amount ?? transaction.amount,
                     utr: apStatus === 'success' ? (result.utr || null) : null,
+                    message: apStatus === 'success'
+                        ? 'Transaction processed'
+                        : apStatus === 'pending' ? 'Transaction is pending' : 'Transaction failed',
+                    timestamp: transaction.updatedAt || transaction.createdAt || new Date().toISOString(),
                     ap_transaction_id: result.ap_transaction_id || null,
                 }
             });
@@ -3376,11 +3381,16 @@ const adminCheckPayinStatus = async (req, res) => {
             return res.status(200).json({
                 success: true,
                 transaction: {
-                    amount: result.amount ?? transaction.amount,
                     reference_id: result.reference_id ?? transaction.reference_id,
-                    paymentStatus: hdfcNormalized,
-                    hdfc_status: result.status || null,
+                    type: 'payin',
+                    status: hdfcNormalized,
+                    amount: result.amount ?? transaction.amount,
                     utr: hdfcNormalized === 'success' ? (result.utr || null) : null,
+                    message: hdfcNormalized === 'success'
+                        ? 'Transaction processed'
+                        : hdfcNormalized === 'pending' ? 'Transaction is pending' : 'Transaction failed',
+                    timestamp: transaction.updatedAt || transaction.createdAt || new Date().toISOString(),
+                    hdfc_status: result.status || null,
                     payerVpa: hdfcNormalized === 'success' ? (result.payer_vpa || null) : null,
                 }
             });
@@ -3404,15 +3414,24 @@ const adminCheckPayinStatus = async (req, res) => {
             return res.status(502).json({ success: false, message: 'Invalid response from payment gateway' });
         }
 
+        const unpayStatusMap = { TXN: 'success', SUCCESS: 'success', FAILED: 'failed', TXF: 'failed', PENDING: 'pending' };
+        const unpayStatus = unpayStatusMap[String(result.data.paymentStatus || '').toUpperCase()]
+            || String(result.data.paymentStatus || 'unknown').toLowerCase();
+
         return res.status(200).json({
             success: true,
             transaction: {
-                amount: transaction.amount,
                 reference_id: transaction.reference_id,
-                paymentStatus: result.data.paymentStatus || 'unknown',
+                type: 'payin',
+                status: unpayStatus,
+                amount: transaction.amount,
+                utr: result.data.rrnNumber || null,
+                message: unpayStatus === 'success'
+                    ? 'Transaction processed'
+                    : unpayStatus === 'pending' ? 'Transaction is pending' : 'Transaction failed',
+                timestamp: transaction.updatedAt || transaction.createdAt || new Date().toISOString(),
                 payerVpa: result.data.payerVpa || null,
-                npciTxnId: result.data.npciTxnId || null,
-                utr: result.data.rrnNumber || null
+                npciTxnId: result.data.npciTxnId || null
             }
         });
     } catch (error) {
@@ -3442,9 +3461,9 @@ const resendPayinWebhook = async (req, res) => {
 
         const callbackData = {
             reference_id,
-            transaction_id: transaction.gateway_response?.merchant_response || null,
+            type: 'payin',
+            status: 'success',
             amount: transaction.amount,
-            status: 'completed',
             utr: transaction.gateway_response?.utr || null,
             message: 'Transaction processed',
             timestamp: new Date().toISOString()

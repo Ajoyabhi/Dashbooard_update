@@ -229,7 +229,10 @@ export default function DevelopmentDocs() {
 
       {/* Transaction Status */}
       <Section title="Check Transaction Status">
-        <p className="text-sm text-slate-600">Poll the status of any transaction using its reference ID.</p>
+        <p className="text-sm text-slate-600">
+          Poll the status of any transaction using its reference ID. Both endpoints return the same
+          uniform <span className="font-mono bg-slate-100 px-1 rounded text-xs">transaction</span> object.
+        </p>
 
         <div className="space-y-4">
           <div className="space-y-2">
@@ -240,6 +243,18 @@ export default function DevelopmentDocs() {
             </div>
             <CodeBlock title="curl" code={`curl --location '${BASE_URL}/api/payments/payin/transaction/TXN123456ABCD' \\
 --header 'Authorization: YOUR_JWT_TOKEN'`} />
+            <CodeBlock title="response" code={`{
+  "success": true,
+  "transaction": {
+    "reference_id": "TXN123456ABCD",
+    "type": "payin",
+    "status": "success",
+    "amount": 100,
+    "utr": "UTR123456789",
+    "message": "Transaction processed",
+    "timestamp": "2026-06-21T10:30:00.000Z"
+  }
+}`} />
           </div>
 
           <div className="space-y-2">
@@ -250,7 +265,22 @@ export default function DevelopmentDocs() {
             </div>
             <CodeBlock title="curl" code={`curl --location '${BASE_URL}/api/payments/payout/transaction/PAYOUT123456ABCD' \\
 --header 'Authorization: YOUR_JWT_TOKEN'`} />
+            <CodeBlock title="response" code={`{
+  "success": true,
+  "transaction": {
+    "reference_id": "PAYOUT123456ABCD",
+    "type": "payout",
+    "status": "success",
+    "amount": 300,
+    "utr": "UTR123456789",
+    "message": "Transaction processed",
+    "timestamp": "2026-06-21T10:30:00.000Z"
+  }
+}`} />
           </div>
+          <p className="text-xs text-slate-500">
+            <span className="font-mono">status</span> is always one of <span className="font-mono">"success"</span>, <span className="font-mono">"failed"</span> or <span className="font-mono">"pending"</span>. <span className="font-mono">utr</span> is <span className="font-mono">null</span> unless the transaction succeeded.
+          </p>
         </div>
       </Section>
 
@@ -276,11 +306,12 @@ export default function DevelopmentDocs() {
         <div className="space-y-4">
           <div className="space-y-2">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Payin Callback Payload</p>
-            <p className="text-xs text-slate-400">Sent when a payin transaction is completed or failed.</p>
+            <p className="text-xs text-slate-400">Sent when a payin transaction succeeds or fails.</p>
             <CodeBlock title="json" code={`{
   "reference_id": "TXN123456ABCD",
-  "amount": "1000",
-  "status": "completed",
+  "type": "payin",
+  "status": "success",
+  "amount": 1000,
   "utr": "UTR123456789",
   "message": "Transaction processed",
   "timestamp": "2026-06-21T10:30:00.000Z"
@@ -292,8 +323,9 @@ export default function DevelopmentDocs() {
             <p className="text-xs text-slate-400">Sent when a payout transaction succeeds or fails.</p>
             <CodeBlock title="json" code={`{
   "reference_id": "PAYOUT123456ABCD",
-  "amount": 1000,
+  "type": "payout",
   "status": "success",
+  "amount": 1000,
   "utr": "UTR123456789",
   "message": "Transaction processed",
   "timestamp": "2026-06-21T10:30:00.000Z"
@@ -303,8 +335,9 @@ export default function DevelopmentDocs() {
 
         <FieldTable rows={[
           { field: 'reference_id', type: 'string', desc: 'Your unique reference ID sent at transaction creation' },
+          { field: 'type',         type: 'string', desc: 'Transaction type: "payin" or "payout"' },
+          { field: 'status',       type: 'string', desc: '"success", "failed" or "pending" — same values for both payin and payout' },
           { field: 'amount',       type: 'number', desc: 'Transaction amount' },
-          { field: 'status',       type: 'string', desc: '"completed" / "failed" for payin; "success" / "failed" for payout' },
           { field: 'utr',          type: 'string', desc: 'Unique Transaction Reference from the bank. null if failed' },
           { field: 'message',      type: 'string', desc: 'Human-readable status message' },
           { field: 'timestamp',    type: 'string', desc: 'ISO 8601 timestamp of when the callback was sent' },

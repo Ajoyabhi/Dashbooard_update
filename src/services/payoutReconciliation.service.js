@@ -127,10 +127,13 @@ async function finalizePayout({ referenceId, isSuccess, utr = null, gatewayTrans
   if (merchantDetails?.payout_callback) {
     callbackSent = await sendMerchantPayoutCallback(merchantDetails.payout_callback, {
       reference_id: referenceId,
-      amount: payout.amount,
+      type: 'payout',
       status: gatewayStatus,
+      amount: payout.amount,
       utr,
-      message: finalMessage,
+      // Standardized message — do not forward the gateway's own text, which may
+      // expose the acquirer/gateway name to the merchant.
+      message: isSuccess ? 'Transaction processed' : 'Transaction failed',
       timestamp: new Date().toISOString()
     });
   } else {

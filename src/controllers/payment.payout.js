@@ -583,10 +583,32 @@ const getPayoutTransactionStatus = async (req, res) => {
       console.log("this is result of bluswap payout", result)
     }
     if (result.status === 200) {
+      // Every gateway status helper already normalizes result.data.status to
+      // success | failed | pending. Map it into the shared uniform envelope and
+      // enrich utr/message/timestamp from the raw gateway payload, falling back
+      // to our own DB record when the gateway omits them.
+      const normalizedStatus = result.data?.status || 'unknown';
+      const gw = result.data?.response?.data || result.data?.response || {};
+      const utr = gw.utr || gw.rrn || gw.bank_reference_id || transaction.gateway_response?.utr || null;
+      // Standardized message only — never surface the gateway's own text/status
+      // description, which can reveal the acquirer/gateway name to the merchant.
+      const message = normalizedStatus === 'success'
+        ? 'Transaction processed'
+        : normalizedStatus === 'pending'
+          ? 'Transaction is pending'
+          : 'Transaction failed';
+
       return res.status(200).json({
         success: true,
-        message: 'Transaction status retrieved successfully',
-        result: result
+        transaction: {
+          reference_id: transaction.reference_id,
+          type: 'payout',
+          status: normalizedStatus,
+          amount: transaction.amount,
+          utr,
+          message,
+          timestamp: gw.updated_at || transaction.updatedAt || new Date().toISOString()
+        }
       });
     }
     else {

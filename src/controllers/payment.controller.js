@@ -412,8 +412,9 @@ const getTransactionStatus = async (req, res) => {
         success: true,
         transaction: {
           reference_id: result.reference_id ?? transaction.reference_id,
+          type: 'payin',
+          status: normalizedStatus,
           amount: result.amount ?? transaction.amount,
-          paymentStatus: normalizedStatus,
           utr: normalizedStatus === 'success' ? (result.utr || null) : null,
           message: normalizedStatus === 'success'
             ? 'Transaction processed'
@@ -457,16 +458,17 @@ const getTransactionStatus = async (req, res) => {
         success: true,
         transaction: {
           reference_id: result.reference_id ?? transaction.reference_id,
+          type: 'payin',
+          status: normalizedStatus,
           amount: result.amount ?? transaction.amount,
-          paymentStatus: normalizedStatus,
           utr: normalizedStatus === 'success' ? (result.utr || null) : null,
-          payerVpa: normalizedStatus === 'success' ? (result.payer_vpa || null) : null,
           message: normalizedStatus === 'success'
             ? 'Transaction processed'
             : normalizedStatus === 'pending'
               ? 'Transaction is pending'
               : 'Transaction failed',
-          timestamp: transaction.updatedAt || transaction.createdAt || new Date().toISOString()
+          timestamp: transaction.updatedAt || transaction.createdAt || new Date().toISOString(),
+          payerVpa: normalizedStatus === 'success' ? (result.payer_vpa || null) : null
         }
       });
     }
@@ -512,15 +514,26 @@ const getTransactionStatus = async (req, res) => {
       });
     }
 
+    const unpayStatusMap = { TXN: 'success', SUCCESS: 'success', FAILED: 'failed', TXF: 'failed', PENDING: 'pending' };
+    const unpayStatus = unpayStatusMap[String(result.data.paymentStatus || '').toUpperCase()]
+      || String(result.data.paymentStatus || 'unknown').toLowerCase();
+
     res.status(200).json({
       success: true,
       transaction: {
-        amount: transaction.amount,
         reference_id: transaction.reference_id,
-        paymentStatus: result.data.paymentStatus || 'unknown',
+        type: 'payin',
+        status: unpayStatus,
+        amount: transaction.amount,
+        utr: result.data.rrnNumber || null,
+        message: unpayStatus === 'success'
+          ? 'Transaction processed'
+          : unpayStatus === 'pending'
+            ? 'Transaction is pending'
+            : 'Transaction failed',
+        timestamp: transaction.updatedAt || transaction.createdAt || new Date().toISOString(),
         payerVpa: result.data.payerVpa || null,
-        npciTxnId: result.data.npciTxnId || null,
-        utr: result.data.rrnNumber || null
+        npciTxnId: result.data.npciTxnId || null
       }
     });
 

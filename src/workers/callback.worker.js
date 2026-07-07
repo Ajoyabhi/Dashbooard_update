@@ -113,11 +113,13 @@ callbackQueue.process(async function (job) {
 
       const callbackData = {
         reference_id: apitxnid,
-        transaction_id: txnid,
+        type: 'payin',
+        status: mappedStatus === 'completed' ? 'success' : 'failed',
         amount,
-        status: mappedStatus,
         utr,
-        message: message || 'Transaction processed',
+        // Standardized, gateway-agnostic message — never forward the acquirer's
+        // own text (it can contain the gateway/bank name, e.g. "HDFC UPI payment").
+        message: mappedStatus === 'completed' ? 'Transaction processed' : 'Transaction failed',
         timestamp: new Date().toISOString()
       };
 
@@ -392,26 +394,16 @@ philpayPayoutQueue.process(async function (job) {
 
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-          let callbackData;
-          if (job.data.data.object.status == "success" || job.data.data.object.status == "Success") {
-            callbackData = {
-              reference_id: job.data.data.object.merchant_order_id,
-              amount: job.data.data.object.amount / 100,
-              status: job.data.data.object.status,
-              utr: job.data.data.object.bank_reference_id,
-              message: job.data.data.object.message || 'Transaction processed',
-              timestamp: new Date().toISOString()
-            };
-          } else {
-            callbackData = {
-              reference_id: job.data.data.object.merchant_order_id,
-              amount: job.data.data.object.amount / 100,
-              status: job.data.data.object.status,
-              utr: job.data.data.object.bank_reference_id,
-              message: job.data.data.object.message || 'Transaction failed',
-              timestamp: new Date().toISOString()
-            };
-          }
+          const philpaySuccess = job.data.data.object.status == "success" || job.data.data.object.status == "Success";
+          const callbackData = {
+            reference_id: job.data.data.object.merchant_order_id,
+            type: 'payout',
+            status: philpaySuccess ? 'success' : 'failed',
+            amount: job.data.data.object.amount / 100,
+            utr: job.data.data.object.bank_reference_id,
+            message: philpaySuccess ? 'Transaction processed' : 'Transaction failed',
+            timestamp: new Date().toISOString()
+          };
 
           console.log("this is callback data of philpay payout", callbackData)
 

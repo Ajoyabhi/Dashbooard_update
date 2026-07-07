@@ -241,7 +241,8 @@ export default function DevelopmentDocs() {
             Check Transaction Status
           </h2>
           <p className="text-neutral-600 mb-4">
-            Check the status of payin and payout transactions using their transaction IDs.
+            Check the status of payin and payout transactions using their transaction IDs. Both endpoints
+            return the same uniform <span className="font-mono">transaction</span> object.
           </p>
           <div className="space-y-4">
             <div>
@@ -250,6 +251,23 @@ export default function DevelopmentDocs() {
                 <pre className="text-sm text-neutral-800 overflow-x-auto">
                   {`curl --location 'https://dashboard.accuzpay.in/api/payments/payin/transaction/{transaction_id}' \\
 --header 'Authorization: YOUR_JWT_TOKEN'`}
+                </pre>
+              </div>
+              <p className="text-sm text-neutral-500 mt-2 mb-1">Response</p>
+              <div className="bg-neutral-100 rounded-xl p-4">
+                <pre className="text-sm text-neutral-800 overflow-x-auto">
+{`{
+  "success": true,
+  "transaction": {
+    "reference_id": "TXN123456ABCD",
+    "type": "payin",
+    "status": "success",
+    "amount": 100,
+    "utr": "UTR123456789",
+    "message": "Transaction processed",
+    "timestamp": "2026-06-15T10:30:00.000Z"
+  }
+}`}
                 </pre>
               </div>
             </div>
@@ -261,7 +279,29 @@ export default function DevelopmentDocs() {
 --header 'Authorization: YOUR_JWT_TOKEN'`}
                 </pre>
               </div>
+              <p className="text-sm text-neutral-500 mt-2 mb-1">Response</p>
+              <div className="bg-neutral-100 rounded-xl p-4">
+                <pre className="text-sm text-neutral-800 overflow-x-auto">
+{`{
+  "success": true,
+  "transaction": {
+    "reference_id": "PAYOUT123456ABCD",
+    "type": "payout",
+    "status": "success",
+    "amount": 300,
+    "utr": "UTR123456789",
+    "message": "Transaction processed",
+    "timestamp": "2026-06-15T10:30:00.000Z"
+  }
+}`}
+                </pre>
+              </div>
             </div>
+            <p className="text-sm text-neutral-500">
+              <span className="font-mono">status</span> is always one of <span className="font-mono">"success"</span>,
+              <span className="font-mono"> "failed"</span> or <span className="font-mono">"pending"</span>. On a
+              failed or pending transaction <span className="font-mono">utr</span> is <span className="font-mono">null</span>.
+            </p>
           </div>
         </div>
 
@@ -306,13 +346,14 @@ export default function DevelopmentDocs() {
             {/* Payin Callback */}
             <div>
               <h3 className="text-lg font-semibold text-neutral-900 mb-1">Payin Callback Payload</h3>
-              <p className="text-sm text-neutral-500 mb-3">Sent when a payin transaction is completed or failed.</p>
+              <p className="text-sm text-neutral-500 mb-3">Sent when a payin transaction succeeds or fails.</p>
               <div className="bg-neutral-100 rounded-xl p-4">
                 <pre className="text-sm text-neutral-800 overflow-x-auto">
 {`{
   "reference_id": "PAYO454789251396",
-  "amount": "100",
-  "status": "completed",
+  "type": "payin",
+  "status": "success",
+  "amount": 100,
   "utr": "UTR123456789",
   "message": "Transaction processed",
   "timestamp": "2026-06-15T10:30:00.000Z"
@@ -329,8 +370,9 @@ export default function DevelopmentDocs() {
                 <pre className="text-sm text-neutral-800 overflow-x-auto">
 {`{
   "reference_id": "PAYOUT123456",
-  "amount": 500,
+  "type": "payout",
   "status": "success",
+  "amount": 500,
   "utr": "UTR123456789",
   "message": "Transaction processed",
   "timestamp": "2026-06-15T10:30:00.000Z"
@@ -354,8 +396,9 @@ export default function DevelopmentDocs() {
                   <tbody className="divide-y divide-gray-200">
                     {[
                       { field: 'reference_id', type: 'string', desc: 'Your unique reference ID sent during transaction initiation' },
+                      { field: 'type',         type: 'string', desc: 'Transaction type: "payin" or "payout"' },
+                      { field: 'status',       type: 'string', desc: 'Transaction status: "success", "failed" or "pending" (same values for payin and payout)' },
                       { field: 'amount',       type: 'number', desc: 'Transaction amount' },
-                      { field: 'status',       type: 'string', desc: 'Transaction status: completed / failed (payin) or success / failed (payout)' },
                       { field: 'utr',          type: 'string', desc: 'Unique Transaction Reference from the bank. null if failed' },
                       { field: 'message',      type: 'string', desc: 'Human-readable status message' },
                       { field: 'timestamp',    type: 'string', desc: 'ISO 8601 timestamp of when the callback was sent' },
