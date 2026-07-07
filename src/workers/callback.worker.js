@@ -2,7 +2,6 @@ const { callbackQueue, philpayPayoutQueue, bluswapPayoutQueue } = require('../co
 const { finalizePayout } = require('../services/payoutReconciliation.service');
 const { logger } = require('../utils/logger');
 const PayinTransaction = require('../models/payinTransaction.model');
-const UserTransaction = require('../models/userTransaction.model');
 const PayoutTransaction = require('../models/payoutTransaction.model');
 const { TransactionCharges, FinancialDetails, MerchantDetails } = require('../models');
 const mongoose = require('mongoose');
@@ -250,22 +249,6 @@ philpayPayoutQueue.process(async function (job) {
         }
       );
       logger.info('Transaction charges stored', { reference: job.data.data.object.merchant_order_id });
-      // Update user transaction
-      await UserTransaction.updateOne(
-        { reference_id: job.data.data.object.merchant_order_id },
-        {
-          $set: {
-            status: 'success',
-            gateway_response: {
-              merchant_response: job.data.data.object.merchant_order_id,
-              status: 'success',
-              message: job.data.data.object.message || 'Transaction processed',
-              utr: job.data.data.object.bank_reference_id || null
-            }
-          }
-        }
-      );
-      logger.info('User transaction updated', { reference: job.data.data.object.merchant_order_id });
       // Update payout transaction
       await PayoutTransaction.updateOne(
         { reference_id: job.data.data.object.merchant_order_id },
@@ -302,22 +285,6 @@ philpayPayoutQueue.process(async function (job) {
         }
       );
       logger.info('Transaction charges stored', { reference: job.data.data.object.merchant_order_id });
-      // Update user transaction
-      await UserTransaction.updateOne(
-        { reference_id: job.data.data.object.merchant_order_id },
-        {
-          $set: {
-            status: 'failed',
-            gateway_response: {
-              merchant_response: job.data.data.object.merchant_order_id,
-              status: 'failed',
-              message: job.data.data.object.message || 'Transaction failed',
-              utr: job.data.data.object.bank_reference_id || null
-            }
-          }
-        }
-      );
-      logger.info('User transaction updated', { reference: job.data.data.object.merchant_order_id });
       // Update payout transaction
       await PayoutTransaction.updateOne(
         { reference_id: job.data.data.object.merchant_order_id },
@@ -337,9 +304,8 @@ philpayPayoutQueue.process(async function (job) {
     }
 
     const payinTransaction = await PayoutTransaction.findOne({ reference_id: job.data.data.object.merchant_order_id });
-    const userTransaction = await UserTransaction.findOne({ reference_id: job.data.data.object.merchant_order_id });
 
-    if (!payinTransaction || !userTransaction) {
+    if (!payinTransaction) {
       throw new Error('Transaction records not found');
     }
 

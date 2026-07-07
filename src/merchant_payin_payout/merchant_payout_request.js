@@ -1,6 +1,5 @@
 const ApiLogs = require('../models/apiLogs.model');
 const PayoutTransaction = require('../models/payoutTransaction.model');
-const UserTransaction = require('../models/userTransaction.model');
 const { TransactionCharges, FinancialDetails } = require('../models');
 const winston = require('winston');
 const { encryptText } = require('./utils_payout');
@@ -111,24 +110,6 @@ async function unpayPayout(payoutData) {
 
             logger.info('Transaction charges stored', { reference: payoutData.reference_id });
 
-            let userTransaction = await UserTransaction.updateOne(
-                {
-                    reference_id: payoutData.reference_id
-                },
-                {
-                    $set: {
-                        status: 'success',
-                        gateway_response: {
-                            merchant_response: transaction_id,
-                            status: 'success',
-                            message: message,
-                            utr: utr
-                        }
-                    }
-                }
-            );
-            logger.info('User transaction updated', { reference: payoutData.reference });
-
             let payoutTransaction = await PayoutTransaction.updateOne(
                 {
                     reference_id: payoutData.reference_id
@@ -189,22 +170,6 @@ async function unpayPayout(payoutData) {
 
             logger.info('Failed transaction charges stored', { reference: payoutData.reference_id });
 
-            let userTransaction = await UserTransaction.updateOne(
-                {
-                    reference_id: payoutData.reference_id
-                },
-                {
-                    $set: {
-                        status: 'failed',
-                        gateway_response: {
-                            merchant_response: JSON.stringify(result),
-                            status: 'failed',
-                            message: result.message
-                        }
-                    }
-                }
-            );
-            logger.info('User transaction updated to failed', { reference: payoutData.reference });
 
             let payoutTransaction = await PayoutTransaction.updateOne(
                 {   
@@ -308,22 +273,6 @@ async function spayPayout(payoutData) {
                 }
             );
             logger.info('Transaction charges stored', { reference: payoutData.reference_id });
-            // Update user transaction
-            await UserTransaction.updateOne(
-                { reference_id: payoutData.reference_id },
-                {
-                    $set: {
-                        status: 'success',
-                        gateway_response: {
-                            merchant_response: result.merchant_order_id,
-                            status: 'success',
-                            message: result.message,
-                            utr: result.utr || null
-                        }
-                    }
-                }
-            );
-            logger.info('User transaction updated', { reference: payoutData.reference_id });
             // Update payout transaction
             await PayoutTransaction.updateOne(
                 { reference_id: payoutData.reference_id },
@@ -373,21 +322,6 @@ async function spayPayout(payoutData) {
                     { where: { user_id: payoutData.user_id } }
                 );
             }
-            // Update user transaction as failed
-            await UserTransaction.updateOne(
-                { reference_id: payoutData.reference_id },
-                {
-                    $set: {
-                        status: 'failed',
-                        gateway_response: {
-                            merchant_response: JSON.stringify(result),
-                            status: 'failed',
-                            message: result.message
-                        }
-                    }
-                }
-            );
-            logger.info('User transaction updated to failed', { reference: payoutData.reference_id });
             // Update payout transaction as failed
             await PayoutTransaction.updateOne(
                 { reference_id: payoutData.reference_id },
@@ -543,21 +477,6 @@ async function philpayPayout(payoutData) {
                     { where: { user_id: payoutData.user_id } }
                 );
             }
-            // Update user transaction as failed
-            await UserTransaction.updateOne(
-                { reference_id: payoutData.reference_id },
-                {
-                    $set: {
-                        status: 'failed',
-                        gateway_response: {
-                            merchant_response: JSON.stringify(result),
-                            status: 'failed',
-                            message: result.message
-                        }
-                    }
-                }
-            );
-            logger.info('User transaction updated to failed', { reference: payoutData.reference_id });
             // Update payout transaction as failed
             await PayoutTransaction.updateOne(
                 { reference_id: payoutData.reference_id },
@@ -664,21 +583,6 @@ async function xlitepayPayout(payoutData) {
             );
             logger.info('Transaction charges stored', { reference: payoutData.reference_id });
 
-            await UserTransaction.updateOne(
-                { reference_id: payoutData.reference_id },
-                {
-                    $set: {
-                        status: 'success',
-                        gateway_response: {
-                            merchant_response: payoutData.reference_id,
-                            status: 'success',
-                            message: result.message,
-                            utr: utr
-                        }
-                    }
-                }
-            );
-            logger.info('User transaction updated', { reference: payoutData.reference_id });
 
             await PayoutTransaction.updateOne(
                 { reference_id: payoutData.reference_id },
@@ -729,20 +633,6 @@ async function xlitepayPayout(payoutData) {
                 );
             }
 
-            await UserTransaction.updateOne(
-                { reference_id: payoutData.reference_id },
-                {
-                    $set: {
-                        status: 'failed',
-                        gateway_response: {
-                            merchant_response: JSON.stringify(result),
-                            status: 'failed',
-                            message: result.message
-                        }
-                    }
-                }
-            );
-            logger.info('User transaction updated to failed', { reference: payoutData.reference_id });
 
             await PayoutTransaction.updateOne(
                 { reference_id: payoutData.reference_id },
@@ -925,43 +815,15 @@ async function bluswapPayout(payoutData) {
                 status: 200
             };
         } else {
-            await TransactionCharges.update(
-                {
-                    status: 'failed',
-                    transaction_utr: null
-                },
-                {
-                    where: {
-                        reference_id: payoutData.reference_id
-                    }
-                }
-            );
-
-            const userFinancial = await FinancialDetails.findOne({
-                where: { user_id: payoutData.user_id }
+            // BluSwap did not accept the payout. Do NOT refund or change status here.
+            // The caller (initiatePayout) runs failPayoutWithRefund() -> finalizePayout(),
+            // which atomically refunds the exact deducted amount and marks the
+            // transaction failed. Keeping it in one place prevents double refunds and
+            // keeps the ledger consistent, since the transaction is still 'pending'.
+            logger.info('BluSwap did not accept payout — deferring refund/status to finalizePayout', {
+                reference: payoutData.reference_id,
+                message: result.message
             });
-            if (userFinancial) {
-                const newSettlement = parseFloat(userFinancial.settlement) + parseFloat(payoutData.amountToDeduct || 0);
-                await FinancialDetails.update(
-                    { settlement: newSettlement },
-                    { where: { user_id: payoutData.user_id } }
-                );
-            }
-
-            await PayoutTransaction.updateOne(
-                { reference_id: payoutData.reference_id },
-                {
-                    $set: {
-                        status: 'failed',
-                        gateway_response: {
-                            merchant_response: JSON.stringify(result),
-                            status: 'failed',
-                            message: result.message
-                        }
-                    }
-                }
-            );
-            logger.info('Payout transaction updated to failed', { reference: payoutData.reference_id });
 
             return {
                 data: {
@@ -969,7 +831,7 @@ async function bluswapPayout(payoutData) {
                     message: result.message || 'Payout processing failed',
                     apitxnid: payoutData.reference_id
                 },
-                status: 200
+                status: 400
             };
         }
     } catch (error) {

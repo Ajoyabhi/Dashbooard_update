@@ -66,7 +66,7 @@ async function sendMerchantPayoutCallback(callbackUrl, callbackData) {
  *
  * @returns {{ changed: boolean, reason?: string, newStatus?: string, callbackSent?: boolean }}
  */
-async function finalizePayout({ referenceId, isSuccess, utr = null, gatewayTransactionId = null, message = null }) {
+async function finalizePayout({ referenceId, isSuccess, utr = null, gatewayTransactionId = null, message = null, notifyMerchant = true }) {
   const payout = await PayoutTransaction.findOne({ reference_id: referenceId });
   if (!payout) {
     return { changed: false, reason: 'not_found' };
@@ -127,10 +127,14 @@ async function finalizePayout({ referenceId, isSuccess, utr = null, gatewayTrans
     }
   }
 
-  // Notify the merchant of the resolved status
+  // Notify the merchant of the resolved status. Skipped for synchronous
+  // rejections at creation time, where the caller already returns the failure
+  // in the HTTP response and a webhook would be redundant.
   let callbackSent = false;
-  const merchantDetails = await MerchantDetails.findOne({ where: { user_id: parseInt(userId, 10) } });
-  if (merchantDetails?.payout_callback) {
+  const merchantDetails = notifyMerchant
+    ? await MerchantDetails.findOne({ where: { user_id: parseInt(userId, 10) } })
+    : null;
+  if (notifyMerchant && merchantDetails?.payout_callback) {
     callbackSent = await sendMerchantPayoutCallback(merchantDetails.payout_callback, {
       reference_id: referenceId,
       type: 'payout',
@@ -142,7 +146,7 @@ async function finalizePayout({ referenceId, isSuccess, utr = null, gatewayTrans
       message: isSuccess ? 'Transaction processed' : 'Transaction failed',
       timestamp: new Date().toISOString()
     });
-  } else {
+  } else if (notifyMerchant) {
     logger.warn('No payout callback URL configured for merchant', { reference_id: referenceId, user_id: userId });
   }
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Button, Chip, IconButton, Tooltip } from '@mui/material'
-import { Download, RefreshCw, Send } from 'lucide-react'
+import { Download, RefreshCw, Send, RotateCw } from 'lucide-react'
 import DataTable, { Column } from '@/components/ui/DataTable'
 import api from '@/utils/axios'
 import { formatCurrency, formatDateTime } from '@/utils/formatUtils'
@@ -39,6 +39,11 @@ export default function AdminPayoutReport() {
   const [pageSize, setPageSize] = useState(10)
   const [totalItems, setTotalItems] = useState(0)
   const [resendingId, setResendingId] = useState<string | null>(null)
+  const [checkingId, setCheckingId] = useState<string | null>(null)
+  const [syncingId, setSyncingId] = useState<string | null>(null)
+  const [checkResults, setCheckResults] = useState<Record<string, { live_status: string; mapped_status: string; differs: boolean }>>({})
+
+  const errMsg = (err: unknown) => (err as { response?: { data?: { message?: string } } })?.response?.data?.message
 
   const handleResend = async (referenceId: string) => {
     if (!window.confirm(`Resend the payout callback for ${referenceId}?`)) return
@@ -47,10 +52,42 @@ export default function AdminPayoutReport() {
       const res = await api.post(`/admin/payout/${referenceId}/resend-webhook`)
       toast.success(res.data?.message || 'Webhook resent successfully')
     } catch (err) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-      toast.error(msg || 'Failed to resend webhook')
+      toast.error(errMsg(err) || 'Failed to resend webhook')
     } finally {
       setResendingId(null)
+    }
+  }
+
+  const handleCheckStatus = async (referenceId: string) => {
+    setCheckingId(referenceId)
+    try {
+      const res = await api.get(`/admin/payout-transactions/${referenceId}/check-status`)
+      const { live_status, mapped_status, differs } = res.data
+      setCheckResults((prev) => ({ ...prev, [referenceId]: { live_status, mapped_status, differs } }))
+      toast.success(`Gateway status: ${live_status}${differs ? ' (differs — can update)' : ''}`)
+    } catch (err) {
+      toast.error(errMsg(err) || 'Failed to check status')
+    } finally {
+      setCheckingId(null)
+    }
+  }
+
+  const handleSyncStatus = async (referenceId: string, mappedStatus: string) => {
+    if (!window.confirm(`Update ${referenceId} to "${mappedStatus}"? This will refund on failure and notify the merchant.`)) return
+    setSyncingId(referenceId)
+    try {
+      const res = await api.post(`/admin/payout-transactions/${referenceId}/sync-status`)
+      if (res.data?.success) {
+        toast.success(res.data?.message || 'Transaction updated')
+        setCheckResults((prev) => { const next = { ...prev }; delete next[referenceId]; return next })
+        fetch(page, pageSize)
+      } else {
+        toast.error(res.data?.message || 'Nothing to update')
+      }
+    } catch (err) {
+      toast.error(errMsg(err) || 'Failed to update status')
+    } finally {
+      setSyncingId(null)
     }
   }
 
@@ -115,7 +152,46 @@ export default function AdminPayoutReport() {
       </div>
 
       <DataTable
-        columns={[...columns, { key: '_actions', label: 'Actions', render: (r) => (
+        columns={[...columns,
+        { key: '_check', label: 'Check Status', render: (r) => {
+          const canCheck = r.status === 'pending' || r.status === 'processing'
+          if (!canCheck) return <span className="text-slate-300 text-xs">—</span>
+          const checked = checkResults[r.reference_id]
+          return (
+            <div className="flex flex-col items-start gap-0.5">
+              <Tooltip title="Check live gateway status">
+                <span>
+                  <IconButton size="small" disabled={checkingId === r.reference_id}
+                    onClick={() => handleCheckStatus(r.reference_id)} sx={{ color: '#2563EB' }}>
+                    <RefreshCw size={15} className={checkingId === r.reference_id ? 'animate-spin' : ''} />
+                  </IconButton>
+                </span>
+              </Tooltip>
+              {checked && (
+                <span className={`text-[0.65rem] font-medium ${checked.differs ? 'text-amber-600' : 'text-green-600'}`}>
+                  {checked.live_status}
+                </span>
+              )}
+            </div>
+          )
+        }},
+        { key: '_sync', label: 'Sync', render: (r) => {
+          const canCheck = r.status === 'pending' || r.status === 'processing'
+          const checked = checkResults[r.reference_id]
+          if (!canCheck || !checked) return <span className="text-slate-300 text-xs">—</span>
+          if (!checked.differs) return <span className="text-green-600 text-xs">In sync</span>
+          return (
+            <Tooltip title={`Update to ${checked.mapped_status}`}>
+              <span>
+                <IconButton size="small" disabled={syncingId === r.reference_id}
+                  onClick={() => handleSyncStatus(r.reference_id, checked.mapped_status)} sx={{ color: '#D97706' }}>
+                  <RotateCw size={15} className={syncingId === r.reference_id ? 'animate-spin' : ''} />
+                </IconButton>
+              </span>
+            </Tooltip>
+          )
+        }},
+        { key: '_actions', label: 'Actions', render: (r) => (
           (r.status === 'completed' || r.status === 'failed') ? (
             <Tooltip title="Resend Webhook">
               <span>

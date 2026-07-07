@@ -52,7 +52,9 @@ const {
   adminCheckPayinStatus,
   getGatewayStats,
   resendPayinWebhook,
-  resendPayoutWebhook
+  resendPayoutWebhook,
+  adminCheckPayoutStatus,
+  adminSyncPayoutStatus
 } = require('../controllers/admin.controller');
 const { registerUser } = require('../controllers/auth.controller');
 const { auth, authorize } = require('../middleware/auth.middleware');
@@ -181,6 +183,10 @@ router.get('/gateway-stats', getGatewayStats);
 // Manual webhook resend for stuck completed transactions
 router.post('/payin/:reference_id/resend-webhook', resendPayinWebhook);
 router.post('/payout/:reference_id/resend-webhook', resendPayoutWebhook);
+
+// Per-transaction payout status: check live gateway status (read-only) and sync/apply it
+router.get('/payout-transactions/:reference_id/check-status', adminCheckPayoutStatus);
+router.post('/payout-transactions/:reference_id/sync-status', adminSyncPayoutStatus);
 
 // Callback queue health
 router.get('/queue/health', async (req, res) => {

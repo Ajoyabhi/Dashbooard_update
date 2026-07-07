@@ -5,7 +5,14 @@ const PayoutTransaction = require('../models/payoutTransaction.model');
 const PayinTransaction = require('../models/payinTransaction.model');
 const axios = require('axios');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
-const { sendMerchantPayoutCallback } = require('../services/payoutReconciliation.service');
+const { sendMerchantPayoutCallback, finalizePayout } = require('../services/payoutReconciliation.service');
+const {
+  unpayTransactionStatus,
+  spayTransactionStatus,
+  philpayTransactionStatus,
+  xlitepayTransactionStatus,
+  bluswapTransactionStatus
+} = require('../transactionStatusCheck/TransactionCheck');
 const { logger } = require('../utils/logger');
 // const Wallet = require('../models/wallet.model');
 const Transaction = require('../models/transaction.model');
@@ -2384,270 +2391,113 @@ const makePayoutFailed = async (req, res) => {
                 message: 'Reference numbers array is required'
             });
         }
-        console.log("this is here referenceNumbers", referenceNumbers);
 
-        // Import SQL models
-        const { User, ManageFundRequest, FinancialDetails, PayoutFailedHistory, sequelize } = require('../models');
+        // SQL models used for the settlement refund + failed-history record.
+        const { User, FinancialDetails, PayoutFailedHistory } = require('../models');
 
-        // Find and update transactions with pending status
-        // Update UserTransactions
-        const updateResult = await UserTransaction.updateMany(
-            {
-                reference_id: { $in: referenceNumbers },
-                status: 'pending'
-            },
-            {
-                $set: {
-                    status: 'failed',
-                    remark: 'Transaction marked as failed by admin',
-                    updatedAt: new Date()
-                }
-            }
-        );
-
-        // Update PayoutTransactions
-        const updatePayoutResult = await PayoutTransaction.updateMany(
-            {
-                reference_id: { $in: referenceNumbers },
-                status: 'pending'
-            },
-            { $set: { status: 'failed' } }
-        );
-
-        console.log(`Updated ${updateResult.modifiedCount} UserTransactions and ${updatePayoutResult.modifiedCount} PayoutTransactions`);
-
-        // Get the updated transactions for response
-        const updatedTransactions = await UserTransaction.find({
-            reference_id: { $in: referenceNumbers }
-        }).select('reference_id status amount user.user_id charges.total_charges beneficiary_details gateway_response createdAt updatedAt');
-
-        const updatedTransactionsPayout = await PayoutTransaction.find({
-            reference_id: { $in: referenceNumbers }
-        }).select('reference_id status amount user.user_id charges.total_charges beneficiary_details gateway_response createdAt updatedAt');
-
-        console.log("updatedTransactions", "================", updatedTransactions);
-        console.log("updatedTransactionsPayout", "================", updatedTransactionsPayout);
-        // Update wallet balance for each user
         const walletUpdates = [];
-        const processedReferences = new Set(); // Track processed reference numbers
+        const skipped = [];
+        const uniqueRefs = [...new Set(referenceNumbers)];
 
-        // Process UserTransactions
-        for (const transaction of updatedTransactions) {
-            if (processedReferences.has(transaction.reference_id)) {
-                console.log(`Skipping duplicate reference: ${transaction.reference_id}`);
-                continue;
-            }
-            processedReferences.add(transaction.reference_id);
-            if (transaction.user && transaction.user.user_id) {
-                try {
-                    console.log("Processing UserTransaction:", {
-                        reference_id: transaction.reference_id,
-                        user_id: transaction.user.user_id,
-                        amount: transaction.amount,
-                        charges: transaction.charges
-                    });
-
-                    // Find the user in SQL database
-                    const user = await User.findByPk(transaction.user.user_id);
-                    if (user) {
-                        console.log("Found user:", user.name);
-
-                        // Find or create financial details for this user
-                        const [financialDetails, created] = await FinancialDetails.findOrCreate({
-                            where: { user_id: transaction.user.user_id },
-                            defaults: {
-                                wallet: 0,
-                                settlement: 0,
-                                lien: 0,
-                                rolling_reserve: 0
-                            }
-                        });
-
-                        const currentBalance = parseFloat(financialDetails.wallet) || 0;
-                        console.log("Current wallet balance:", currentBalance);
-
-                        // Calculate amount to add to wallet
-                        const amount = parseFloat(transaction.amount) || 0;
-                        const charges = parseFloat(transaction.charges?.total_charges) || 0;
-                        const totalAmount = amount + charges;
-
-                        console.log("Amount calculation:", {
-                            amount: amount,
-                            charges: charges,
-                            totalAmount: totalAmount
-                        });
-
-                        // Calculate new balance
-                        const newBalance = currentBalance + totalAmount;
-                        console.log("New wallet balance will be:", newBalance);
-
-                        // Store the old balance before updating
-                        const oldBalance = currentBalance;
-
-                        await financialDetails.update({
-                            wallet: newBalance
-                        });
-
-                        // Verify the update
-                        const updatedFinancialDetails = await FinancialDetails.findOne({
-                            where: { user_id: transaction.user.user_id }
-                        });
-                        console.log("Updated wallet balance:", updatedFinancialDetails.wallet);
-
-                        walletUpdates.push({
-                            user_id: transaction.user.user_id,
-                            user_name: user.name,
-                            amount_added: totalAmount,
-                            transaction_type: 'UserTransaction',
-                            reference_id: transaction.reference_id,
-                            old_balance: oldBalance,
-                            new_balance: updatedFinancialDetails.wallet
-                        });
-
-                        // Store failed transaction history
-                        await PayoutFailedHistory.create({
-                            user_id: transaction.user.user_id,
-                            reference_id: transaction.reference_id,
-                            transaction_id: transaction.transaction_id || null,
-                            transaction_type: 'PayoutTransaction',
-                            amount: amount,
-                            charges: charges,
-                            total_amount: totalAmount,
-                            wallet_balance_before: oldBalance,
-                            wallet_balance_after: updatedFinancialDetails.wallet,
-                            beneficiary_name: updatedTransactionsPayout.map(item => item.beneficiary_details?.beneficiary_name).join(', '),
-                            beneficiary_account: updatedTransactionsPayout.map(item => item.beneficiary_details?.account_number).join(', '),
-                            beneficiary_ifsc: updatedTransactionsPayout.map(item => item.beneficiary_details?.account_ifsc).join(', '),
-                            bank_name: updatedTransactionsPayout.map(item => item.beneficiary_details?.bank_name).join(', '),
-                            utr_number: transaction.gateway_response?.utr || null,
-                            remark: 'Transaction marked as failed by admin',
-                            failed_by: req.user.id,
-                            original_status: 'pending',
-                            new_status: 'failed'
-                        });
-                    } else {
-                        console.log("User not found:", transaction.user.user_id);
-                    }
-                } catch (error) {
-                    console.error(`Error updating wallet for user ${transaction.user.user_id}:`, error);
+        for (const reference_id of uniqueRefs) {
+            try {
+                const payout = await PayoutTransaction.findOne({ reference_id });
+                if (!payout) {
+                    skipped.push({ reference_id, reason: 'not_found' });
+                    continue;
                 }
+                // Only non-terminal payouts can be failed + refunded.
+                if (!['pending', 'processing'].includes(payout.status)) {
+                    skipped.push({ reference_id, reason: 'already_finalized', status: payout.status });
+                    continue;
+                }
+
+                const userId = payout.user?.user_id;
+                if (!userId) {
+                    skipped.push({ reference_id, reason: 'no_user' });
+                    continue;
+                }
+
+                // Capture settlement before, then let finalizePayout do the atomic
+                // status transition + refund. finalizePayout refunds the FULL deducted
+                // amount to SETTLEMENT: amount + total_charges + gst_amount + platform_fee.
+                const finBefore = await FinancialDetails.findOne({ where: { user_id: parseInt(userId, 10) } });
+                const settlementBefore = parseFloat(finBefore?.settlement || 0);
+
+                // notifyMerchant: true -> fire the merchant's payout webhook so their
+                // side is updated with the new (failed) status.
+                const result = await finalizePayout({
+                    referenceId: reference_id,
+                    isSuccess: false,
+                    message: 'Transaction marked as failed by admin',
+                    notifyMerchant: true
+                });
+
+                if (!result?.changed) {
+                    skipped.push({ reference_id, reason: result?.reason || 'not_changed' });
+                    continue;
+                }
+
+                const finAfter = await FinancialDetails.findOne({ where: { user_id: parseInt(userId, 10) } });
+                const settlementAfter = parseFloat(finAfter?.settlement || 0);
+
+                const amount = parseFloat(payout.amount) || 0;
+                const totalCharges = parseFloat(payout.charges?.total_charges) || 0;
+                const gst = parseFloat(payout.gst_amount) || 0;
+                const platformFee = parseFloat(payout.platform_fee) || 0;
+                const chargesRefunded = totalCharges + gst + platformFee;
+                const totalRefunded = amount + chargesRefunded;
+
+                const user = await User.findByPk(userId);
+
+                walletUpdates.push({
+                    user_id: userId,
+                    user_name: user?.name || null,
+                    amount_added: totalRefunded,
+                    transaction_type: 'PayoutTransaction',
+                    reference_id,
+                    old_balance: settlementBefore,
+                    new_balance: settlementAfter
+                });
+
+                // Store failed-transaction history. NOTE: the wallet_balance_* columns
+                // now carry the SETTLEMENT balance (payouts move settlement, not wallet).
+                await PayoutFailedHistory.create({
+                    user_id: userId,
+                    reference_id,
+                    transaction_id: payout.transaction_id || null,
+                    transaction_type: 'PayoutTransaction',
+                    amount,
+                    charges: chargesRefunded,
+                    total_amount: totalRefunded,
+                    wallet_balance_before: settlementBefore,
+                    wallet_balance_after: settlementAfter,
+                    beneficiary_name: payout.beneficiary_details?.beneficiary_name || null,
+                    beneficiary_account: payout.beneficiary_details?.account_number || null,
+                    beneficiary_ifsc: payout.beneficiary_details?.account_ifsc || null,
+                    bank_name: payout.beneficiary_details?.bank_name || null,
+                    utr_number: payout.gateway_response?.utr || null,
+                    remark: 'Transaction marked as failed by admin',
+                    failed_by: req.user.id,
+                    original_status: 'pending',
+                    new_status: 'failed'
+                });
+            } catch (err) {
+                logger.error('Error failing payout', { reference_id, error: err.message });
+                skipped.push({ reference_id, reason: 'error', error: err.message });
             }
         }
 
-        // Process PayoutTransactions
-        for (const transaction of updatedTransactionsPayout) {
-            if (processedReferences.has(transaction.reference_id)) {
-                console.log(`Skipping duplicate reference: ${transaction.reference_id}`);
-                continue;
-            }
-            processedReferences.add(transaction.reference_id);
-            if (transaction.user && transaction.user.user_id) {
-                try {
-                    console.log("Processing PayoutTransaction:", {
-                        reference_id: transaction.reference_id,
-                        user_id: transaction.user.user_id,
-                        amount: transaction.amount,
-                        charges: transaction.charges
-                    });
-
-                    // Find the user in SQL database
-                    const user = await User.findByPk(transaction.user.user_id);
-                    if (user) {
-                        console.log("Found user:", user.name);
-
-                        // Find or create financial details for this user
-                        const [financialDetails, created] = await FinancialDetails.findOrCreate({
-                            where: { user_id: transaction.user.user_id },
-                            defaults: {
-                                wallet: 0,
-                                settlement: 0,
-                                lien: 0,
-                                rolling_reserve: 0
-                            }
-                        });
-
-                        const currentBalance = parseFloat(financialDetails.wallet) || 0;
-                        console.log("Current wallet balance:", currentBalance);
-
-                        // Calculate amount to add to wallet
-                        const amount = parseFloat(transaction.amount) || 0;
-                        const charges = parseFloat(transaction.charges?.total_charges) || 0;
-                        const totalAmount = amount + charges;
-
-                        console.log("Amount calculation:", {
-                            amount: amount,
-                            charges: charges,
-                            totalAmount: totalAmount
-                        });
-
-                        // Calculate new balance
-                        const newBalance = currentBalance + totalAmount;
-                        console.log("New wallet balance will be:", newBalance);
-
-                        // Store the old balance before updating
-                        const oldBalance = currentBalance;
-
-                        await financialDetails.update({
-                            wallet: newBalance
-                        });
-
-                        // Verify the update
-                        const updatedFinancialDetails = await FinancialDetails.findOne({
-                            where: { user_id: transaction.user.user_id }
-                        });
-                        console.log("Updated wallet balance:", updatedFinancialDetails.wallet);
-
-                        walletUpdates.push({
-                            user_id: transaction.user.user_id,
-                            user_name: user.name,
-                            amount_added: totalAmount,
-                            transaction_type: 'PayoutTransaction',
-                            reference_id: transaction.reference_id,
-                            old_balance: oldBalance,
-                            new_balance: updatedFinancialDetails.wallet
-                        });
-
-                        // Store failed transaction history
-                        await PayoutFailedHistory.create({
-                            user_id: transaction.user.user_id,
-                            reference_id: transaction.reference_id,
-                            transaction_id: transaction.transaction_id || null,
-                            transaction_type: 'PayoutTransaction',
-                            amount: amount,
-                            charges: charges,
-                            total_amount: totalAmount,
-                            wallet_balance_before: oldBalance,
-                            wallet_balance_after: updatedFinancialDetails.wallet,
-                            beneficiary_name: transaction.beneficiary_details?.beneficiary_name || null,
-                            beneficiary_account: transaction.beneficiary_details?.account_number || null,
-                            beneficiary_ifsc: transaction.beneficiary_details?.account_ifsc || null,
-                            bank_name: transaction.beneficiary_details?.bank_name || null,
-                            utr_number: transaction.gateway_response?.utr || null,
-                            remark: 'Transaction marked as failed by admin',
-                            failed_by: req.user.id,
-                            original_status: 'pending',
-                            new_status: 'failed'
-                        });
-                    } else {
-                        console.log("User not found:", transaction.user.user_id);
-                    }
-                } catch (error) {
-                    console.error(`Error updating wallet for user ${transaction.user.user_id}:`, error);
-                }
-            }
-        }
-
+        const modifiedCount = walletUpdates.length;
         res.json({
             success: true,
-            message: `Successfully updated ${updateResult.modifiedCount + updatePayoutResult.modifiedCount} transactions to failed status and updated wallet balances`,
+            message: `Marked ${modifiedCount} payout(s) as failed and refunded the settlement balance`,
             data: {
-                modifiedCount: updateResult.modifiedCount + updatePayoutResult.modifiedCount,
-                totalMatched: updateResult.matchedCount + updatePayoutResult.matchedCount,
-                userTransactionsUpdated: updateResult.modifiedCount,
-                payoutTransactionsUpdated: updatePayoutResult.modifiedCount,
-                updatedTransactions,
-                updatedTransactionsPayout,
-                walletUpdates
+                modifiedCount,
+                totalMatched: uniqueRefs.length,
+                payoutTransactionsUpdated: modifiedCount,
+                walletUpdates,
+                skipped
             }
         });
 
@@ -3551,6 +3401,123 @@ const resendPayoutWebhook = async (req, res) => {
     }
 };
 
+// Query the payout gateway for the live status of a transaction, resolving the
+// gateway from the TRANSACTION's owner (not the logged-in admin). All gateway
+// helpers return a normalized result.data.status of success|failed|pending.
+const getLivePayoutStatus = async (transaction) => {
+    const userId = transaction.user?.user_id;
+    const merchantDetails = await MerchantDetails.findOne({ where: { user_id: parseInt(userId, 10) } });
+    const merchantName = merchantDetails?.payout_merchant_name;
+
+    const statusFns = {
+        BluSwap: bluswapTransactionStatus,
+        Philpay: philpayTransactionStatus,
+        Xlitepay: xlitepayTransactionStatus,
+        Unpay: unpayTransactionStatus,
+        SPay: spayTransactionStatus,
+    };
+    const fn = statusFns[merchantName];
+    if (!fn) return { supported: false, merchantName: merchantName || null };
+
+    let statusResult;
+    try {
+        statusResult = await fn(transaction.reference_id);
+    } catch (err) {
+        logger.error('Gateway payout status check failed', { reference_id: transaction.reference_id, merchant: merchantName, error: err.message });
+        return { supported: true, merchantName, derived: 'error', error: err.message };
+    }
+
+    const derived = statusResult?.data?.status || 'unknown'; // success | failed | pending | error | unknown
+    const gw = statusResult?.data?.response?.data || statusResult?.data?.response || {};
+    return {
+        supported: true,
+        merchantName,
+        derived,
+        utr: gw.utr || gw.rrn || gw.bank_reference_id || transaction.gateway_response?.utr || null,
+        gatewayTransactionId: gw.bluswap_transaction_id || gw.transaction_id || null,
+        message: gw.status_description || gw.message || null,
+    };
+};
+
+// Read-only: report the live gateway status alongside the stored status so the
+// admin UI can decide whether an update is needed. Does NOT modify anything.
+const adminCheckPayoutStatus = async (req, res) => {
+    try {
+        const { reference_id } = req.params;
+        const transaction = await PayoutTransaction.findOne({ reference_id });
+        if (!transaction) {
+            return res.status(404).json({ success: false, message: 'Transaction not found' });
+        }
+
+        const live = await getLivePayoutStatus(transaction);
+        if (!live.supported) {
+            return res.status(400).json({ success: false, message: `Live status check not supported for gateway: ${live.merchantName || 'unknown'}` });
+        }
+
+        // Map gateway 'success' to our stored 'completed' for comparison.
+        const mappedStatus = live.derived === 'success' ? 'completed'
+            : live.derived === 'failed' ? 'failed'
+                : live.derived;
+        const differs = ['completed', 'failed'].includes(mappedStatus) && mappedStatus !== transaction.status;
+
+        return res.status(200).json({
+            success: true,
+            reference_id,
+            db_status: transaction.status,
+            live_status: live.derived,      // success | failed | pending | error | unknown
+            mapped_status: mappedStatus,    // completed | failed | pending | ...
+            differs,
+            utr: live.utr,
+            message: live.message,
+        });
+    } catch (error) {
+        logger.error('Admin check payout status error', { error: error.message, reference_id: req.params.reference_id });
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// Apply the live gateway status: if terminal and the transaction is still
+// pending/processing, finalize it (atomic status change + refund on failure +
+// merchant webhook), reusing the same path as the automatic reconciler.
+const adminSyncPayoutStatus = async (req, res) => {
+    try {
+        const { reference_id } = req.params;
+        const transaction = await PayoutTransaction.findOne({ reference_id });
+        if (!transaction) {
+            return res.status(404).json({ success: false, message: 'Transaction not found' });
+        }
+        if (!['pending', 'processing'].includes(transaction.status)) {
+            return res.status(400).json({ success: false, message: `Transaction already finalized (status: ${transaction.status})` });
+        }
+
+        const live = await getLivePayoutStatus(transaction);
+        if (!live.supported) {
+            return res.status(400).json({ success: false, message: `Live status check not supported for gateway: ${live.merchantName || 'unknown'}` });
+        }
+        if (live.derived !== 'success' && live.derived !== 'failed') {
+            return res.status(200).json({ success: false, message: `Gateway still reports '${live.derived}' — nothing to update`, live_status: live.derived });
+        }
+
+        const result = await finalizePayout({
+            referenceId: reference_id,
+            isSuccess: live.derived === 'success',
+            utr: live.utr,
+            gatewayTransactionId: live.gatewayTransactionId,
+            message: live.message,
+        });
+
+        return res.status(200).json({
+            success: !!result?.changed,
+            message: result?.changed ? `Transaction updated to ${live.derived}` : (result?.reason || 'No change applied'),
+            new_status: live.derived,
+            result,
+        });
+    } catch (error) {
+        logger.error('Admin sync payout status error', { error: error.message, reference_id: req.params.reference_id });
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 const getGatewayStats = async (req, res) => {
     try {
         const { from, to } = req.query;
@@ -3679,5 +3646,7 @@ module.exports = {
     adminCheckPayinStatus,
     getGatewayStats,
     resendPayinWebhook,
-    resendPayoutWebhook
+    resendPayoutWebhook,
+    adminCheckPayoutStatus,
+    adminSyncPayoutStatus
 };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Filter, Search, X, Send } from 'lucide-react';
+import { Download, Filter, Search, X, Send, RefreshCw, RotateCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../utils/axios';
 import DashboardLayout from '../../components/layout/DashboardLayout';
@@ -88,6 +88,9 @@ export default function PayoutReport() {
   const [users, setUsers] = useState<UserOption[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [checkingId, setCheckingId] = useState<string | null>(null);
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [checkResults, setCheckResults] = useState<Record<string, { live_status: string; mapped_status: string; differs: boolean }>>({});
 
   const handleResendWebhook = async (referenceId: string) => {
     if (!window.confirm(`Resend the payout callback for ${referenceId}?`)) return;
@@ -99,6 +102,39 @@ export default function PayoutReport() {
       toast.error(err?.response?.data?.message || 'Failed to resend webhook');
     } finally {
       setResendingId(null);
+    }
+  };
+
+  const handleCheckStatus = async (referenceId: string) => {
+    setCheckingId(referenceId);
+    try {
+      const response = await api.get(`/admin/payout-transactions/${referenceId}/check-status`);
+      const { live_status, mapped_status, differs } = response.data;
+      setCheckResults((prev) => ({ ...prev, [referenceId]: { live_status, mapped_status, differs } }));
+      toast.success(`Gateway status: ${live_status}${differs ? ' (differs — can update)' : ''}`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to check status');
+    } finally {
+      setCheckingId(null);
+    }
+  };
+
+  const handleSyncStatus = async (referenceId: string, mappedStatus: string) => {
+    if (!window.confirm(`Update ${referenceId} to "${mappedStatus}"? This will refund on failure and notify the merchant.`)) return;
+    setSyncingId(referenceId);
+    try {
+      const response = await api.post(`/admin/payout-transactions/${referenceId}/sync-status`);
+      if (response.data?.success) {
+        toast.success(response.data?.message || 'Transaction updated');
+        setCheckResults((prev) => { const next = { ...prev }; delete next[referenceId]; return next; });
+        fetchTransactions();
+      } else {
+        toast.error(response.data?.message || 'Nothing to update');
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to update status');
+    } finally {
+      setSyncingId(null);
     }
   };
 
@@ -303,6 +339,52 @@ export default function PayoutReport() {
       header: 'Date',
       accessor: 'createdAt',
       cell: (value: string) => formatDate(value),
+    },
+    {
+      header: 'Check Status',
+      accessor: 'status',
+      cell: (value: string, row: PayoutRecord) => {
+        const canCheck = value === 'pending' || value === 'processing';
+        if (!canCheck) return <span className="text-xs text-gray-400">—</span>;
+        const checked = checkResults[row.reference_id];
+        return (
+          <div className="flex flex-col items-start gap-1">
+            <button
+              onClick={() => handleCheckStatus(row.reference_id)}
+              disabled={checkingId === row.reference_id}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 whitespace-nowrap transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`h-3 w-3 ${checkingId === row.reference_id ? 'animate-spin' : ''}`} />
+              {checkingId === row.reference_id ? 'Checking…' : 'Check Status'}
+            </button>
+            {checked && (
+              <span className={`text-xs font-medium ${checked.differs ? 'text-amber-600' : 'text-green-600'}`}>
+                Gateway: {checked.live_status}
+              </span>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      header: 'Sync',
+      accessor: 'status',
+      cell: (value: string, row: PayoutRecord) => {
+        const canCheck = value === 'pending' || value === 'processing';
+        const checked = checkResults[row.reference_id];
+        if (!canCheck || !checked) return <span className="text-xs text-gray-400">—</span>;
+        if (!checked.differs) return <span className="text-xs text-green-600">In sync</span>;
+        return (
+          <button
+            onClick={() => handleSyncStatus(row.reference_id, checked.mapped_status)}
+            disabled={syncingId === row.reference_id}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 whitespace-nowrap transition-colors disabled:opacity-50"
+          >
+            <RotateCw className={`h-3 w-3 ${syncingId === row.reference_id ? 'animate-spin' : ''}`} />
+            {syncingId === row.reference_id ? 'Updating…' : `Update to ${checked.mapped_status}`}
+          </button>
+        );
+      },
     },
     {
       header: 'Actions',

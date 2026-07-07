@@ -6,7 +6,6 @@ const { logger } = require('../utils/logger');
 const { setValidationResult, setThirdPartyApiInfo } = require('../middleware/apiLogger.middleware');
 const { validatePaymentRequest } = require('../controllers/payment.controller');
 const PayoutTransaction = require('../models/payoutTransaction.model');
-const UserTransaction = require('../models/userTransaction.model');
 const { Op } = require('sequelize');
 const { unpayPayout, spayPayout, philpayPayout, xlitepayPayout, bluswapPayout } = require('../merchant_payin_payout/merchant_payout_request');
 const getClientIp = require('../utils/getClientIp');
@@ -14,7 +13,24 @@ const mongoose = require('mongoose');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
 const axios = require('axios');
 const { unpayTransactionStatus, spayTransactionStatus, philpayTransactionStatus, xlitepayTransactionStatus, bluswapTransactionStatus } = require('../transactionStatusCheck/TransactionCheck');
-const { reconcilePayoutTransaction } = require('../services/payoutReconciliation.service');
+const { reconcilePayoutTransaction, finalizePayout } = require('../services/payoutReconciliation.service');
+
+/**
+ * Reverse a payout that failed synchronously at creation time (e.g. the gateway
+ * rejected the request after we had already deducted the merchant's settlement).
+ *
+ * Reuses finalizePayout so the refund + status transition happen atomically and
+ * identically to the async callback path. notifyMerchant is false because the
+ * caller already returns the failure in the HTTP response.
+ */
+const failPayoutWithRefund = async (reference_id, message) => {
+  try {
+    return await finalizePayout({ referenceId: reference_id, isSuccess: false, message, notifyMerchant: false });
+  } catch (err) {
+    logger.error('Failed to reverse rejected payout', { reference_id, error: err.message });
+    return { changed: false, reason: 'reversal_error' };
+  }
+};
 
 /**
  * Initiate a payout
@@ -244,40 +260,6 @@ const initiatePayout = async (req, res) => {
       }
     );
 
-    let userTransaction = await UserTransaction.create({
-      user: {
-        id: new mongoose.Types.ObjectId(user_id),
-        user_id: user_id
-      },
-      transaction_id: uuidv4(),
-      amount: amount,
-      transaction_type: 'payout',
-      reference_id: reference_id,
-      status: 'pending',
-      charges: {
-        admin_charge: adminCharge,
-        agent_charge: agentCharge,
-        total_charges: totalCharges
-      },
-      gst_amount: gstAmount,
-      platform_fee: platformFee,
-      balance: {
-        before: user.FinancialDetail.settlement,
-        after: user_balance_left
-      },
-      merchant_details: {
-        merchant_name: user.MerchantDetail.payout_merchant_name,
-        merchant_callback_url: user.MerchantDetail.payout_callback
-      },
-      remark: 'Payout request initiated',
-      metadata: {
-        requested_ip: clientIp
-      },
-      created_by: new mongoose.Types.ObjectId(user_id),
-      created_by_model: user.user_type
-    });
-    await userTransaction.save();
-
     let payoutTransaction = await PayoutTransaction.create({
       transaction_id: uuidv4(),
       user: {
@@ -357,10 +339,6 @@ const initiatePayout = async (req, res) => {
           { reference_id: reference_id },
           { $set: { status: "completed", gateway_response: { reference_id, status: "completed", message: result.data.message, merchant_response: result.data.txn_id } } }
         );
-        await userTransaction.updateOne(
-          { reference_id: reference_id },
-          { $set: { status: "completed", gateway_response: { reference_id, status: "completed", message: result.data.message, merchant_response: result.data.txn_id } } }
-        );
         await TransactionCharges.update(
           {
             status: 'completed',
@@ -376,21 +354,8 @@ const initiatePayout = async (req, res) => {
           reference_id: result.data.apitxnid
         });
       } else {
-        await payoutTransaction.updateOne(
-          { reference_id: reference_id },
-          { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result?.data?.message || 'Unknown error' } } }
-        );
-        await userTransaction.updateOne(
-          { reference_id: reference_id },
-          { $set: { status: "failed", gateway_response: { reference_id, status: "failed", message: result?.data?.message || 'Unknown error' } } }
-        );
-        await TransactionCharges.update(
-          {
-            status: 'failed',
-            merchant_response: result.data.txn_id
-          },
-          { where: { reference_id: reference_id } }
-        );
+        // Gateway rejected — atomically mark failed and refund the deducted settlement.
+        await failPayoutWithRefund(reference_id, result?.data?.message || 'Unknown error');
         res.status(400).json({
           success: false,
           message: 'Payout processing failed',
@@ -449,6 +414,7 @@ const initiatePayout = async (req, res) => {
         });
       }
       else {
+        await failPayoutWithRefund(reference_id, result?.data?.message || 'Payout processing failed');
         return res.status(400).json({
           success: false,
           message: result.data.message || 'Payout processing failed',
@@ -480,6 +446,7 @@ const initiatePayout = async (req, res) => {
           reference_id: result.data.apitxnid
         });
       } else {
+        await failPayoutWithRefund(reference_id, result?.data?.message || 'Payout processing failed');
         return res.status(400).json({
           success: false,
           message: result?.data?.message || 'Payout processing failed',
@@ -513,6 +480,7 @@ const initiatePayout = async (req, res) => {
           transaction_id: result.data.transaction_id
         });
       } else {
+        await failPayoutWithRefund(reference_id, result?.data?.message || 'Payout processing failed');
         return res.status(400).json({
           success: false,
           message: result?.data?.message || 'Payout processing failed',
@@ -523,6 +491,12 @@ const initiatePayout = async (req, res) => {
 
   } catch (error) {
     logger.error('Error processing payout', { error: error.message });
+    // If we already deducted the settlement (and created the payout) before the
+    // exception, reverse it so the merchant is never charged for a payout that
+    // did not go through. No-ops if nothing was created/deducted yet.
+    if (req.body?.reference_id) {
+      await failPayoutWithRefund(req.body.reference_id, 'Error processing payout');
+    }
     res.status(500).json({
       success: false,
       message: 'Error processing payout'
