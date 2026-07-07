@@ -4,7 +4,7 @@ const { auth } = require('../middleware/auth.middleware');
 const { checkRole } = require('../middleware/role.middleware');
 const { initiatePayment, getTransactionStatus, handleUnpayCallback, handleSpayCallback,
   handleSpayPayoutCallback, handlePhilpayPayoutCallback, handleBluswapPayoutCallback, hdfcCallback, airpayCallback } = require('../controllers/payment.controller');
-const { initiatePayout , getPayoutTransactionStatus, handleBalanceCheck} = require('../controllers/payment.payout');
+const { initiatePayout , getPayoutTransactionStatus, handleBalanceCheck, reconcilePayoutByReference, reconcileProcessingPayouts } = require('../controllers/payment.payout');
 
 
 // Initiate payout - Only admin and agent can initiate payouts
@@ -30,10 +30,24 @@ router.get('/payin/transaction/:transaction_id',
 
 
 // Get transaction status - payout
-router.get('/payout/transaction/:transaction_id', 
+router.get('/payout/transaction/:transaction_id',
   auth,
-  checkRole(['admin', 'agent', 'user', 'payin_payout', 'payout_only', 'payin_only']), 
+  checkRole(['admin', 'agent', 'user', 'payin_payout', 'payout_only', 'payin_only']),
   getPayoutTransactionStatus
+);
+
+// Reconcile all stuck 'processing' payouts against the gateway status API (admin/agent maintenance)
+router.post('/payout/reconcile',
+  auth,
+  checkRole(['admin', 'agent']),
+  reconcileProcessingPayouts
+);
+
+// Reconcile a single payout by reference_id against the gateway status API
+router.post('/payout/reconcile/:reference_id',
+  auth,
+  checkRole(['admin', 'agent', 'user', 'payin_payout', 'payout_only', 'payin_only']),
+  reconcilePayoutByReference
 );
 
 // router.get

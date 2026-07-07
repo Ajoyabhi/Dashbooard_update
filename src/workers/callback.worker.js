@@ -1,4 +1,5 @@
 const { callbackQueue, philpayPayoutQueue, bluswapPayoutQueue } = require('../config/queue.config');
+const { finalizePayout } = require('../services/payoutReconciliation.service');
 const { logger } = require('../utils/logger');
 const PayinTransaction = require('../models/payinTransaction.model');
 const UserTransaction = require('../models/userTransaction.model');
@@ -521,188 +522,19 @@ bluswapPayoutQueue.process(async function (job) {
     const bluswapTransactionId = job.data.data?.transaction_id || null;
     const isSuccess = trxStatus === 'SUCCESS';
 
-    if (isSuccess) {
-      // Update transaction charges
-      await TransactionCharges.update(
-        {
-          status: 'completed',
-          transaction_utr: utr
-        },
-        {
-          where: {
-            reference_id: referenceId
-          }
-        }
-      );
-      logger.info('Transaction charges stored', { reference: referenceId });
-      // Update payout transaction
-      await PayoutTransaction.updateOne(
-        { reference_id: referenceId },
-        {
-          $set: {
-            status: 'completed',
-            gateway_response: {
-              merchant_response: bluswapTransactionId,
-              status: 'success',
-              message: job.data.message || 'Transaction processed',
-              utr
-            }
-          }
-        }
-      );
-      logger.info('Payout transaction updated', { reference: referenceId });
-    } else {
-      logger.info('BluSwap payout job failed', {
-        jobId: job.id,
-        status: trxStatus,
-        message: job.data.message || 'Transaction failed',
-        attempts: job.attemptsMade
-      });
-      await TransactionCharges.update(
-        {
-          status: 'failed',
-          transaction_utr: utr
-        },
-        {
-          where: {
-            reference_id: referenceId
-          }
-        }
-      );
-      logger.info('Transaction charges stored', { reference: referenceId });
-      // Update payout transaction
-      await PayoutTransaction.updateOne(
-        { reference_id: referenceId },
-        {
-          $set: {
-            status: 'failed',
-            gateway_response: {
-              merchant_response: bluswapTransactionId,
-              status: 'failed',
-              message: job.data.message || 'Transaction failed',
-              utr
-            }
-          }
-        }
-      );
-      logger.info('Payout transaction updated', { reference: referenceId });
-    }
-
-    const payoutTransaction = await PayoutTransaction.findOne({ reference_id: referenceId });
-
-    if (!payoutTransaction) {
-      throw new Error('Transaction record not found');
-    }
-
-    const userId = payoutTransaction.user.user_id;
-    const settlement_amount = payoutTransaction.amount;
-    const chargesAmount = payoutTransaction.charges.total_charges;
-
-    // Only update settlement wallet if payout failed (refund the money)
-    if (!isSuccess) {
-      const userCurrrentBalance = await FinancialDetails.findOne({
-        where: {
-          user_id: parseInt(userId, 10)
-        }
-      });
-
-      if (userCurrrentBalance) {
-        const currentSettlement = parseFloat(userCurrrentBalance.settlement || 0);
-        const settlementAmount = parseFloat(settlement_amount || 0);
-        const chargesAmountParsed = parseFloat(chargesAmount || 0);
-
-        const newSettlement = currentSettlement + settlementAmount + chargesAmountParsed;
-
-        userCurrrentBalance.settlement = parseFloat(newSettlement.toFixed(2));
-        await userCurrrentBalance.save();
-
-        logger.info('Settlement wallet refunded for failed payout', {
-          reference_id: referenceId,
-          user_id: userId,
-          amount_refunded: settlementAmount + chargesAmountParsed,
-          new_settlement_balance: userCurrrentBalance.settlement
-        });
-      }
-    } else {
-      logger.info('Payout successful - no settlement refund needed', {
-        reference_id: referenceId,
-        user_id: userId
-      });
-    }
-
-    const merchantDetails = await MerchantDetails.findOne({
-      where: {
-        user_id: parseInt(userId, 10)
-      }
+    // Shared, idempotent finalization — same path used by the reconcile routes.
+    // Guards against double refund / duplicate callback if a late webhook and a
+    // manual reconcile race each other.
+    const result = await finalizePayout({
+      referenceId,
+      isSuccess,
+      utr,
+      gatewayTransactionId: bluswapTransactionId,
+      message: job.data.data?.trx_message || job.data.message || null
     });
 
-    if (merchantDetails?.payout_callback) {
-      const maxRetries = 3;
-      const baseDelay = 2000;
-
-      const callbackData = {
-        reference_id: referenceId,
-        amount: job.data.data?.amount,
-        status: isSuccess ? 'success' : 'failed',
-        utr,
-        message: job.data.message || (isSuccess ? 'Transaction processed' : 'Transaction failed'),
-        timestamp: new Date().toISOString()
-      };
-
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-          console.log("this is callback data of bluswap payout", callbackData)
-
-          const response = await axios.post(merchantDetails.payout_callback, callbackData, {
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            timeout: 10000
-          });
-
-          logger.info('Callback sent successfully to merchant', {
-            reference_id: referenceId,
-            callback_url: merchantDetails.payout_callback,
-            response_status: response.status,
-            attempt: attempt
-          });
-
-          break;
-        } catch (error) {
-          logger.warn('Callback attempt failed', {
-            reference_id: referenceId,
-            callback_url: merchantDetails.payout_callback,
-            error: error.message,
-            response_status: error.response?.status,
-            response_body: error.response?.data,
-            attempt: attempt,
-            maxRetries: maxRetries
-          });
-
-          if (attempt === maxRetries) {
-            logger.error('Failed to send callback to merchant after all retries', {
-              reference_id: referenceId,
-              callback_url: merchantDetails.payout_callback,
-              error: error.message,
-              totalAttempts: maxRetries
-            });
-          } else {
-            const delay = baseDelay * Math.pow(2, attempt - 1);
-            logger.info(`Retrying callback in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`, {
-              reference_id: referenceId
-            });
-            await new Promise(resolve => setTimeout(resolve, delay));
-          }
-        }
-      }
-    } else {
-      logger.warn('No callback URL found for merchant', {
-        reference_id: referenceId,
-        user_id: userId
-      });
-    }
-
-    return { success: true, jobId: job.id };
+    logger.info('BluSwap payout finalized via callback', { jobId: job.id, referenceId, result });
+    return { success: true, jobId: job.id, ...result };
   } catch (error) {
     logger.error('Error processing bluswap payout job', {
       jobId: job.id,

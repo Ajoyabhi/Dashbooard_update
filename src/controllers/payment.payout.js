@@ -14,6 +14,7 @@ const mongoose = require('mongoose');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
 const axios = require('axios');
 const { unpayTransactionStatus, spayTransactionStatus, philpayTransactionStatus, xlitepayTransactionStatus, bluswapTransactionStatus } = require('../transactionStatusCheck/TransactionCheck');
+const { reconcilePayoutTransaction } = require('../services/payoutReconciliation.service');
 
 /**
  * Initiate a payout
@@ -659,8 +660,89 @@ const handleBalanceCheck = async (req, res) => {
   }
 }
 
+/**
+ * Reconcile a single payout by reference_id. Queries the gateway status API and,
+ * if the gateway reports a terminal status, updates the dashboard records and
+ * fires the merchant callback. Idempotent — safe to call repeatedly.
+ */
+const reconcilePayoutByReference = async (req, res) => {
+  try {
+    const { reference_id } = req.params;
+
+    const payoutTransaction = await PayoutTransaction.findOne({ reference_id }).lean();
+    if (!payoutTransaction) {
+      return res.status(404).json({ success: false, message: 'Transaction not found' });
+    }
+
+    // Non-admin/agent callers may only reconcile their own transactions
+    const role = req.user.user_type;
+    if (!['admin', 'agent'].includes(role) &&
+        payoutTransaction.user?.user_id?.toString() !== req.user.id?.toString()) {
+      return res.status(403).json({ success: false, message: 'Not authorized for this transaction' });
+    }
+
+    const result = await reconcilePayoutTransaction(payoutTransaction);
+
+    return res.status(200).json({
+      success: true,
+      message: result.changed ? 'Transaction reconciled and updated' : 'No status change',
+      data: result
+    });
+  } catch (error) {
+    logger.error('Error reconciling payout', {
+      error: error.message,
+      stack: error.stack,
+      reference_id: req.params.reference_id
+    });
+    return res.status(500).json({ success: false, message: 'Error reconciling payout', error: error.message });
+  }
+};
+
+/**
+ * Sweep every payout still in the 'processing' state, query each gateway's
+ * status API, and finalize any that have resolved. Intended as an admin/agent
+ * maintenance trigger for when webhooks were missed.
+ */
+const reconcileProcessingPayouts = async (req, res) => {
+  try {
+    const processing = await PayoutTransaction.find({ status: 'processing' }).lean();
+
+    const summary = {
+      total: processing.length,
+      changed: 0,
+      unchanged: 0,
+      errors: 0,
+      results: []
+    };
+
+    for (const txn of processing) {
+      try {
+        const result = await reconcilePayoutTransaction(txn);
+        if (result.changed) summary.changed++;
+        else summary.unchanged++;
+        summary.results.push(result);
+      } catch (err) {
+        summary.errors++;
+        summary.results.push({ referenceId: txn.reference_id, changed: false, reason: 'error', error: err.message });
+        logger.error('Error reconciling processing payout', { reference_id: txn.reference_id, error: err.message });
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Reconciled ${summary.changed} of ${summary.total} processing payout(s)`,
+      data: summary
+    });
+  } catch (error) {
+    logger.error('Error reconciling processing payouts', { error: error.message, stack: error.stack });
+    return res.status(500).json({ success: false, message: 'Error reconciling processing payouts', error: error.message });
+  }
+};
+
 module.exports = {
   initiatePayout,
   getPayoutTransactionStatus,
-  handleBalanceCheck
+  handleBalanceCheck,
+  reconcilePayoutByReference,
+  reconcileProcessingPayouts
 };
