@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Filter, Search, X, RefreshCw, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Download, Filter, Search, X, RefreshCw, CheckCircle, XCircle, Clock, Send } from 'lucide-react';
+import toast from 'react-hot-toast';
 import api from '../../utils/axios';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Table from '../../components/dashboard/Table';
@@ -95,6 +96,7 @@ export default function PayinReport() {
   const [statusCheckResult, setStatusCheckResult] = useState<StatusCheckResult | null>(null);
   const [statusCheckError, setStatusCheckError] = useState<string | null>(null);
   const [checkedReferenceId, setCheckedReferenceId] = useState('');
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   const fetchUsers = async () => {
     try {
@@ -155,6 +157,19 @@ export default function PayinReport() {
       setStatusCheckError(err?.response?.data?.message || 'Failed to check status');
     } finally {
       setStatusCheckLoading(false);
+    }
+  };
+
+  const handleResendWebhook = async (referenceId: string) => {
+    if (!window.confirm(`Resend the payin callback for ${referenceId}?`)) return;
+    setResendingId(referenceId);
+    try {
+      const response = await api.post(`/admin/payin/${referenceId}/resend-webhook`);
+      toast.success(response.data?.message || 'Webhook resent successfully');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to resend webhook');
+    } finally {
+      setResendingId(null);
     }
   };
 
@@ -326,15 +341,30 @@ export default function PayinReport() {
       accessor: 'status',
       cell: (value: string, row: PayinRecord) => {
         const canCheck = value === 'pending' || value === 'failed' || value === 'payin_qr_generated';
-        if (!canCheck) return <span className="text-xs text-gray-400">—</span>;
+        const canResend = value === 'completed';
+        if (!canCheck && !canResend) return <span className="text-xs text-gray-400">—</span>;
         return (
-          <button
-            onClick={() => handleCheckStatus(row.reference_id)}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 whitespace-nowrap transition-colors"
-          >
-            <RefreshCw className="h-3 w-3" />
-            Check Status
-          </button>
+          <div className="flex items-center gap-2">
+            {canCheck && (
+              <button
+                onClick={() => handleCheckStatus(row.reference_id)}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 whitespace-nowrap transition-colors"
+              >
+                <RefreshCw className="h-3 w-3" />
+                Check Status
+              </button>
+            )}
+            {canResend && (
+              <button
+                onClick={() => handleResendWebhook(row.reference_id)}
+                disabled={resendingId === row.reference_id}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 whitespace-nowrap transition-colors disabled:opacity-50"
+              >
+                <Send className="h-3 w-3" />
+                {resendingId === row.reference_id ? 'Resending…' : 'Resend Webhook'}
+              </button>
+            )}
+          </div>
         );
       },
     },

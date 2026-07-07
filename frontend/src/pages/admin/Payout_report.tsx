@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Filter, Search, X } from 'lucide-react';
+import { Download, Filter, Search, X, Send } from 'lucide-react';
+import toast from 'react-hot-toast';
 import api from '../../utils/axios';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Table from '../../components/dashboard/Table';
@@ -86,6 +87,20 @@ export default function PayoutReport() {
   // Users for dropdown
   const [users, setUsers] = useState<UserOption[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
+  const [resendingId, setResendingId] = useState<string | null>(null);
+
+  const handleResendWebhook = async (referenceId: string) => {
+    if (!window.confirm(`Resend the payout callback for ${referenceId}?`)) return;
+    setResendingId(referenceId);
+    try {
+      const response = await api.post(`/admin/payout/${referenceId}/resend-webhook`);
+      toast.success(response.data?.message || 'Webhook resent successfully');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to resend webhook');
+    } finally {
+      setResendingId(null);
+    }
+  };
 
   // Fetch users for dropdown
   const fetchUsers = async () => {
@@ -288,6 +303,24 @@ export default function PayoutReport() {
       header: 'Date',
       accessor: 'createdAt',
       cell: (value: string) => formatDate(value),
+    },
+    {
+      header: 'Actions',
+      accessor: 'status',
+      cell: (value: string, row: PayoutRecord) => {
+        const canResend = value === 'completed' || value === 'failed';
+        if (!canResend) return <span className="text-xs text-gray-400">—</span>;
+        return (
+          <button
+            onClick={() => handleResendWebhook(row.reference_id)}
+            disabled={resendingId === row.reference_id}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 whitespace-nowrap transition-colors disabled:opacity-50"
+          >
+            <Send className="h-3 w-3" />
+            {resendingId === row.reference_id ? 'Resending…' : 'Resend Webhook'}
+          </button>
+        );
+      },
     },
   ];
 

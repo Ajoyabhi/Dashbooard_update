@@ -51,7 +51,8 @@ const {
   getLastNDaysTransactionDetails,
   adminCheckPayinStatus,
   getGatewayStats,
-  resendPayinWebhook
+  resendPayinWebhook,
+  resendPayoutWebhook
 } = require('../controllers/admin.controller');
 const { registerUser } = require('../controllers/auth.controller');
 const { auth, authorize } = require('../middleware/auth.middleware');
@@ -179,6 +180,7 @@ router.get('/gateway-stats', getGatewayStats);
 
 // Manual webhook resend for stuck completed transactions
 router.post('/payin/:reference_id/resend-webhook', resendPayinWebhook);
+router.post('/payout/:reference_id/resend-webhook', resendPayoutWebhook);
 
 // Callback queue health
 router.get('/queue/health', async (req, res) => {

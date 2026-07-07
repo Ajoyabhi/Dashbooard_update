@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Button, Chip } from '@mui/material'
-import { Download, RefreshCw } from 'lucide-react'
+import { Button, Chip, IconButton, Tooltip } from '@mui/material'
+import { Download, RefreshCw, Send } from 'lucide-react'
 import DataTable, { Column } from '@/components/ui/DataTable'
 import api from '@/utils/axios'
 import { formatCurrency, formatDateTime } from '@/utils/formatUtils'
@@ -38,6 +38,21 @@ export default function AdminPayoutReport() {
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(10)
   const [totalItems, setTotalItems] = useState(0)
+  const [resendingId, setResendingId] = useState<string | null>(null)
+
+  const handleResend = async (referenceId: string) => {
+    if (!window.confirm(`Resend the payout callback for ${referenceId}?`)) return
+    setResendingId(referenceId)
+    try {
+      const res = await api.post(`/admin/payout/${referenceId}/resend-webhook`)
+      toast.success(res.data?.message || 'Webhook resent successfully')
+    } catch (err) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      toast.error(msg || 'Failed to resend webhook')
+    } finally {
+      setResendingId(null)
+    }
+  }
 
   const fetch = useCallback(async (p = 0, limit = 10) => {
     setLoading(true)
@@ -100,7 +115,19 @@ export default function AdminPayoutReport() {
       </div>
 
       <DataTable
-        columns={columns} rows={rows} loading={loading}
+        columns={[...columns, { key: '_actions', label: 'Actions', render: (r) => (
+          (r.status === 'completed' || r.status === 'failed') ? (
+            <Tooltip title="Resend Webhook">
+              <span>
+                <IconButton size="small" disabled={resendingId === r.reference_id}
+                  onClick={() => handleResend(r.reference_id)} sx={{ color: '#4F46E5' }}>
+                  <Send size={15} />
+                </IconButton>
+              </span>
+            </Tooltip>
+          ) : <span className="text-slate-300 text-xs">—</span>
+        )}]}
+        rows={rows} loading={loading}
         searchKeys={['transaction_id', 'reference_id', 'utr', 'user_name', 'beneficiary_name', 'status']}
         emptyMessage="No payout transactions found"
         serverPagination={{ total: totalItems, page, pageSize, onPageChange: handlePageChange, onPageSizeChange: handlePageSizeChange }} />

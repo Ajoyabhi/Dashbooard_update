@@ -5,6 +5,7 @@ const PayoutTransaction = require('../models/payoutTransaction.model');
 const PayinTransaction = require('../models/payinTransaction.model');
 const axios = require('axios');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
+const { sendMerchantPayoutCallback } = require('../services/payoutReconciliation.service');
 const { logger } = require('../utils/logger');
 // const Wallet = require('../models/wallet.model');
 const Transaction = require('../models/transaction.model');
@@ -3469,6 +3470,13 @@ const resendPayinWebhook = async (req, res) => {
             timestamp: new Date().toISOString()
         };
 
+        // Print the exact payload being POSTed so it's visible in the server terminal / PM2 logs.
+        console.log('===== Manual payin webhook resend =====');
+        console.log('URL   :', merchantDetails.payin_callback);
+        console.log('BODY  :', JSON.stringify(callbackData, null, 2));
+        console.log('=======================================');
+        logger.info('Manual payin webhook payload', { reference_id, url: merchantDetails.payin_callback, body: callbackData });
+
         const response = await axios.post(merchantDetails.payin_callback, callbackData, {
             headers: { 'Content-Type': 'application/json' },
             timeout: 10000
@@ -3480,9 +3488,65 @@ const resendPayinWebhook = async (req, res) => {
         );
 
         logger.info('Manual webhook resent', { reference_id, status: response.status, admin: req.user?.id });
-        return res.status(200).json({ success: true, message: 'Webhook resent successfully', http_status: response.status });
+        // Return the sent payload + target URL so it's also visible in the UI response.
+        return res.status(200).json({
+            success: true,
+            message: 'Webhook resent successfully',
+            http_status: response.status,
+            callback_url: merchantDetails.payin_callback,
+            payload: callbackData
+        });
     } catch (error) {
         logger.error('Error resending webhook', { error: error.message, reference_id: req.params.reference_id });
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// Manually re-send the payout webhook for a finalized (completed/failed) payout.
+// Mirrors resendPayinWebhook — builds the uniform payload and re-POSTs it to the
+// merchant's payout_callback without re-querying the gateway.
+const resendPayoutWebhook = async (req, res) => {
+    try {
+        const { reference_id } = req.params;
+        const transaction = await PayoutTransaction.findOne({ reference_id });
+
+        if (!transaction) {
+            return res.status(404).json({ success: false, message: 'Transaction not found' });
+        }
+        if (!['completed', 'failed'].includes(transaction.status)) {
+            return res.status(400).json({ success: false, message: `Transaction is not finalized (status: ${transaction.status})` });
+        }
+
+        const userId = transaction.user.user_id;
+        const merchantDetails = await MerchantDetails.findOne({ where: { user_id: parseInt(userId, 10) } });
+
+        if (!merchantDetails?.payout_callback) {
+            return res.status(400).json({ success: false, message: 'No payout callback URL configured for this merchant' });
+        }
+
+        const isSuccess = transaction.status === 'completed';
+        const callbackData = {
+            reference_id,
+            type: 'payout',
+            status: isSuccess ? 'success' : 'failed',
+            amount: transaction.amount,
+            utr: transaction.gateway_response?.utr || null,
+            message: isSuccess ? 'Transaction processed' : 'Transaction failed',
+            timestamp: new Date().toISOString()
+        };
+
+        // sendMerchantPayoutCallback already console.logs the body and retries with backoff.
+        const delivered = await sendMerchantPayoutCallback(merchantDetails.payout_callback, callbackData);
+
+        logger.info('Manual payout webhook resent', { reference_id, delivered, admin: req.user?.id });
+        return res.status(delivered ? 200 : 502).json({
+            success: delivered,
+            message: delivered ? 'Webhook resent successfully' : 'Failed to deliver webhook after retries',
+            callback_url: merchantDetails.payout_callback,
+            payload: callbackData
+        });
+    } catch (error) {
+        logger.error('Error resending payout webhook', { error: error.message, reference_id: req.params.reference_id });
         return res.status(500).json({ success: false, message: error.message });
     }
 };
@@ -3614,5 +3678,6 @@ module.exports = {
     invalidateLast5DaysCache,
     adminCheckPayinStatus,
     getGatewayStats,
-    resendPayinWebhook
+    resendPayinWebhook,
+    resendPayoutWebhook
 };
