@@ -79,10 +79,28 @@ router.post('/hdfc/callback', hdfcCallback);
 router.post('/airpay/callback', airpayCallback);
 router.post('/rp/callback', airpayCallback);
 
-router.get('/balanceCheck', 
-  auth, 
-  checkRole(['admin', 'agent', 'user', 'payin_payout', 'payout_only', 'payin_only']), 
+router.get('/balanceCheck',
+  auth,
+  checkRole(['admin', 'agent', 'user', 'payin_payout', 'payout_only', 'payin_only']),
   handleBalanceCheck
 );
 
-module.exports = router; 
+// ---------------------------------------------------------------------------
+// Internal test webhook sink. Set a merchant's payin/payout callback URL to
+// this endpoint to inspect exactly what the system delivers to merchants.
+// It does nothing except log the received payload and reply 200 OK.
+// No auth — it must be reachable by the callback worker like a real merchant URL.
+// ---------------------------------------------------------------------------
+const logTestWebhook = (req, res) => {
+  console.log('=================================================================');
+  console.log('>>> This is the data transferred to the merchant (TEST webhook) <<<');
+  console.log('Method :', req.method);
+  console.log('Query  :', JSON.stringify(req.query || {}));
+  console.log('Body   :', JSON.stringify(req.body || {}, null, 2));
+  console.log('=================================================================');
+  return res.status(200).json({ received: true });
+};
+router.post('/test-webhook', logTestWebhook);
+router.get('/test-webhook', logTestWebhook);
+
+module.exports = router;
