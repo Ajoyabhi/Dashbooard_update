@@ -564,6 +564,47 @@ const getPayoutTransactionStatus = async (req, res) => {
       const normalizedStatus = result.data?.status || 'unknown';
       const gw = result.data?.response?.data || result.data?.response || {};
       const utr = gw.utr || gw.rrn || gw.bank_reference_id || transaction.gateway_response?.utr || null;
+
+      // Self-healing status check: if the gateway now reports a terminal status
+      // (success/failed) but our record is still non-terminal (pending/processing),
+      // the state has drifted — a webhook was likely missed. Persist the resolved
+      // status, refund on failure, and fire the merchant callback here, reusing the
+      // exact same idempotent path as the async webhook worker. finalizePayout's
+      // conditional claim guarantees the update + callback happen at most once even
+      // if concurrent status checks / the worker race, so this is safe to run inline
+      // before returning the (now up-to-date) status to the caller.
+      if (
+        (normalizedStatus === 'success' || normalizedStatus === 'failed') &&
+        ['pending', 'processing'].includes(transaction.status)
+      ) {
+        try {
+          const gatewayTransactionId =
+            gw.bluswap_transaction_id || gw.transaction_id || gw.txn_id || gw.merchant_order_id || null;
+          const reconciliation = await finalizePayout({
+            referenceId: transaction.reference_id,
+            isSuccess: normalizedStatus === 'success',
+            utr,
+            gatewayTransactionId
+          });
+          logger.info('Payout status reconciled during status check', {
+            reference_id: transaction.reference_id,
+            previous_status: transaction.status,
+            gateway_status: normalizedStatus,
+            changed: reconciliation.changed,
+            callback_sent: reconciliation.callbackSent
+          });
+        } catch (reconcileError) {
+          // Never let a reconciliation failure break the status response — the
+          // caller still gets the freshly fetched gateway status, and the
+          // reconcile job / next status check will retry the update + callback.
+          logger.error('Failed to reconcile payout during status check', {
+            reference_id: transaction.reference_id,
+            gateway_status: normalizedStatus,
+            error: reconcileError.message
+          });
+        }
+      }
+
       // Standardized message only — never surface the gateway's own text/status
       // description, which can reveal the acquirer/gateway name to the merchant.
       const message = normalizedStatus === 'success'
