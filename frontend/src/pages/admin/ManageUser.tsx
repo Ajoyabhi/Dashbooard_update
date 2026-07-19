@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Plus, Eye, Edit, Settings, RefreshCw, Wallet } from 'lucide-react';
+import { Plus, Eye, Edit, Settings, RefreshCw, Wallet, ShieldCheck } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { adminMenuItems } from '../../data/mockData';
 import Table from '../../components/dashboard/Table';
@@ -73,6 +73,13 @@ export default function ManageUser() {
       accessor: 'settlement',
       cell: (value: any) => (
         <span className="font-medium text-gray-900">₹{Number(value || 0).toFixed(2)}</span>
+      ),
+    },
+    {
+      header: 'Rolling Reserve',
+      accessor: 'rollingReserve',
+      cell: (value: any) => (
+        <span className="font-medium text-amber-600">₹{Number(value || 0).toFixed(2)}</span>
       ),
     },
     {
@@ -153,6 +160,13 @@ export default function ManageUser() {
             title="Add Fund"
           >
             <Wallet className="h-5 w-5" />
+          </button>
+          <button
+            onClick={() => navigate(`/admin/manage-user/${value}/rolling-reserve`)}
+            className="text-amber-600 hover:text-amber-800"
+            title="Rolling Reserve"
+          >
+            <ShieldCheck className="h-5 w-5" />
           </button>
         </div>
       ),

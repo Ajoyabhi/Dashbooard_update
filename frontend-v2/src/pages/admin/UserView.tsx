@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Button, Chip, Skeleton, Divider } from '@mui/material'
-import { ArrowLeft, Edit2, Wallet, FileText, Phone as PhoneIcon } from 'lucide-react'
+import { ArrowLeft, Edit2, Wallet, FileText, Phone as PhoneIcon, ShieldCheck } from 'lucide-react'
 import api from '@/utils/axios'
 import { formatDateTime } from '@/utils/formatUtils'
 import toast from 'react-hot-toast'
@@ -104,6 +104,9 @@ export default function UserView() {
           <Button size="small" variant="outlined" startIcon={<Wallet size={14} />}
             onClick={() => navigate(`/admin/manage-user/${userId}/add-fund`)}
             sx={{ borderColor: '#10B981', color: '#10B981', borderRadius: 2 }}>Add Fund</Button>
+          <Button size="small" variant="outlined" startIcon={<ShieldCheck size={14} />}
+            onClick={() => navigate(`/admin/manage-user/${userId}/rolling-reserve`)}
+            sx={{ borderColor: '#D97706', color: '#D97706', borderRadius: 2 }}>Rolling Reserve</Button>
           <Button size="small" variant="contained" startIcon={<Edit2 size={14} />}
             onClick={() => navigate(`/admin/manage-user/${userId}/edit`)}
             sx={{ bgcolor: '#1A2744', borderRadius: 2, '&:hover': { bgcolor: '#0E172A' } }}>Edit User</Button>

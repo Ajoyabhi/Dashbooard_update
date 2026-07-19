@@ -17,6 +17,7 @@ const PIE_COLORS = ['#1A2744', '#10B981', '#D4AF37']
 interface DashData {
   totalUsers: number
   totalBalance: number
+  totalRollingReserve: number
   todayPayin: number
   todayPayout: number
   totalPayin: number
@@ -174,12 +175,13 @@ export default function AdminDashboard() {
         </ResponsiveContainer>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {[
           { label: "Today's Profit", value: formatCurrency(d?.todayProfit ?? 0), color: 'text-emerald-600' },
           { label: 'Total Outflow', value: formatCurrency(d?.totalOutflow ?? 0), color: 'text-red-500' },
           { label: 'Total Inflow', value: formatCurrency(d?.totalInflow ?? 0), color: 'text-blue-600' },
           { label: 'Total Balance', value: formatCurrency(d?.totalBalance ?? 0), color: 'text-purple-600' },
+          { label: 'Rolling Reserve', value: formatCurrency(d?.totalRollingReserve ?? 0), color: 'text-amber-600' },
         ].map((item) => (
           <div key={item.label} className="bg-white rounded-xl border border-slate-100 shadow-sm px-4 py-3">
             <p className="text-xs text-slate-500 mb-1">{item.label}</p>

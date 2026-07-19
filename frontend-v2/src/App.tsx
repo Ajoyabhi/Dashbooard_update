@@ -17,6 +17,7 @@ import AdminManageUser from './pages/admin/ManageUser'
 import AdminUserView from './pages/admin/UserView'
 import AdminUserEdit from './pages/admin/UserEdit'
 import AdminAddFund from './pages/admin/AddFund'
+import AdminRollingReserve from './pages/admin/RollingReserve'
 import AdminUserCharges from './pages/admin/UserCharges'
 import AdminUserCallbacks from './pages/admin/UserCallbacks'
 import AdminAddUser from './pages/admin/AddUser'
@@ -91,6 +92,7 @@ export default function App() {
                 <Route path="/admin/manage-user/:userId" element={<AdminUserView />} />
                 <Route path="/admin/manage-user/:userId/edit" element={<AdminUserEdit />} />
                 <Route path="/admin/manage-user/:userId/add-fund" element={<AdminAddFund />} />
+                <Route path="/admin/manage-user/:userId/rolling-reserve" element={<AdminRollingReserve />} />
                 <Route path="/admin/manage-user/:userId/charges" element={<AdminUserCharges />} />
                 <Route path="/admin/manage-user/:userId/callbacks" element={<AdminUserCallbacks />} />
                 <Route path="/admin/payin-report" element={<AdminPayinReport />} />

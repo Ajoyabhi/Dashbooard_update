@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, IconButton, Tooltip, Avatar, Chip } from '@mui/material'
-import { UserPlus, Eye, Edit2, Wallet, RefreshCw, Percent, Phone } from 'lucide-react'
+import { UserPlus, Eye, Edit2, Wallet, RefreshCw, Percent, Phone, ShieldCheck } from 'lucide-react'
 import DataTable, { Column } from '@/components/ui/DataTable'
 import api from '@/utils/axios'
 import { formatCurrency } from '@/utils/formatUtils'
@@ -10,6 +10,7 @@ import toast from 'react-hot-toast'
 interface UserRow {
   id: string; name: string; username: string; email: string
   userType: string; walletBalance: number; settlement: number
+  rollingReserve: number
   status: string; mobile: string; payin: boolean; payout: boolean
   [key: string]: unknown
 }
@@ -50,6 +51,7 @@ export default function ManageUser() {
     )},
     { key: 'walletBalance', label: 'Wallet Balance', align: 'right', render: (r) => <span className="font-semibold text-emerald-700">{formatCurrency(r.walletBalance)}</span> },
     { key: 'settlement', label: 'Settlement Balance', align: 'right', render: (r) => <span className="font-semibold text-[#1A2744]">{formatCurrency(Number(r.settlement ?? 0))}</span> },
+    { key: 'rollingReserve', label: 'Rolling Reserve', align: 'right', render: (r) => <span className="font-semibold text-amber-600">{formatCurrency(Number(r.rollingReserve ?? 0))}</span> },
     { key: 'status', label: 'Status', render: (r) => (
       <Chip label={String(r.status)} size="small"
         color={r.status === 'active' ? 'success' : 'error'}
@@ -89,6 +91,7 @@ export default function ManageUser() {
             <Tooltip title="Charges"><IconButton size="small" sx={{ color: '#6366F1' }} onClick={() => navigate(`/admin/manage-user/${row.id}/charges`)}><Percent size={15} /></IconButton></Tooltip>
             <Tooltip title="Callbacks"><IconButton size="small" sx={{ color: '#0EA5E9' }} onClick={() => navigate(`/admin/manage-user/${row.id}/callbacks`)}><Phone size={15} /></IconButton></Tooltip>
             <Tooltip title="Add Fund"><IconButton size="small" sx={{ color: '#10B981' }} onClick={() => navigate(`/admin/manage-user/${row.id}/add-fund`)}><Wallet size={15} /></IconButton></Tooltip>
+            <Tooltip title="Rolling Reserve"><IconButton size="small" sx={{ color: '#D97706' }} onClick={() => navigate(`/admin/manage-user/${row.id}/rolling-reserve`)}><ShieldCheck size={15} /></IconButton></Tooltip>
           </>
         )} />
     </div>

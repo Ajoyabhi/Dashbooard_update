@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
 import { Select, MenuItem, FormControl, InputLabel, LinearProgress, Skeleton } from '@mui/material'
-import { Wallet, TrendingDown, TrendingUp, Activity, ArrowUpCircle, BadgeCheck, RefreshCw } from 'lucide-react'
+import { Wallet, TrendingDown, TrendingUp, Activity, ArrowUpCircle, BadgeCheck, RefreshCw, ShieldCheck } from 'lucide-react'
 // BadgeCheck used in hero card settlement balance icon
 import StatCard from '@/components/ui/StatCard'
 import api from '@/utils/axios'
@@ -53,6 +53,7 @@ export default function UserDashboard() {
   const d = data as Record<string, number | string> | null
   const walletBalance = Number(d?.wallet_balance ?? d?.walletBalance ?? 0)
   const settlementBalance = Number(d?.settlement_balance ?? d?.settlementBalance ?? 0)
+  const rollingReserveBalance = Number(d?.rolling_reserve_balance ?? d?.rollingReserveBalance ?? 0)
   const totalPayin = Number(d?.total_payin ?? d?.totalPayin ?? 0)
   const totalPayout = Number(d?.total_payout ?? d?.totalPayout ?? 0)
   const todayPayin = Number(d?.today_payin ?? d?.todayPayin ?? 0)
@@ -84,7 +85,7 @@ export default function UserDashboard() {
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-24 translate-x-20" />
         <div className="absolute bottom-0 right-20 w-40 h-40 bg-[#D4AF37]/10 rounded-full translate-y-16" />
         <div className="relative z-10">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             {/* Wallet Balance */}
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -105,6 +106,17 @@ export default function UserDashboard() {
               {loading
                 ? <Skeleton variant="rectangular" width={180} height={36} sx={{ borderRadius: 2, bgcolor: 'rgba(255,255,255,0.1)' }} />
                 : <p className="text-3xl font-bold tracking-tight text-[#D4AF37]">{formatCurrency(settlementBalance)}</p>
+              }
+            </div>
+            {/* Rolling Reserve */}
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <ShieldCheck size={14} className="text-amber-400" />
+                <p className="text-amber-200/80 text-sm font-medium">Rolling Reserve</p>
+              </div>
+              {loading
+                ? <Skeleton variant="rectangular" width={180} height={36} sx={{ borderRadius: 2, bgcolor: 'rgba(255,255,255,0.1)' }} />
+                : <p className="text-3xl font-bold tracking-tight text-amber-300">{formatCurrency(rollingReserveBalance)}</p>
               }
             </div>
           </div>

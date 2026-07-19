@@ -37,6 +37,7 @@ const Dashboard = () => {
   const [dashboardData, setDashboardData] = useState({
     settlement_balance: 0,
     wallet_balance: 0,
+    rolling_reserve_balance: 0,
     today_payin: 0,
     today_payout: 0,
     total_payin: 0,
@@ -137,6 +138,12 @@ const Dashboard = () => {
       value: `${dashboardData.wallet_balance || 0}`,
       icon: "Wallet",
       color: 'secondary'
+    },
+    {
+      title: 'Rolling Reserve',
+      value: `${dashboardData.rolling_reserve_balance || 0}`,
+      icon: "ShieldCheck",
+      color: 'warning'
     },
     {
       title: "Today's Pay-in (Net)",
@@ -246,7 +253,8 @@ const Dashboard = () => {
 
   const balanceData = [
     { name: 'Settlement', value: dashboardData.settlement_balance || 0 },
-    { name: 'Wallet', value: dashboardData.wallet_balance || 0 }
+    { name: 'Wallet', value: dashboardData.wallet_balance || 0 },
+    { name: 'Rolling Reserve', value: dashboardData.rolling_reserve_balance || 0 }
   ];
 
   // New chart data patterns
@@ -849,7 +857,7 @@ const Dashboard = () => {
                         {balanceData.map((entry, index) => (
                           <Cell
                             key={`cell-${index}`}
-                            fill={index === 0 ? COLORS.purple[0] : COLORS.pink[0]}
+                            fill={index === 0 ? COLORS.purple[0] : index === 1 ? COLORS.pink[0] : COLORS.accent[0]}
                             stroke="#fff"
                             strokeWidth={2}
                           />

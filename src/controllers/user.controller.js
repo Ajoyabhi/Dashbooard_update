@@ -821,6 +821,7 @@ const getUserDashboard = async (req, res) => {
     const dashboardData = {
       settlement_balance: financialDetails ? parseFloat(financialDetails.settlement) : 0,
       wallet_balance: financialDetails ? parseFloat(financialDetails.wallet) : 0,
+      rolling_reserve_balance: financialDetails ? parseFloat(financialDetails.rolling_reserve) || 0 : 0,
 
       // Today's transactions with net amounts (after charges)
       today_payin: todayPayin,

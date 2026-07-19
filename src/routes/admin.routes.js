@@ -18,6 +18,8 @@ const {
   getUserCallbacks,
   updateUserWallet,
   getUserWallet,
+  getUserRollingReserve,
+  updateUserRollingReserve,
   getUserWalletTransactionHistory,
   getUserIPs,
   addUserIP,
@@ -97,6 +99,10 @@ router.post('/users/:userId/callback/payout', updateUserPayoutCallback);
 router.get('/users/:userId/wallet', getUserWallet);
 router.post('/users/:userId/wallet', updateUserWallet);
 router.get('/users/:userId/wallet/transactions', getUserWalletTransactionHistory);
+
+// User Rolling Reserve Management
+router.get('/users/:userId/rolling-reserve', getUserRollingReserve);
+router.post('/users/:userId/rolling-reserve', updateUserRollingReserve);
 
 // User IP Management
 router.get('/users/:user_id/ips', getUserIPs);

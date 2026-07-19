@@ -845,6 +845,131 @@ const getUserWalletTransactionHistory = async (req, res) => {
     }
 };
 
+// Get user rolling reserve balance (with wallet balance for context)
+const getUserRollingReserve = async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        const user = await User.findByPk(userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const [financialDetails] = await FinancialDetails.findOrCreate({
+            where: { user_id: userId },
+            defaults: {
+                settlement: 0,
+                wallet: 0,
+                lien: 0,
+                rolling_reserve: 0
+            }
+        });
+
+        res.json({
+            success: true,
+            data: {
+                wallet_balance: parseFloat(financialDetails.wallet) || 0,
+                rolling_reserve_balance: parseFloat(financialDetails.rolling_reserve) || 0
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching rolling reserve:', error);
+        res.status(500).json({ error: 'Error fetching rolling reserve balance' });
+    }
+};
+
+// Move funds between wallet and rolling reserve
+// action: 'hold'    -> debit wallet, credit rolling reserve
+// action: 'release' -> debit rolling reserve, credit wallet
+const updateUserRollingReserve = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { amount, action, remark } = req.body;
+
+        const parsedAmount = parseFloat(amount);
+        if (!parsedAmount || parsedAmount <= 0) {
+            return res.status(400).json({ error: 'Invalid amount' });
+        }
+        if (!['hold', 'release'].includes(action)) {
+            return res.status(400).json({ error: 'Invalid action. Use "hold" or "release"' });
+        }
+
+        const user = await User.findByPk(userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const result = await sequelize.transaction(async (t) => {
+            const financialDetails = await FinancialDetails.findOne({
+                where: { user_id: userId },
+                transaction: t,
+                lock: true
+            });
+
+            if (!financialDetails) {
+                throw new Error('Financial details not found');
+            }
+
+            const walletBalance = parseFloat(financialDetails.wallet) || 0;
+            const reserveBalance = parseFloat(financialDetails.rolling_reserve) || 0;
+
+            let newWallet, newReserve;
+            if (action === 'hold') {
+                if (walletBalance < parsedAmount) {
+                    throw new Error('Insufficient wallet balance');
+                }
+                newWallet = walletBalance - parsedAmount;
+                newReserve = reserveBalance + parsedAmount;
+            } else {
+                if (reserveBalance < parsedAmount) {
+                    throw new Error('Insufficient rolling reserve balance');
+                }
+                newWallet = walletBalance + parsedAmount;
+                newReserve = reserveBalance - parsedAmount;
+            }
+
+            await financialDetails.update({
+                wallet: newWallet,
+                rolling_reserve: newReserve
+            }, { transaction: t });
+
+            // Log the wallet-side movement in wallet transaction history
+            await WalletTransaction.create({
+                user_id: userId,
+                transaction_type: action === 'hold' ? 'debit' : 'credit',
+                amount: parsedAmount,
+                balance_before: walletBalance,
+                balance_after: newWallet,
+                remark: `[Rolling Reserve ${action === 'hold' ? 'Hold' : 'Release'}] ${remark || (action === 'hold' ? 'Moved to rolling reserve' : 'Released to wallet')}`,
+                created_by: req.user.id
+            }, { transaction: t });
+
+            return { walletBalance, reserveBalance, newWallet, newReserve };
+        });
+
+        res.json({
+            success: true,
+            message: action === 'hold'
+                ? 'Amount moved to rolling reserve successfully'
+                : 'Amount released to wallet successfully',
+            data: {
+                action,
+                amount: parsedAmount,
+                wallet_balance_before: result.walletBalance,
+                wallet_balance_after: result.newWallet,
+                rolling_reserve_before: result.reserveBalance,
+                rolling_reserve_after: result.newReserve
+            }
+        });
+    } catch (error) {
+        console.error('Error updating rolling reserve:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message || 'Error updating rolling reserve'
+        });
+    }
+};
+
 // Get user IPs
 const getUserIPs = async (req, res) => {
     try {
@@ -1182,6 +1307,9 @@ const getAdminDashboard = async (req, res) => {
         // 2. Calculate total available balance from financial_details
         const totalBalance = await FinancialDetails.sum('wallet');
 
+        // 2b. Calculate total rolling reserve held across all users
+        const totalRollingReserve = await FinancialDetails.sum('rolling_reserve');
+
         // 3. Calculate total payout (sum of merchant charges for completed payout transactions)
         const totalPayout = await TransactionCharges.sum('merchant_charge', {
             where: {
@@ -1287,6 +1415,7 @@ const getAdminDashboard = async (req, res) => {
         const dashboardData = {
             totalUsers: totalUsers || 0,
             totalBalance: totalBalance || 0,
+            totalRollingReserve: totalRollingReserve || 0,
             totalPayout: totalPayout || 0,
             todayPayout: todayPayout || 0,
             totalPayin: totalPayin || 0,
@@ -3611,6 +3740,8 @@ module.exports = {
     getUserCallbacks,
     updateUserWallet,
     getUserWallet,
+    getUserRollingReserve,
+    updateUserRollingReserve,
     getUserIPs,
     addUserIP,
     removeUserIP,

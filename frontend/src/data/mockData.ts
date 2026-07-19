@@ -25,7 +25,8 @@ import {
   DollarSign,
   FileText,
   UserPlus,
-  BarChart2
+  BarChart2,
+  ShieldCheck
 } from 'lucide-react';
 
 // Mock Users
@@ -408,7 +409,8 @@ export const getIconByName = (iconName: string) => {
     Layers,
     DollarSign,
     FileText,
-    UserPlus
+    UserPlus,
+    ShieldCheck
   };
 
   return icons[iconName as keyof typeof icons] || Users;

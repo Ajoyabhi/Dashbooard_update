@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit } from 'lucide-react';
+import { ArrowLeft, Edit, ShieldCheck } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { adminMenuItems } from '../../data/mockData';
 import api from '../../utils/axios';
@@ -118,13 +118,22 @@ export default function UserView() {
                         </button>
                         <h1 className="text-2xl font-bold text-gray-900">User Details</h1>
                     </div>
-                    <button
-                        onClick={() => navigate(`/admin/manage-user/${userId}/edit`)}
-                        className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                    >
-                        <Edit className="h-5 w-5 mr-2" />
-                        Edit User
-                    </button>
+                    <div className="flex space-x-3">
+                        <button
+                            onClick={() => navigate(`/admin/manage-user/${userId}/rolling-reserve`)}
+                            className="inline-flex items-center px-4 py-2 border border-amber-600 rounded-md shadow-sm text-sm font-medium text-amber-600 bg-white hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500"
+                        >
+                            <ShieldCheck className="h-5 w-5 mr-2" />
+                            Rolling Reserve
+                        </button>
+                        <button
+                            onClick={() => navigate(`/admin/manage-user/${userId}/edit`)}
+                            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                        >
+                            <Edit className="h-5 w-5 mr-2" />
+                            Edit User
+                        </button>
+                    </div>
                 </div>
 
                 {/* User Information */}

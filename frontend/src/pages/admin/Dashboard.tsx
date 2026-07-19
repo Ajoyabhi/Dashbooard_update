@@ -12,6 +12,7 @@ import api from '../../utils/axios';
 interface DashboardData {
   totalUsers: number;
   totalBalance: number;
+  totalRollingReserve?: number;
   totalPayout: number;
   todayPayout: number;
   totalPayin: number;
@@ -319,6 +320,13 @@ const AdminDashboard: React.FC = () => {
             darkMode={darkMode}
           />
           <SummaryCard
+            title="Rolling Reserve"
+            value={(Number(dashboardData?.totalRollingReserve) || 0)}
+            icon="ShieldCheck"
+            color="warning"
+            darkMode={darkMode}
+          />
+          <SummaryCard
             title="Total Payin"
             value={(Number(dashboardData?.totalPayin) || 0)}
             icon="TrendingDown"
@@ -362,7 +370,7 @@ const AdminDashboard: React.FC = () => {
           />
           <SummaryCard
             title="OutFlow Amount"
-            value={(Number(dashboardData?.totaloutflow) || 0)}
+            value={(Number(dashboardData?.totalOutflow) || 0)}
             icon="TrendingUp"
             color="secondary"
             darkMode={darkMode}

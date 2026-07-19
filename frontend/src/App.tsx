@@ -16,6 +16,7 @@ import UserEdit from './pages/admin/UserEdit';
 import UserCharges from './pages/admin/UserCharges';
 import UserCallbacks from './pages/admin/UserCallbacks';
 import AddFund from './pages/admin/AddFund';
+import RollingReserve from './pages/admin/RollingReserve';
 import ManageStaff from './pages/admin/ManageStaff';
 import ManagePayout from './pages/admin/ManagePayout';
 import BulkPayout from './pages/admin/BulkPayout';
@@ -73,6 +74,7 @@ function AppRoutes() {
         <Route path="/admin/manage-user/:userId/charges" element={<ProtectedRoute role="admin"><UserCharges /></ProtectedRoute>} />
         <Route path="/admin/manage-user/:userId/callbacks" element={<ProtectedRoute role="admin"><UserCallbacks /></ProtectedRoute>} />
         <Route path="/admin/manage-user/:userId/add-fund" element={<ProtectedRoute role="admin"><AddFund /></ProtectedRoute>} />
+        <Route path="/admin/manage-user/:userId/rolling-reserve" element={<ProtectedRoute role="admin"><RollingReserve /></ProtectedRoute>} />
         <Route path="/admin/manage-staff" element={<ProtectedRoute role="admin"><ManageStaff /></ProtectedRoute>} />
         <Route path="/admin/manage-payout" element={<ProtectedRoute role="admin"><ManagePayout /></ProtectedRoute>} />
         <Route path="/admin/bulk-payout" element={<ProtectedRoute role="admin"><BulkPayout /></ProtectedRoute>} />
