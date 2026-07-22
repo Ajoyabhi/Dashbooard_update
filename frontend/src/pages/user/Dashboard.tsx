@@ -139,12 +139,13 @@ const Dashboard = () => {
       icon: "Wallet",
       color: 'secondary'
     },
-    {
+    // Rolling Reserve card only appears once funds have been moved into reserve
+    ...(Number(dashboardData.rolling_reserve_balance) > 0 ? [{
       title: 'Rolling Reserve',
       value: `${dashboardData.rolling_reserve_balance || 0}`,
       icon: "ShieldCheck",
       color: 'warning'
-    },
+    }] : []),
     {
       title: "Today's Pay-in (Net)",
       value: `${dashboardData.today_payin || 0}`,
@@ -254,7 +255,10 @@ const Dashboard = () => {
   const balanceData = [
     { name: 'Settlement', value: dashboardData.settlement_balance || 0 },
     { name: 'Wallet', value: dashboardData.wallet_balance || 0 },
-    { name: 'Rolling Reserve', value: dashboardData.rolling_reserve_balance || 0 }
+    // Only include the reserve slice when funds are actually held in reserve
+    ...(Number(dashboardData.rolling_reserve_balance) > 0
+      ? [{ name: 'Rolling Reserve', value: dashboardData.rolling_reserve_balance }]
+      : [])
   ];
 
   // New chart data patterns

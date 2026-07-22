@@ -85,7 +85,7 @@ export default function UserDashboard() {
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-24 translate-x-20" />
         <div className="absolute bottom-0 right-20 w-40 h-40 bg-[#D4AF37]/10 rounded-full translate-y-16" />
         <div className="relative z-10">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <div className={`grid grid-cols-1 gap-6 ${rollingReserveBalance > 0 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
             {/* Wallet Balance */}
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -108,17 +108,16 @@ export default function UserDashboard() {
                 : <p className="text-3xl font-bold tracking-tight text-[#D4AF37]">{formatCurrency(settlementBalance)}</p>
               }
             </div>
-            {/* Rolling Reserve */}
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <ShieldCheck size={14} className="text-amber-400" />
-                <p className="text-amber-200/80 text-sm font-medium">Rolling Reserve</p>
+            {/* Rolling Reserve — only shown when funds are held in reserve */}
+            {rollingReserveBalance > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <ShieldCheck size={14} className="text-amber-400" />
+                  <p className="text-amber-200/80 text-sm font-medium">Rolling Reserve</p>
+                </div>
+                <p className="text-3xl font-bold tracking-tight text-amber-300">{formatCurrency(rollingReserveBalance)}</p>
               </div>
-              {loading
-                ? <Skeleton variant="rectangular" width={180} height={36} sx={{ borderRadius: 2, bgcolor: 'rgba(255,255,255,0.1)' }} />
-                : <p className="text-3xl font-bold tracking-tight text-amber-300">{formatCurrency(rollingReserveBalance)}</p>
-              }
-            </div>
+            )}
           </div>
 
           <div className="mt-5 flex items-center gap-3 max-w-xs">
