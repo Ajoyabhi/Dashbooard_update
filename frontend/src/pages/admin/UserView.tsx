@@ -61,7 +61,7 @@ export default function UserView() {
 
     const fetchUserDetails = async () => {
         try {
-            const response = await api.get(`/agent/users/${userId}`);
+            const response = await api.get(`/admin/users/${userId}`);
             setUser(response.data);
         } catch (error: any) {
             toast.error(error.response?.data?.error || 'Error fetching user details');
