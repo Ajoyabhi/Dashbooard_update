@@ -82,6 +82,13 @@ module.exports = (sequelize) => {
         remember_token: {
             type: DataTypes.STRING(100)
         },
+        // When true, payin requests for this user get a random test beneficiary
+        // (name/email/phone) instead of the submitted values. For testing only.
+        test_random_beneficiary: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: false
+        },
         // reset_token: {
         //     type: DataTypes.STRING(255),
         //     allowNull: true

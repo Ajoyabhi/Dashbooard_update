@@ -108,6 +108,15 @@ export default function ManageUser() {
       ),
     },
     {
+      header: 'Test Beneficiary',
+      accessor: 'testRandomBeneficiary',
+      cell: (value: any) => (
+        Boolean(value)
+          ? <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800">On</span>
+          : <span className="text-gray-400">—</span>
+      ),
+    },
+    {
       header: 'Status',
       accessor: 'status',
       cell: (value: any) => {

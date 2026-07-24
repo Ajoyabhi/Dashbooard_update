@@ -45,6 +45,7 @@ interface UserData {
     created_by: number;
     updated_by: number | null;
     remember_token: string | null;
+    test_random_beneficiary?: boolean;
     UserStatus: UserStatus;
 }
 
@@ -66,6 +67,23 @@ export default function UserView() {
             toast.error(error.response?.data?.error || 'Error fetching user details');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const [togglingBeneficiary, setTogglingBeneficiary] = useState(false);
+
+    const handleToggleTestBeneficiary = async () => {
+        if (!user) return;
+        const nextValue = !user.test_random_beneficiary;
+        setTogglingBeneficiary(true);
+        try {
+            await api.patch(`/admin/users/${user.id}/test-beneficiary`, { enabled: nextValue });
+            setUser({ ...user, test_random_beneficiary: nextValue });
+            toast.success(`Random test beneficiary ${nextValue ? 'enabled' : 'disabled'}`);
+        } catch (error: any) {
+            toast.error(error.response?.data?.error || 'Error updating test beneficiary setting');
+        } finally {
+            setTogglingBeneficiary(false);
         }
     };
 
@@ -288,6 +306,39 @@ export default function UserView() {
                                         </span>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+
+                        {/* Testing Tools */}
+                        <div className="border-t border-gray-200 pt-6">
+                            <h2 className="text-lg font-medium text-gray-900 mb-4">Testing Tools</h2>
+                            <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-4">
+                                <div className="pr-4">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm font-medium text-gray-900">Random Test Beneficiary</span>
+                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${user.test_random_beneficiary ? 'bg-success-100 text-success-800' : 'bg-gray-200 text-gray-700'
+                                            }`}>
+                                            {user.test_random_beneficiary ? 'Enabled' : 'Disabled'}
+                                        </span>
+                                    </div>
+                                    <p className="mt-1 text-xs text-gray-500">
+                                        When enabled, this user's payin requests use a random test name, email and Indian mobile number instead of the submitted values. For testing only.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={handleToggleTestBeneficiary}
+                                    disabled={togglingBeneficiary}
+                                    role="switch"
+                                    aria-checked={!!user.test_random_beneficiary}
+                                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${user.test_random_beneficiary ? 'bg-primary-600' : 'bg-gray-300'
+                                        }`}
+                                >
+                                    <span
+                                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${user.test_random_beneficiary ? 'translate-x-5' : 'translate-x-0'
+                                            }`}
+                                    />
+                                </button>
                             </div>
                         </div>
 

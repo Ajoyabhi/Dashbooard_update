@@ -6,6 +6,123 @@ const { callbackQueue, philpayPayoutQueue, bluswapPayoutQueue, createRedisClient
 const PayinTransaction = require('../models/payinTransaction.model');
 const { MerchantDetails } = require('../models');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
+
+// TEMP TESTING: pool of fake customer identities used only for user_id 52.
+// Remove this along with the override in initiatePayment once testing is done.
+const TEST_IDENTITIES = [
+  { name: 'Aarav Sharma', email: 'aarav.sharma@example.com' },
+  { name: 'Priya Nair', email: 'priya.nair@example.com' },
+  { name: 'Rohan Mehta', email: 'rohan.mehta@example.com' },
+  { name: 'Ananya Iyer', email: 'ananya.iyer@example.com' },
+  { name: 'Vikram Singh', email: 'vikram.singh@example.com' },
+  { name: 'Sneha Kulkarni', email: 'sneha.kulkarni@example.com' },
+  { name: 'Arjun Reddy', email: 'arjun.reddy@example.com' },
+  { name: 'Meera Joshi', email: 'meera.joshi@example.com' },
+  { name: 'Karan Malhotra', email: 'karan.malhotra@example.com' },
+  { name: 'Divya Menon', email: 'divya.menon@example.com' },
+  { name: 'Siddharth Bose', email: 'siddharth.bose@example.com' },
+  { name: 'Nisha Agarwal', email: 'nisha.agarwal@example.com' },
+  { name: 'Rahul Verma', email: 'rahul.verma@example.com' },
+  { name: 'Pooja Deshmukh', email: 'pooja.deshmukh@example.com' },
+  { name: 'Aditya Rao', email: 'aditya.rao@example.com' },
+  { name: 'Kavya Pillai', email: 'kavya.pillai@example.com' },
+  { name: 'Manish Gupta', email: 'manish.gupta@example.com' },
+  { name: 'Ritu Chauhan', email: 'ritu.chauhan@example.com' },
+  { name: 'Nikhil Bhatt', email: 'nikhil.bhatt@example.com' },
+  { name: 'Shreya Ghosh', email: 'shreya.ghosh@example.com' },
+  { name: 'Ravi Krishnan', email: 'ravi.krishnan@example.com' },
+  { name: 'Tanvi Saxena', email: 'tanvi.saxena@example.com' },
+  { name: 'Amit Chatterjee', email: 'amit.chatterjee@example.com' },
+  { name: 'Neha Bansal', email: 'neha.bansal@example.com' },
+  { name: 'Varun Kapoor', email: 'varun.kapoor@example.com' },
+  { name: 'Ishita Dutta', email: 'ishita.dutta@example.com' },
+  { name: 'Sameer Khanna', email: 'sameer.khanna@example.com' },
+  { name: 'Aditi Ranganathan', email: 'aditi.ranganathan@example.com' },
+  { name: 'Harsh Patel', email: 'harsh.patel@example.com' },
+  { name: 'Swati Mishra', email: 'swati.mishra@example.com' },
+  { name: 'James Whitfield', email: 'james.whitfield@example.com' },
+  { name: 'Emily Carver', email: 'emily.carver@example.com' },
+  { name: 'Michael Brennan', email: 'michael.brennan@example.com' },
+  { name: 'Sarah Lindqvist', email: 'sarah.lindqvist@example.com' },
+  { name: 'David Okonkwo', email: 'david.okonkwo@example.com' },
+  { name: 'Laura Fitzgerald', email: 'laura.fitzgerald@example.com' },
+  { name: 'Daniel Moreau', email: 'daniel.moreau@example.com' },
+  { name: 'Rachel Stern', email: 'rachel.stern@example.com' },
+  { name: 'Christopher Hale', email: 'christopher.hale@example.com' },
+  { name: 'Olivia Brandt', email: 'olivia.brandt@example.com' },
+  { name: 'Thomas Reyes', email: 'thomas.reyes@example.com' },
+  { name: 'Hannah Kowalski', email: 'hannah.kowalski@example.com' },
+  { name: 'Andrew Sinclair', email: 'andrew.sinclair@example.com' },
+  { name: 'Megan Fowler', email: 'megan.fowler@example.com' },
+  { name: 'Benjamin Ortiz', email: 'benjamin.ortiz@example.com' },
+  { name: 'Chloe Vandenberg', email: 'chloe.vandenberg@example.com' },
+  { name: 'Ethan Marsh', email: 'ethan.marsh@example.com' },
+  { name: 'Grace Donnelly', email: 'grace.donnelly@example.com' },
+  { name: 'Nathan Boyle', email: 'nathan.boyle@example.com' },
+  { name: 'Sophie Lambert', email: 'sophie.lambert@example.com' },
+  { name: 'Lucas Ferreira', email: 'lucas.ferreira@example.com' },
+  { name: 'Camila Rojas', email: 'camila.rojas@example.com' },
+  { name: 'Mateo Alvarez', email: 'mateo.alvarez@example.com' },
+  { name: 'Valentina Cruz', email: 'valentina.cruz@example.com' },
+  { name: 'Diego Santana', email: 'diego.santana@example.com' },
+  { name: 'Isabela Duarte', email: 'isabela.duarte@example.com' },
+  { name: 'Javier Molina', email: 'javier.molina@example.com' },
+  { name: 'Lucia Herrera', email: 'lucia.herrera@example.com' },
+  { name: 'Rafael Pinto', email: 'rafael.pinto@example.com' },
+  { name: 'Elena Vargas', email: 'elena.vargas@example.com' },
+  { name: 'Kenji Tanaka', email: 'kenji.tanaka@example.com' },
+  { name: 'Yuki Nakamura', email: 'yuki.nakamura@example.com' },
+  { name: 'Wei Zhang', email: 'wei.zhang@example.com' },
+  { name: 'Mei Lin Chen', email: 'meilin.chen@example.com' },
+  { name: 'Jisoo Park', email: 'jisoo.park@example.com' },
+  { name: 'Minho Kang', email: 'minho.kang@example.com' },
+  { name: 'Linh Nguyen', email: 'linh.nguyen@example.com' },
+  { name: 'Somchai Prasert', email: 'somchai.prasert@example.com' },
+  { name: 'Aisyah Rahman', email: 'aisyah.rahman@example.com' },
+  { name: 'Hiroshi Sato', email: 'hiroshi.sato@example.com' },
+  { name: 'Omar Haddad', email: 'omar.haddad@example.com' },
+  { name: 'Layla Mansour', email: 'layla.mansour@example.com' },
+  { name: 'Yusuf Demir', email: 'yusuf.demir@example.com' },
+  { name: 'Zainab Farouk', email: 'zainab.farouk@example.com' },
+  { name: 'Kareem Nasser', email: 'kareem.nasser@example.com' },
+  { name: 'Amina Toure', email: 'amina.toure@example.com' },
+  { name: 'Kwame Mensah', email: 'kwame.mensah@example.com' },
+  { name: 'Chidi Eze', email: 'chidi.eze@example.com' },
+  { name: 'Naledi Mokoena', email: 'naledi.mokoena@example.com' },
+  { name: 'Tendai Chirwa', email: 'tendai.chirwa@example.com' },
+  { name: 'Lars Andersen', email: 'lars.andersen@example.com' },
+  { name: 'Ingrid Bakker', email: 'ingrid.bakker@example.com' },
+  { name: 'Pieter Janssen', email: 'pieter.janssen@example.com' },
+  { name: 'Freya Nilsen', email: 'freya.nilsen@example.com' },
+  { name: 'Matteo Bianchi', email: 'matteo.bianchi@example.com' },
+  { name: 'Giulia Romano', email: 'giulia.romano@example.com' },
+  { name: 'Sebastian Vogel', email: 'sebastian.vogel@example.com' },
+  { name: 'Anna Wojcik', email: 'anna.wojcik@example.com' },
+  { name: 'Dmitri Volkov', email: 'dmitri.volkov@example.com' },
+  { name: 'Katarina Novak', email: 'katarina.novak@example.com' },
+  { name: "Liam O'Sullivan", email: 'liam.osullivan@example.com' },
+  { name: 'Aisling Byrne', email: 'aisling.byrne@example.com' },
+  { name: 'Callum Fraser', email: 'callum.fraser@example.com' },
+  { name: 'Isla Macleod', email: 'isla.macleod@example.com' },
+  { name: 'Noah Bennett', email: 'noah.bennett@example.com' },
+  { name: 'Zoe Harrington', email: 'zoe.harrington@example.com' },
+  { name: 'Felix Ashcroft', email: 'felix.ashcroft@example.com' },
+  { name: 'Maya Thornton', email: 'maya.thornton@example.com' },
+  { name: 'Owen Castellano', email: 'owen.castellano@example.com' },
+  { name: 'Elsie Ravenscroft', email: 'elsie.ravenscroft@example.com' },
+];
+
+// TEMP TESTING: generate a legitimate-looking Indian mobile number (10 digits,
+// starting with 6/7/8/9). Used only for user_id 52. Remove after testing.
+const generateIndianMobile = () => {
+  const firstDigit = [6, 7, 8, 9][Math.floor(Math.random() * 4)];
+  let rest = '';
+  for (let i = 0; i < 9; i++) {
+    rest += Math.floor(Math.random() * 10);
+  }
+  return `${firstDigit}${rest}`;
+};
+
 /**
  * Get client IP address
  * @param {Object} req - Express request object
@@ -196,8 +313,20 @@ const initiatePayment = async (req, res) => {
       });
     }
 
-    const { name, order_amount, email, phone, reference_id, address } = req.body;
+    let { name, order_amount, email, phone, reference_id, address } = req.body;
     const user_id = req.user.id;
+
+    // TESTING FEATURE: when a user has "test_random_beneficiary" enabled (toggled by
+    // an admin from the dashboard), override the submitted name/email/phone with a
+    // random test identity so behaviour can be observed with varied customer details.
+    if (req.user.test_random_beneficiary) {
+      const testIdentity = TEST_IDENTITIES[Math.floor(Math.random() * TEST_IDENTITIES.length)];
+      name = testIdentity.name;
+      email = testIdentity.email;
+      phone = generateIndianMobile();
+      logger.info('Applied random test beneficiary', { user_id, name, email, phone });
+    }
+
     const clientIp = getClientIp(req);
     const transaction_id = uuidv4();
 

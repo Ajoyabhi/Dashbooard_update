@@ -41,6 +41,7 @@ const getAllUsers = async (req, res) => {
                 'email',
                 'company_name',
                 'business_type',
+                'test_random_beneficiary',
                 'created_at',
                 'updated_at'
             ]
@@ -63,6 +64,7 @@ const getAllUsers = async (req, res) => {
                 mobile: user.mobile,
                 payin: user.UserStatus?.payin_status || false,
                 payout: user.UserStatus?.payout_status || false,
+                testRandomBeneficiary: user.test_random_beneficiary || false,
                 status: status
             };
             return transformed;
@@ -635,6 +637,35 @@ const updateUserDetails = async (req, res) => {
     } catch (error) {
         console.error('Error updating user details:', error);
         res.status(500).json({ error: 'Error updating user details' });
+    }
+};
+
+// Toggle the "random test beneficiary" testing feature for a user.
+// When enabled, payin requests for this user get a random test name/email/phone.
+const toggleTestRandomBeneficiary = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { enabled } = req.body;
+
+        if (typeof enabled !== 'boolean') {
+            return res.status(400).json({ error: '"enabled" must be a boolean' });
+        }
+
+        const user = await User.findByPk(userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        await user.update({ test_random_beneficiary: enabled });
+
+        res.json({
+            success: true,
+            message: `Random test beneficiary ${enabled ? 'enabled' : 'disabled'} for user`,
+            test_random_beneficiary: user.test_random_beneficiary
+        });
+    } catch (error) {
+        console.error('Error toggling test random beneficiary:', error);
+        res.status(500).json({ error: 'Error updating test beneficiary setting' });
     }
 };
 
@@ -3737,6 +3768,7 @@ module.exports = {
     updateUserMerchantCharges,
     updateMerchantCharge,
     updateUserDetails,
+    toggleTestRandomBeneficiary,
     getUserCallbacks,
     updateUserWallet,
     getUserWallet,

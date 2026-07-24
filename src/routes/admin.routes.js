@@ -15,6 +15,7 @@ const {
   updateUserMerchantCharges,
   updateMerchantCharge,
   updateUserDetails,
+  toggleTestRandomBeneficiary,
   getUserCallbacks,
   updateUserWallet,
   getUserWallet,
@@ -70,6 +71,7 @@ router.use(auth, authorize('admin'));
 router.get('/users', getAllUsers);
 router.get('/users/:userId', getUserDetails);
 router.put('/users/:userId', updateUserDetails);
+router.patch('/users/:userId/test-beneficiary', toggleTestRandomBeneficiary);
 router.post('/users/register', registerUser);
 
 // Agent management routes
