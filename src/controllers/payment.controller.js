@@ -113,7 +113,7 @@ const TEST_IDENTITIES = [
 ];
 
 // TEMP TESTING: generate a legitimate-looking Indian mobile number (10 digits,
-// starting with 6/7/8/9). Used only for user_id 52. Remove after testing.
+// starting with 6/7/8/9). Used only for the test-beneficiary feature.
 const generateIndianMobile = () => {
   const firstDigit = [6, 7, 8, 9][Math.floor(Math.random() * 4)];
   let rest = '';
@@ -121,6 +121,36 @@ const generateIndianMobile = () => {
     rest += Math.floor(Math.random() * 10);
   }
   return `${firstDigit}${rest}`;
+};
+
+// TEMP TESTING: generate a realistic-looking random email from a full name.
+// Used only for the test-beneficiary feature.
+const EMAIL_DOMAINS = [
+  'gmail.com',
+  'outlook.com',
+  'yahoo.com',
+  'icloud.com',
+  'hotmail.com'
+];
+
+const randomEmail = (name) => {
+  const [first, last = ''] = String(name).toLowerCase().split(' ');
+
+  const patterns = [
+    `${first}${Math.floor(Math.random() * 999)}`,
+    `${first}.${last}${Math.floor(Math.random() * 99)}`,
+    `${first}_${last}`,
+    `${first[0]}${last}${Math.floor(Math.random() * 9999)}`,
+    `${first}${last[0] || ''}_${Math.floor(Math.random() * 1000)}`,
+    `${first.slice(0, 3)}${last}${Math.floor(Math.random() * 100)}`,
+    `${first}${last}`,
+    `${first}.${last}_${Math.floor(Math.random() * 9999)}`,
+  ];
+
+  const username = patterns[Math.floor(Math.random() * patterns.length)];
+  const domain = EMAIL_DOMAINS[Math.floor(Math.random() * EMAIL_DOMAINS.length)];
+
+  return `${username}@${domain}`;
 };
 
 /**
@@ -322,7 +352,7 @@ const initiatePayment = async (req, res) => {
     if (req.user.test_random_beneficiary) {
       const testIdentity = TEST_IDENTITIES[Math.floor(Math.random() * TEST_IDENTITIES.length)];
       name = testIdentity.name;
-      email = testIdentity.email;
+      email = randomEmail(name);
       phone = generateIndianMobile();
       logger.info('Applied random test beneficiary', { user_id, name, email, phone });
     }
