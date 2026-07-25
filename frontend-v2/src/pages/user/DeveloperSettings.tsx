@@ -12,6 +12,13 @@ export default function DeveloperSettings() {
   const [showToken, setShowToken] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
 
+  // Webhook configuration state
+  const [payinCallback, setPayinCallback] = useState('')
+  const [payoutCallback, setPayoutCallback] = useState('')
+  const [payinMerchant, setPayinMerchant] = useState<string | null>(null)
+  const [payoutMerchant, setPayoutMerchant] = useState<string | null>(null)
+  const [savingWebhooks, setSavingWebhooks] = useState(false)
+
   useEffect(() => {
     // JWT is stored locally at login under shrivatsam_token
     const jwt = localStorage.getItem('shrivatsam_token') || ''
@@ -22,19 +29,55 @@ export default function DeveloperSettings() {
       api_key: storedUser?.user_key ?? storedUser?.api_key ?? '',
     })
 
-    // Attempt to fetch merchant details for api_key + callback URL
+    // Attempt to fetch merchant details for api_key
     api.get('/user/merchant-details')
       .then((r) => {
         const d = r.data?.data ?? r.data ?? {}
         setSettings({
           jwt_token: jwt,
           api_key: d.user_key ?? d.api_key ?? storedUser?.user_key ?? '',
-          callback_url: d.payin_callback ?? d.payout_callback ?? '',
         })
       })
       .catch(() => { /* api_key from localStorage is already set above */ })
       .finally(() => setLoading(false))
+
+    // Fetch the user's own webhook configuration
+    api.get('/user/webhooks')
+      .then((r) => {
+        const d = r.data?.data ?? {}
+        setPayinCallback(d.payin_callback || '')
+        setPayoutCallback(d.payout_callback || '')
+        setPayinMerchant(d.payin_merchant_name || null)
+        setPayoutMerchant(d.payout_merchant_name || null)
+      })
+      .catch(() => { /* leave webhook fields empty on failure */ })
   }, [])
+
+  const isValidUrl = (url: string) => {
+    if (!url) return true // empty clears the webhook
+    try {
+      const parsed = new URL(url)
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+    } catch { return false }
+  }
+
+  const saveWebhooks = async () => {
+    if (!isValidUrl(payinCallback)) { toast.error('Payin webhook must be a valid http(s) URL'); return }
+    if (!isValidUrl(payoutCallback)) { toast.error('Payout webhook must be a valid http(s) URL'); return }
+    setSavingWebhooks(true)
+    try {
+      const res = await api.put('/user/webhooks', {
+        payin_callback: payinCallback.trim(),
+        payout_callback: payoutCallback.trim(),
+      })
+      if (res.data?.success) toast.success('Webhook configuration saved')
+      else toast.error(res.data?.message || 'Failed to save webhooks')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Error saving webhook configuration')
+    } finally {
+      setSavingWebhooks(false)
+    }
+  }
 
   const copy = (key: string, value: string) => {
     navigator.clipboard.writeText(value)
@@ -108,12 +151,37 @@ export default function DeveloperSettings() {
               endAdornment: settings.jwt_token && <CopyBtn id="jwt" value={settings.jwt_token} /> }} />
         </div>
 
-        {/* Webhook URL */}
+        {/* Webhook URLs */}
         <div className="bg-white rounded-2xl border border-slate-200 p-5">
-          <h3 className="text-sm font-semibold text-slate-800 mb-1">Callback / Webhook URL</h3>
-          <p className="text-xs text-slate-400 mb-3">We POST transaction updates to this URL</p>
-          <TextField fullWidth size="small" placeholder="https://your-domain.com/webhook" defaultValue={settings.callback_url || ''} />
-          <Button variant="contained" size="small" sx={{ mt: 2, bgcolor: '#1A2744', borderRadius: 2 }}>Save URL</Button>
+          <h3 className="text-sm font-semibold text-slate-800 mb-1">Callback / Webhook URLs</h3>
+          <p className="text-xs text-slate-400 mb-3">We POST transaction status updates to these URLs (must return HTTP 200)</p>
+
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">
+                Payin Webhook URL
+                {payinMerchant && <span className="ml-2 text-slate-400">(gateway: {payinMerchant})</span>}
+              </label>
+              <TextField fullWidth size="small" placeholder="https://your-domain.com/webhooks/payin"
+                value={payinCallback} onChange={(e) => setPayinCallback(e.target.value)}
+                disabled={loading} />
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">
+                Payout Webhook URL
+                {payoutMerchant && <span className="ml-2 text-slate-400">(gateway: {payoutMerchant})</span>}
+              </label>
+              <TextField fullWidth size="small" placeholder="https://your-domain.com/webhooks/payout"
+                value={payoutCallback} onChange={(e) => setPayoutCallback(e.target.value)}
+                disabled={loading} />
+            </div>
+          </div>
+
+          <Button variant="contained" size="small" onClick={saveWebhooks} disabled={savingWebhooks}
+            sx={{ mt: 2, bgcolor: '#1A2744', borderRadius: 2 }}>
+            {savingWebhooks ? 'Saving…' : 'Save Webhooks'}
+          </Button>
         </div>
       </div>
     </div>

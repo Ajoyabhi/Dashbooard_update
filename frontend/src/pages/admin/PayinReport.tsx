@@ -291,6 +291,7 @@ export default function PayinReport() {
           SpayIcici: 'bg-indigo-100 text-indigo-700',
           HDFC:      'bg-sky-100 text-sky-700',
           AirPay:    'bg-emerald-100 text-emerald-700',
+          Razorpay:  'bg-amber-100 text-amber-700',
         };
         const cls = gw ? (colorMap[gw] ?? 'bg-gray-100 text-gray-600') : 'bg-gray-100 text-gray-400';
         return (

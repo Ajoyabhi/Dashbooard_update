@@ -632,6 +632,51 @@ const getTransactionStatus = async (req, res) => {
       });
     }
 
+    if (merchantName === 'Razorpay') {
+      // GET /api/v1/payments/razorpay/rp-check?reference_id=... (Razorpay contract)
+      const response = await axios.get(
+        `${process.env.ECOMMERCE_API_URL}/api/v1/payments/razorpay/rp-check`,
+        {
+          params: { reference_id: searchTransactionId },
+          headers: {
+            'x-api-key': process.env.RAZORPAY_SHARED_SECRET,
+            'Content-Type': 'application/json'
+          },
+          timeout: 30000
+        }
+      );
+
+      const result = response.data;
+      logger.info('Razorpay rp-check response', { result, reference_id: searchTransactionId });
+
+      // Map Razorpay status (status / razorpay_status) to our normalized values
+      const normalizeRazorpayStatus = (rpStatus) => {
+        if (!rpStatus) return 'pending';
+        const s = rpStatus.toUpperCase();
+        if (s === 'TXN' || s === 'CAPTURED' || s === 'FORWARDED') return 'success';
+        if (['FAILED', 'FAILURE', 'CANCELLED', 'CANCEL', 'ERROR', 'EXPIRED'].includes(s)) return 'failed';
+        return 'pending';
+      };
+
+      const normalizedStatus = normalizeRazorpayStatus(result.razorpay_status || result.status);
+      return res.status(200).json({
+        success: true,
+        transaction: {
+          reference_id: result.reference_id ?? transaction.reference_id,
+          type: 'payin',
+          status: normalizedStatus,
+          amount: result.amount ?? transaction.amount,
+          utr: normalizedStatus === 'success' ? (result.utr || null) : null,
+          message: normalizedStatus === 'success'
+            ? 'Transaction processed'
+            : normalizedStatus === 'pending'
+              ? 'Transaction is pending'
+              : 'Transaction failed',
+          timestamp: transaction.updatedAt || transaction.createdAt || new Date().toISOString()
+        }
+      });
+    }
+
     // Default: Unpay gateway
     const requestBody = {
       partner_id: "4071",
@@ -891,6 +936,38 @@ const airpayCallback = async (req, res) => {
   }
 };
 
+const razorpayCallback = async (req, res) => {
+  try {
+    const apiKey = req.headers['x-api-key'];
+    if (!apiKey || apiKey !== process.env.RAZORPAY_SHARED_SECRET) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const { reference_id, status, utr, amount, payment_id } = req.body;
+    if (!reference_id || !status) {
+      return res.status(400).json({ success: false, message: 'Missing reference_id or status' });
+    }
+
+    await callbackQueue.add(
+      {
+        statuscode: status,
+        apitxnid: reference_id,
+        utr: utr || null,
+        amount,
+        message: 'Razorpay UPI payment',
+        txnid: payment_id || null,
+      },
+      { attempts: 3, backoff: { type: 'exponential', delay: 5000 } }
+    );
+
+    logger.info('Razorpay callback queued', { reference_id, status });
+    return res.status(200).json({ received: true });
+  } catch (error) {
+    logger.error('Razorpay callback error', { error: error.message });
+    return res.status(500).json({ success: false, message: 'Internal error' });
+  }
+};
+
 module.exports = {
   initiatePayment,
   handleUnpayCallback,
@@ -903,7 +980,8 @@ module.exports = {
   handlePhilpayPayoutCallback,
   handleBluswapPayoutCallback,
   hdfcCallback,
-  airpayCallback
+  airpayCallback,
+  razorpayCallback
 };
 
 

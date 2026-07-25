@@ -5,7 +5,7 @@ import { ArrowLeft, Save } from 'lucide-react'
 import api from '@/utils/axios'
 import toast from 'react-hot-toast'
 
-const PAYIN_MERCHANTS = ['Unpay', 'Spay', 'SpayIcici', 'HDFC', 'AirPay', 'Philpay']
+const PAYIN_MERCHANTS = ['Unpay', 'Spay', 'SpayIcici', 'HDFC', 'AirPay', 'Razorpay', 'Philpay']
 const PAYOUT_MERCHANTS = ['Unpay', 'Spay', 'Philpay', 'Xlitepay', 'BluSwap']
 
 export default function UserCallbacks() {

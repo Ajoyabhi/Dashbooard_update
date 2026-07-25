@@ -3,7 +3,7 @@ const router = express.Router();
 const { auth } = require('../middleware/auth.middleware');
 const { checkRole } = require('../middleware/role.middleware');
 const { initiatePayment, getTransactionStatus, handleUnpayCallback, handleSpayCallback,
-  handleSpayPayoutCallback, handlePhilpayPayoutCallback, handleBluswapPayoutCallback, hdfcCallback, airpayCallback } = require('../controllers/payment.controller');
+  handleSpayPayoutCallback, handlePhilpayPayoutCallback, handleBluswapPayoutCallback, hdfcCallback, airpayCallback, razorpayCallback } = require('../controllers/payment.controller');
 const { initiatePayout , getPayoutTransactionStatus, handleBalanceCheck, reconcilePayoutByReference, reconcileProcessingPayouts } = require('../controllers/payment.payout');
 
 
@@ -78,6 +78,9 @@ router.post('/hdfc/callback', hdfcCallback);
 // registered at both paths: the doc-specified /rp/callback and the explicit /airpay/callback
 router.post('/airpay/callback', airpayCallback);
 router.post('/rp/callback', airpayCallback);
+
+// Razorpay callback — called by anpamart backend after Razorpay webhook is verified
+router.post('/razorpay/callback', razorpayCallback);
 
 router.get('/balanceCheck',
   auth,

@@ -160,6 +160,8 @@ const processPayin = async (data) => {
       result = await hdfcPayin(payinData);
     } else if (merchantName === 'AirPay') {
       result = await airpayPayin(payinData);
+    } else if (merchantName === 'Razorpay') {
+      result = await razorpayPayin(payinData);
     } else {
       throw new Error('Invalid merchant name');
     }
@@ -398,6 +400,48 @@ const airpayPayin = async (payinData) => {
       apitxnid: response.data.reference_id || reference_id,
       qrString: response.data.upi_intent_uri,
       airpay_order_id: response.data.airpay_order_id,
+    },
+  };
+};
+
+const razorpayPayin = async (payinData) => {
+  const { order_amount, name, email, phone, reference_id } = payinData;
+
+  // Razorpay contract requires a customerId — reuse the persistent UPI customer
+  // registry (dedupes by email, else mints a UUID) just like the HDFC flow.
+  const customerId = await resolveHdfcCustomerId(phone, email);
+
+  const response = await axios.post(
+    `${process.env.ECOMMERCE_API_URL}/api/v1/payments/razorpay/rp-initiate`,
+    {
+      reference_id,
+      amount: order_amount,
+      name: name || '',
+      email: email || '',
+      phone: phone || '',
+      customerId,
+    },
+    {
+      headers: {
+        'x-api-key': process.env.RAZORPAY_SHARED_SECRET,
+        'Content-Type': 'application/json',
+      },
+      timeout: 30000,
+    }
+  );
+
+  if (!response.data.success || !response.data.upi_intent_uri) {
+    throw new Error(response.data.message || 'Razorpay payment initiation failed');
+  }
+
+  return {
+    statuscode: 'TXN',
+    message: 'UPI intent generated',
+    data: {
+      apitxnid: response.data.reference_id || reference_id,
+      qrString: response.data.upi_intent_uri,
+      razorpay_order_id: response.data.razorpay_order_id,
+      razorpay_payment_id: response.data.razorpay_payment_id,
     },
   };
 };

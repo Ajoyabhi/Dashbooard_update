@@ -17,7 +17,9 @@ const {
   getUserWalletTransactionHistory,
   getUserPayoutFailedHistory,
   downloadSettlementReport,
-  downloadPayoutFailedHistory
+  downloadPayoutFailedHistory,
+  getUserWebhooks,
+  updateUserWebhooks
 } = require('../controllers/user.controller');
 const { auth, authorize } = require('../middleware/auth.middleware');
 
@@ -56,6 +58,11 @@ router.get('/lastNdays-transactions',
 // User profile routes
 router.get('/profile', getUserProfile);
 router.put('/profile', updateUserProfile);
+
+// Developer settings — user-managed payin/payout webhook URLs
+// (reflected on the admin callbacks screen; gateway selection stays admin-only)
+router.get('/webhooks', getUserWebhooks);
+router.put('/webhooks', updateUserWebhooks);
 
 // User wallet , payin , payout routes reports
 router.get('/wallet_reports', getUserWalletReports);

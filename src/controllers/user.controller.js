@@ -1,5 +1,5 @@
 const { logger } = require('../utils/logger');
-const { User, FinancialDetails, ManageFundRequest, TransactionCharges, SettlementTransaction, WalletTransaction, PayoutFailedHistory } = require('../models');
+const { User, FinancialDetails, ManageFundRequest, TransactionCharges, SettlementTransaction, WalletTransaction, PayoutFailedHistory, MerchantDetails } = require('../models');
 const { sequelize } = require('../models');
 const UserTransaction = require('../models/userTransaction.model');
 const PayinTransaction = require('../models/payinTransaction.model');
@@ -1460,9 +1460,101 @@ const downloadPayoutFailedHistory = async (req, res) => {
   }
 };
 
+// Validate a webhook URL: empty string is allowed (clears the webhook),
+// otherwise it must be a well-formed http/https URL.
+const isValidWebhookUrl = (url) => {
+  if (url === '' || url === null || url === undefined) return true;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
+// GET /api/user/webhooks — return the logged-in user's own webhook configuration.
+// The gateway/merchant selection is admin-controlled and returned read-only here.
+const getUserWebhooks = async (req, res) => {
+  try {
+    const merchantDetails = await MerchantDetails.findOne({
+      where: { user_id: req.user.id }
+    });
+
+    res.json({
+      success: true,
+      data: {
+        payin_callback: merchantDetails?.payin_callback || '',
+        payout_callback: merchantDetails?.payout_callback || '',
+        payin_merchant_name: merchantDetails?.payin_merchant_name || null,
+        payout_merchant_name: merchantDetails?.payout_merchant_name || null,
+        last_updated: merchantDetails?.updated_at || null
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching user webhooks', { error: error.message });
+    res.status(500).json({ success: false, message: 'Error fetching webhook configuration' });
+  }
+};
+
+// PUT /api/user/webhooks — let the user set their own payin/payout webhook URLs.
+// Only the callback URL fields are touched; merchant/gateway assignment is never
+// modified here so a user cannot change which gateway routes their traffic.
+// These are the same MerchantDetails fields the admin manages, so changes are
+// reflected on the admin callbacks screen (and vice-versa).
+const updateUserWebhooks = async (req, res) => {
+  try {
+    const { payin_callback, payout_callback } = req.body;
+
+    // Only apply fields that were actually provided in the request.
+    const updates = {};
+    if (payin_callback !== undefined) {
+      if (!isValidWebhookUrl(payin_callback)) {
+        return res.status(400).json({ success: false, message: 'Invalid payin webhook URL. Use a valid http(s) URL.' });
+      }
+      updates.payin_callback = payin_callback || '';
+    }
+    if (payout_callback !== undefined) {
+      if (!isValidWebhookUrl(payout_callback)) {
+        return res.status(400).json({ success: false, message: 'Invalid payout webhook URL. Use a valid http(s) URL.' });
+      }
+      updates.payout_callback = payout_callback || '';
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ success: false, message: 'No webhook URL provided to update' });
+    }
+
+    const [merchantDetails, created] = await MerchantDetails.findOrCreate({
+      where: { user_id: req.user.id },
+      defaults: { user_id: req.user.id, ...updates }
+    });
+
+    if (!created) {
+      await merchantDetails.update(updates);
+    }
+
+    res.json({
+      success: true,
+      message: 'Webhook configuration updated successfully',
+      data: {
+        payin_callback: merchantDetails.payin_callback || '',
+        payout_callback: merchantDetails.payout_callback || '',
+        payin_merchant_name: merchantDetails.payin_merchant_name || null,
+        payout_merchant_name: merchantDetails.payout_merchant_name || null,
+        last_updated: merchantDetails.updated_at || null
+      }
+    });
+  } catch (error) {
+    logger.error('Error updating user webhooks', { error: error.message });
+    res.status(500).json({ success: false, message: 'Error updating webhook configuration' });
+  }
+};
+
 module.exports = {
   getUserProfile,
   updateUserProfile,
+  getUserWebhooks,
+  updateUserWebhooks,
   getUserWalletReports,
   getUserPayinReports,
   downloadUserPayinReports,
