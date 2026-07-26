@@ -1785,6 +1785,87 @@ const getPayinTransactions = async (req, res) => {
 };
 
 
+// Aggregated collection summary for payin transactions.
+// Given a user + date/time range (and optional status), returns the total
+// amount and count, plus a per-status breakdown. Mirrors the CLI report at
+// src/scripts/checkPayinTransactionsByDate.js but scoped to a single query.
+const getPayinCollectionSummary = async (req, res) => {
+    try {
+        const { status, startDate, endDate, user } = req.query;
+
+        // Build filter object (kept identical in spirit to getPayinTransactions)
+        const filter = {};
+
+        if (status && status !== 'all') {
+            filter.status = status;
+        }
+
+        if (startDate || endDate) {
+            filter.createdAt = {};
+            if (startDate) {
+                filter.createdAt.$gte = new Date(startDate);
+            }
+            if (endDate) {
+                filter.createdAt.$lte = new Date(endDate);
+            }
+        }
+
+        if (user && user !== '') {
+            filter['user.user_id'] = user.toString();
+        }
+
+        const results = await PayinTransaction.aggregate([
+            { $match: filter },
+            {
+                $group: {
+                    _id: '$status',
+                    count: { $sum: 1 },
+                    totalAmount: { $sum: { $ifNull: ['$amount', 0] } }
+                }
+            }
+        ]);
+
+        // Overall totals across whatever statuses matched the filter
+        const overall = results.reduce(
+            (acc, r) => {
+                acc.count += r.count;
+                acc.totalAmount += r.totalAmount;
+                return acc;
+            },
+            { count: 0, totalAmount: 0 }
+        );
+
+        // Per-status breakdown as an easy-to-render map
+        const statusBreakdown = results.reduce((acc, r) => {
+            acc[r._id] = { count: r.count, totalAmount: r.totalAmount };
+            return acc;
+        }, {});
+
+        res.json({
+            success: true,
+            data: {
+                totalCount: overall.count,
+                totalAmount: overall.totalAmount,
+                statusBreakdown,
+                filters: {
+                    status: status || 'all',
+                    startDate: startDate || null,
+                    endDate: endDate || null,
+                    user: user || null
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching payin collection summary:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching payin collection summary',
+            error: error.message
+        });
+    }
+};
+
+
 const getPayinTransactionsDownload = async (req, res) => {
     try {
         const { startDate, endDate, status, user } = req.query;
@@ -3794,6 +3875,7 @@ module.exports = {
     handleChargebackAction,
     getPayoutTransactions,
     getPayinTransactions,
+    getPayinCollectionSummary,
     getPayinTransactionsDownload,
     getPayoutTransactionsDownload,
     getWalletTransactionsDownload,

@@ -42,6 +42,7 @@ const {
   handleChargebackAction,
   getPayoutTransactions,
   getPayinTransactions,
+  getPayinCollectionSummary,
   getPayinTransactionsDownload,
   getPayoutTransactionsDownload,
   getWalletTransactionsDownload,
@@ -150,6 +151,7 @@ router.get('/wallet-transactions', getWalletTransactions);
 router.get('/payout-transactions', getPayoutTransactions);
 
 router.get('/payin-transactions', getPayinTransactions);
+router.get('/payin-transactions/summary', getPayinCollectionSummary);
 router.get('/payin-transactions/:reference_id/check-status', adminCheckPayinStatus);
 
 // payout , payin, wallet transaction report downlaod route

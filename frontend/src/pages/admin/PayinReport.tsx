@@ -52,6 +52,17 @@ interface PayinRecord {
   updatedAt: string;
 }
 
+interface StatusBreakdownEntry {
+  count: number;
+  totalAmount: number;
+}
+
+interface CollectionSummary {
+  totalCount: number;
+  totalAmount: number;
+  statusBreakdown: Record<string, StatusBreakdownEntry>;
+}
+
 interface StatusCheckResult {
   paymentStatus: string;
   utr?: string | null;
@@ -89,6 +100,10 @@ export default function PayinReport() {
   const [downloadLoading, setDownloadLoading] = useState(false);
   const [users, setUsers] = useState<UserOption[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
+
+  // Collection summary (aggregated total amount + count for current filters)
+  const [summary, setSummary] = useState<CollectionSummary | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
 
   // Status check modal
   const [statusModalOpen, setStatusModalOpen] = useState(false);
@@ -141,8 +156,35 @@ export default function PayinReport() {
     }
   };
 
+  const fetchSummary = async () => {
+    try {
+      setSummaryLoading(true);
+      const params = new URLSearchParams({ status: selectedStatus });
+      if (selectedUser) params.append('user', selectedUser);
+      if (dateRange.startDate) params.append('startDate', dateRange.startDate.toISOString());
+      if (dateRange.endDate) params.append('endDate', dateRange.endDate.toISOString());
+
+      const response = await api.get(`/admin/payin-transactions/summary?${params}`);
+      setSummary(response.data.data);
+    } catch (error) {
+      console.error('Error fetching payin collection summary:', error);
+      setSummary(null);
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
   useEffect(() => { fetchTransactions(); }, [currentPage, pageSize, selectedStatus, selectedUser, dateRange, searchTerm]);
+  // Summary only depends on the filters, not on pagination
+  useEffect(() => { fetchSummary(); }, [selectedStatus, selectedUser, dateRange]);
   useEffect(() => { fetchUsers(); }, []);
+
+  // Format a Date into the value expected by <input type="datetime-local"> (local time)
+  const toLocalInputValue = (d: Date | null) => {
+    if (!d) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
 
   const handleCheckStatus = async (referenceId: string) => {
     setCheckedReferenceId(referenceId);
@@ -421,12 +463,12 @@ export default function PayinReport() {
                     {usersLoading && <p className="mt-1 text-xs text-gray-500">Loading users...</p>}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-                    <input type="date" value={dateRange.startDate?.toISOString().split('T')[0] || ''} onChange={(e) => setDateRange({ ...dateRange, startDate: e.target.value ? new Date(e.target.value) : null })} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm" />
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Date &amp; Time</label>
+                    <input type="datetime-local" value={toLocalInputValue(dateRange.startDate)} onChange={(e) => setDateRange({ ...dateRange, startDate: e.target.value ? new Date(e.target.value) : null })} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-                    <input type="date" value={dateRange.endDate?.toISOString().split('T')[0] || ''} onChange={(e) => setDateRange({ ...dateRange, endDate: e.target.value ? new Date(e.target.value) : null })} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm" />
+                    <label className="block text-sm font-medium text-gray-700 mb-1">End Date &amp; Time</label>
+                    <input type="datetime-local" value={toLocalInputValue(dateRange.endDate)} onChange={(e) => setDateRange({ ...dateRange, endDate: e.target.value ? new Date(e.target.value) : null })} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
@@ -440,6 +482,71 @@ export default function PayinReport() {
                 </div>
               </div>
             )}
+
+            {/* Collection Summary — aggregated totals for the selected user, status and date/time range */}
+            <div className="mb-6 rounded-lg border border-primary-100 bg-gradient-to-r from-primary-50 to-white p-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-800">Collection Summary</h3>
+                  <p className="text-xs text-gray-500">
+                    {selectedUser
+                      ? users.find((u) => String(u.id) === selectedUser)?.displayText || `User #${selectedUser}`
+                      : 'All users'}
+                    {' · '}
+                    {selectedStatus === 'all' ? 'All statuses' : selectedStatus.charAt(0).toUpperCase() + selectedStatus.slice(1)}
+                    {dateRange.startDate || dateRange.endDate ? (
+                      <> {' · '}{dateRange.startDate ? formatDate(dateRange.startDate.toISOString()) : '…'} → {dateRange.endDate ? formatDate(dateRange.endDate.toISOString()) : 'now'}</>
+                    ) : ' · all time'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    const start = new Date();
+                    start.setHours(0, 0, 0, 0);
+                    setDateRange({ startDate: start, endDate: new Date() });
+                  }}
+                  className="self-start inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-primary-600 text-white hover:bg-primary-700"
+                >
+                  <Clock className="h-3.5 w-3.5 mr-1" />
+                  Today from 12 AM
+                </button>
+              </div>
+
+              {summaryLoading ? (
+                <div className="flex items-center text-sm text-gray-500 py-4">
+                  <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                  Calculating totals…
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="rounded-lg bg-white border border-gray-200 p-3">
+                    <div className="text-xs text-gray-500">Total Amount</div>
+                    <div className="text-lg font-bold text-gray-900">{formatCurrency(summary?.totalAmount || 0)}</div>
+                  </div>
+                  <div className="rounded-lg bg-white border border-gray-200 p-3">
+                    <div className="text-xs text-gray-500">Transactions</div>
+                    <div className="text-lg font-bold text-gray-900">{summary?.totalCount || 0}</div>
+                  </div>
+                  <div className="rounded-lg bg-white border border-green-200 p-3">
+                    <div className="text-xs text-green-600 flex items-center gap-1">
+                      <CheckCircle className="h-3 w-3" /> Completed
+                    </div>
+                    <div className="text-lg font-bold text-green-700">
+                      {formatCurrency(summary?.statusBreakdown?.completed?.totalAmount || 0)}
+                    </div>
+                    <div className="text-xs text-gray-500">{summary?.statusBreakdown?.completed?.count || 0} txns</div>
+                  </div>
+                  <div className="rounded-lg bg-white border border-gray-200 p-3">
+                    <div className="text-xs text-gray-500 flex items-center gap-1">
+                      <Clock className="h-3 w-3" /> Pending / Failed
+                    </div>
+                    <div className="text-sm font-semibold text-gray-700">
+                      {(summary?.statusBreakdown?.pending?.count || 0)} pend · {(summary?.statusBreakdown?.failed?.count || 0)} fail
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <Table
               columns={columns}
