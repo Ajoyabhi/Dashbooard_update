@@ -82,9 +82,20 @@ const statusOptions: FilterOption[] = [
   { label: 'Payin QR Generated', value: 'payin_qr_generated' },
 ];
 
+const gatewayOptions: FilterOption[] = [
+  { label: 'All Gateways', value: 'all' },
+  { label: 'Unpay', value: 'Unpay' },
+  { label: 'Spay', value: 'Spay' },
+  { label: 'SpayIcici', value: 'SpayIcici' },
+  { label: 'HDFC', value: 'HDFC' },
+  { label: 'AirPay', value: 'AirPay' },
+  { label: 'Razorpay', value: 'Razorpay' },
+];
+
 export default function PayinReport() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedGateway, setSelectedGateway] = useState('all');
   const [selectedUser, setSelectedUser] = useState('');
   const [dateRange, setDateRange] = useState<DateRange>({ startDate: null, endDate: null });
   const [showFilters, setShowFilters] = useState(false);
@@ -134,6 +145,7 @@ export default function PayinReport() {
         status: selectedStatus,
         search: searchTerm,
       });
+      if (selectedGateway && selectedGateway !== 'all') params.append('gateway', selectedGateway);
       if (selectedUser) params.append('user', selectedUser);
       if (dateRange.startDate) params.append('startDate', dateRange.startDate.toISOString());
       if (dateRange.endDate) params.append('endDate', dateRange.endDate.toISOString());
@@ -160,6 +172,7 @@ export default function PayinReport() {
     try {
       setSummaryLoading(true);
       const params = new URLSearchParams({ status: selectedStatus });
+      if (selectedGateway && selectedGateway !== 'all') params.append('gateway', selectedGateway);
       if (selectedUser) params.append('user', selectedUser);
       if (dateRange.startDate) params.append('startDate', dateRange.startDate.toISOString());
       if (dateRange.endDate) params.append('endDate', dateRange.endDate.toISOString());
@@ -174,9 +187,9 @@ export default function PayinReport() {
     }
   };
 
-  useEffect(() => { fetchTransactions(); }, [currentPage, pageSize, selectedStatus, selectedUser, dateRange, searchTerm]);
+  useEffect(() => { fetchTransactions(); }, [currentPage, pageSize, selectedStatus, selectedGateway, selectedUser, dateRange, searchTerm]);
   // Summary only depends on the filters, not on pagination
-  useEffect(() => { fetchSummary(); }, [selectedStatus, selectedUser, dateRange]);
+  useEffect(() => { fetchSummary(); }, [selectedStatus, selectedGateway, selectedUser, dateRange]);
   useEffect(() => { fetchUsers(); }, []);
 
   // Format a Date into the value expected by <input type="datetime-local"> (local time)
@@ -247,6 +260,7 @@ export default function PayinReport() {
 
   const resetFilters = () => {
     setSelectedStatus('all');
+    setSelectedGateway('all');
     setSelectedUser('');
     setDateRange({ startDate: null, endDate: null });
     setSearchTerm('');
@@ -447,11 +461,17 @@ export default function PayinReport() {
                     Reset Filters
                   </button>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                     <select value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm">
                       {statusOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Gateway</label>
+                    <select value={selectedGateway} onChange={(e) => setSelectedGateway(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm">
+                      {gatewayOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </div>
                   <div>
@@ -494,6 +514,8 @@ export default function PayinReport() {
                       : 'All users'}
                     {' · '}
                     {selectedStatus === 'all' ? 'All statuses' : selectedStatus.charAt(0).toUpperCase() + selectedStatus.slice(1)}
+                    {' · '}
+                    {selectedGateway === 'all' ? 'All gateways' : selectedGateway}
                     {dateRange.startDate || dateRange.endDate ? (
                       <> {' · '}{dateRange.startDate ? formatDate(dateRange.startDate.toISOString()) : '…'} → {dateRange.endDate ? formatDate(dateRange.endDate.toISOString()) : 'now'}</>
                     ) : ' · all time'}

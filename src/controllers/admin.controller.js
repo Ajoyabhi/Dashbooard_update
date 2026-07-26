@@ -1694,7 +1694,8 @@ const getPayinTransactions = async (req, res) => {
             startDate,
             endDate,
             search,
-            user
+            user,
+            gateway
         } = req.query;
 
         // Convert page and pageSize to numbers
@@ -1722,6 +1723,11 @@ const getPayinTransactions = async (req, res) => {
         // Add user filter (from dropdown selection)
         if (user && user !== '') {
             filter['user.user_id'] = user.toString();
+        }
+
+        // Add gateway filter (from dropdown selection)
+        if (gateway && gateway !== 'all') {
+            filter['metadata.gateway_name'] = gateway;
         }
 
         // Add search condition if search term is provided
@@ -1791,7 +1797,7 @@ const getPayinTransactions = async (req, res) => {
 // src/scripts/checkPayinTransactionsByDate.js but scoped to a single query.
 const getPayinCollectionSummary = async (req, res) => {
     try {
-        const { status, startDate, endDate, user } = req.query;
+        const { status, startDate, endDate, user, gateway } = req.query;
 
         // Build filter object (kept identical in spirit to getPayinTransactions)
         const filter = {};
@@ -1812,6 +1818,10 @@ const getPayinCollectionSummary = async (req, res) => {
 
         if (user && user !== '') {
             filter['user.user_id'] = user.toString();
+        }
+
+        if (gateway && gateway !== 'all') {
+            filter['metadata.gateway_name'] = gateway;
         }
 
         const results = await PayinTransaction.aggregate([
@@ -1868,7 +1878,7 @@ const getPayinCollectionSummary = async (req, res) => {
 
 const getPayinTransactionsDownload = async (req, res) => {
     try {
-        const { startDate, endDate, status, user } = req.query;
+        const { startDate, endDate, status, user, gateway } = req.query;
 
         // Build filter object
         const filter = {};
@@ -1890,6 +1900,11 @@ const getPayinTransactionsDownload = async (req, res) => {
         // Add user filter
         if (user) {
             filter['user.user_id'] = user.toString();
+        }
+
+        // Add gateway filter
+        if (gateway && gateway !== 'all') {
+            filter['metadata.gateway_name'] = gateway;
         }
 
         // Get all payin transactions based on filters
