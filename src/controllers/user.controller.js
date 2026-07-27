@@ -334,7 +334,9 @@ const downloadUserPayinReports = async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    // Create CSV content
+    // Create CSV content. Columns mirror the on-screen Payin Report table so
+    // the downloaded Net Amount matches what the user sees (amount minus admin
+    // charge, GST and platform fee — not just the admin charge).
     const headers = [
       'Order ID',
       'UTR',
@@ -342,6 +344,8 @@ const downloadUserPayinReports = async (req, res) => {
       'Beneficiary Name',
       'Amount',
       'Charge',
+      'GST',
+      'Platform Fee',
       'Net Amount',
       'Status',
       'Created Date',
@@ -352,14 +356,20 @@ const downloadUserPayinReports = async (req, res) => {
 
     // Add data rows
     transactions.forEach(transaction => {
-      const netAmount = transaction.amount - (transaction.charges?.admin_charge || 0);
+      const amount = transaction.amount || 0;
+      const adminCharge = transaction.charges?.admin_charge || 0;
+      const gstAmount = transaction.gst_amount || 0;
+      const platformFee = transaction.platform_fee || 0;
+      const netAmount = amount - adminCharge - gstAmount - platformFee;
       csvRows.push([
         transaction.reference_id,
         transaction.gateway_response?.utr || 'N/A',
         transaction.user?.name || 'N/A',
         transaction.beneficiary_details?.beneficiary_name || 'N/A',
-        transaction.amount,
-        transaction.charges?.admin_charge || 0,
+        amount,
+        adminCharge,
+        gstAmount,
+        platformFee,
         netAmount,
         transaction.status,
         new Date(transaction.createdAt).toLocaleString('en-IN'),
@@ -901,126 +911,98 @@ const getUserDashboard = async (req, res) => {
 const getLastNDaysTransactions = async (req, res) => {
   try {
     const userId = req.user.id; // Get user ID from authenticated user
-    const { days = 5 } = req.query; // Default to 5 days if not specified
 
-    // Validate days parameter
-    const validDays = [3, 5, 10];
-    const selectedDays = validDays.includes(parseInt(days)) ? parseInt(days) : 5;
+    // Validate days parameter. 7 is included because the dashboard's
+    // "Performance Overview (Last 7 Days)" chart calls this endpoint with days=7.
+    const validDays = [3, 5, 7, 10];
+    const selectedDays = validDays.includes(parseInt(req.query.days)) ? parseInt(req.query.days) : 5;
 
-    const lastNDaysData = [];
+    // Collection/payout figures are aggregated from the MongoDB transaction
+    // stores (PayinTransaction / PayoutTransaction) — the same source of truth
+    // as the admin "user-wise time-wise collection" API and the payin report —
+    // rather than the SQL TransactionCharges mirror, so the numbers match.
+    //
+    // Days are bucketed by IST calendar date (the business timezone), matching
+    // the reporting scripts. We build the IST day skeleton, derive the exact
+    // UTC window it spans, and let MongoDB group by IST date via $dateToString.
+    const IST_TIMEZONE = 'Asia/Kolkata';
+    const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000; // +05:30
+    const DAY_MS = 24 * 60 * 60 * 1000;
 
+    // "Now" shifted into IST wall-clock (UTC getters then read IST values).
+    const nowIst = new Date(Date.now() + IST_OFFSET_MS);
+
+    const daySkeleton = [];
     for (let i = selectedDays - 1; i >= 0; i--) {
-      // Get current date and calculate the date range
-      const now = new Date();
-      const targetDate = new Date(now);
-      targetDate.setDate(targetDate.getDate() - i);
-      targetDate.setUTCHours(0, 0, 0, 0); // Start of day in UTC
+      const istMidnight = new Date(nowIst);
+      istMidnight.setUTCDate(istMidnight.getUTCDate() - i);
+      istMidnight.setUTCHours(0, 0, 0, 0);
+      const dateLabel = istMidnight.toISOString().split('T')[0]; // IST calendar date
+      // Convert IST midnight back to the real UTC instant for the Mongo query.
+      const startUtc = new Date(istMidnight.getTime() - IST_OFFSET_MS);
+      const endUtc = new Date(startUtc.getTime() + DAY_MS - 1);
+      daySkeleton.push({ dateLabel, startUtc, endUtc });
+    }
 
-      // End of day in UTC
-      const endDate = new Date(targetDate);
-      endDate.setUTCHours(23, 59, 59, 999);
+    const rangeStart = daySkeleton[0].startUtc;
+    const rangeEnd = daySkeleton[daySkeleton.length - 1].endUtc;
 
-      const startDate = targetDate;
+    const groupStage = {
+      _id: {
+        $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: IST_TIMEZONE }
+      },
+      total_amount: { $sum: { $ifNull: ['$amount', 0] } },
+      total_charges: { $sum: { $ifNull: ['$charges.total_charges', 0] } },
+      total_gst: { $sum: { $ifNull: ['$gst_amount', 0] } },
+      total_platform_fee: { $sum: { $ifNull: ['$platform_fee', 0] } },
+      transaction_count: { $sum: 1 }
+    };
 
-      console.log(`Date: ${targetDate.toISOString().split('T')[0]}`);
-      console.log(`UTC Start: ${startDate.toISOString()}`);
-      console.log(`UTC End: ${endDate.toISOString()}`);
+    const matchStage = {
+      'user.user_id': userId.toString(),
+      status: 'completed',
+      createdAt: { $gte: rangeStart, $lte: rangeEnd }
+    };
 
-      // Get payin transactions for the day for this user
-      const payinTransactions = await TransactionCharges.findAll({
-        where: {
-          user_id: userId,
-          transaction_type: 'payin',
-          status: 'completed',
-          created_at: {
-            [Op.between]: [startDate, endDate]
-          }
-        },
-        attributes: [
-          'transaction_amount',
-          'merchant_charge',
-          'agent_charge',
-          'total_charges',
-          'gst_amount',
-          'platform_fee',
-          'reference_id',
-          'transaction_utr',
-          'created_at'
-        ]
-      });
+    const [payinAgg, payoutAgg] = await Promise.all([
+      PayinTransaction.aggregate([{ $match: matchStage }, { $group: groupStage }]),
+      PayoutTransaction.aggregate([{ $match: matchStage }, { $group: groupStage }])
+    ]);
 
-      // Get payout transactions for the day for this user
-      const payoutTransactions = await TransactionCharges.findAll({
-        where: {
-          user_id: userId,
-          transaction_type: 'payout',
-          status: 'completed',
-          created_at: {
-            [Op.between]: [startDate, endDate]
-          }
-        },
-        attributes: [
-          'transaction_amount',
-          'merchant_charge',
-          'agent_charge',
-          'total_charges',
-          'gst_amount',
-          'platform_fee',
-          'reference_id',
-          'transaction_utr',
-          'created_at'
-        ]
-      });
+    // Index aggregation results by IST date string for quick lookup.
+    const toMap = (rows) => rows.reduce((acc, r) => { acc[r._id] = r; return acc; }, {});
+    const payinByDate = toMap(payinAgg);
+    const payoutByDate = toMap(payoutAgg);
 
-      // Calculate totals for payin
-      const payinTotal = payinTransactions.reduce((sum, t) => sum + parseFloat(t.transaction_amount || 0), 0);
-      const payinTotalCharges = payinTransactions.reduce((sum, t) => sum + parseFloat(t.total_charges || 0), 0);
-      const payinTotalGST = payinTransactions.reduce((sum, t) => sum + parseFloat(t.gst_amount || 0), 0);
-      const payinTotalPlatformFee = payinTransactions.reduce((sum, t) => sum + parseFloat(t.platform_fee || 0), 0);
+    const emptyBucket = () => ({
+      total_amount: 0, total_charges: 0, total_gst: 0,
+      total_platform_fee: 0, transaction_count: 0
+    });
 
-      // Calculate totals for payout
-      const payoutTotal = payoutTransactions.reduce((sum, t) => sum + parseFloat(t.transaction_amount || 0), 0);
-      const payoutTotalCharges = payoutTransactions.reduce((sum, t) => sum + parseFloat(t.total_charges || 0), 0);
-      const payoutTotalGST = payoutTransactions.reduce((sum, t) => sum + parseFloat(t.gst_amount || 0), 0);
-      const payoutTotalPlatformFee = payoutTransactions.reduce((sum, t) => sum + parseFloat(t.platform_fee || 0), 0);
-
-      lastNDaysData.push({
-        date: targetDate.toISOString().split('T')[0],
+    const lastNDaysData = daySkeleton.map(({ dateLabel }) => {
+      const p = payinByDate[dateLabel] || emptyBucket();
+      const po = payoutByDate[dateLabel] || emptyBucket();
+      return {
+        date: dateLabel,
         payin: {
-          total_amount: payinTotal,
-          total_charges: payinTotalCharges,
-          total_gst: payinTotalGST,
-          total_platform_fee: payinTotalPlatformFee,
-          total_gst_platform: payinTotalGST + payinTotalPlatformFee,
-          transaction_count: payinTransactions.length,
-          transactions: payinTransactions.map(t => ({
-            reference_id: t.reference_id,
-            amount: parseFloat(t.transaction_amount || 0),
-            charges: parseFloat(t.total_charges || 0),
-            gst: parseFloat(t.gst_amount || 0),
-            platform_fee: parseFloat(t.platform_fee || 0),
-            utr: t.transaction_utr || null,
-            created_at: t.created_at
-          }))
+          total_amount: p.total_amount,
+          total_charges: p.total_charges,
+          total_gst: p.total_gst,
+          total_platform_fee: p.total_platform_fee,
+          total_gst_platform: p.total_gst + p.total_platform_fee,
+          transaction_count: p.transaction_count,
+          transactions: []
         },
         payout: {
-          total_amount: payoutTotal,
-          total_charges: payoutTotalCharges,
-          total_gst: payoutTotalGST,
-          total_platform_fee: payoutTotalPlatformFee,
-          transaction_count: payoutTransactions.length,
-          transactions: payoutTransactions.map(t => ({
-            reference_id: t.reference_id,
-            amount: parseFloat(t.transaction_amount || 0),
-            charges: parseFloat(t.total_charges || 0),
-            gst: parseFloat(t.gst_amount || 0),
-            platform_fee: parseFloat(t.platform_fee || 0),
-            utr: t.transaction_utr || null,
-            created_at: t.created_at
-          }))
+          total_amount: po.total_amount,
+          total_charges: po.total_charges,
+          total_gst: po.total_gst,
+          total_platform_fee: po.total_platform_fee,
+          transaction_count: po.transaction_count,
+          transactions: []
         }
-      });
-    }
+      };
+    });
 
     res.json({
       success: true,
