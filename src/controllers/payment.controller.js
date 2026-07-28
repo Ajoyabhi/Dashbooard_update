@@ -4,6 +4,8 @@ const { logger } = require('../utils/logger');
 const { processPayin } = require('../services/payment.service');
 const { callbackQueue, philpayPayoutQueue, bluswapPayoutQueue, createRedisClient } = require('../config/queue.config');
 const PayinTransaction = require('../models/payinTransaction.model');
+const GatewayCallbackLog = require('../models/gatewayCallbackLog.model');
+const { extractFailureReason } = require('../utils/failureReason');
 const { MerchantDetails } = require('../models');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
 // TEMP TESTING: pool of fake customer identities used by the test-beneficiary
@@ -778,6 +780,40 @@ const handleBluswapPayoutCallback = async (req, res) => {
   }
 };
 
+// Map a gateway's raw status to our internal status (same rule as the worker).
+const mapCallbackStatus = (statuscode) =>
+  (statuscode === 'TXN' || statuscode === 'SUCCESS') ? 'completed' : 'failed';
+
+// Header keys that must never be persisted (they carry the shared secret).
+const REDACTED_HEADERS = new Set(['x-api-key', 'authorization', 'cookie']);
+
+/**
+ * Persist an inbound gateway callback VERBATIM for investigation/audit. Wrapped
+ * so a logging failure can never block the 200 ack back to the gateway.
+ */
+const logGatewayCallback = async (gateway, req, { reference_id, status_raw, mapped_status, failure_reason }) => {
+  try {
+    const headers = { ...req.headers };
+    for (const key of Object.keys(headers)) {
+      if (REDACTED_HEADERS.has(key.toLowerCase())) headers[key] = '[REDACTED]';
+    }
+    await GatewayCallbackLog.create({
+      gateway,
+      reference_id: reference_id || null,
+      http_method: req.method,
+      status_raw: status_raw != null ? String(status_raw) : null,
+      mapped_status: mapped_status || null,
+      failure_reason: failure_reason || null,
+      headers,
+      query: req.query,
+      body: req.body,
+    });
+    logger.info('Gateway callback stored', { gateway, reference_id, mapped_status, has_reason: !!failure_reason });
+  } catch (err) {
+    logger.error('Failed to store gateway callback log', { gateway, reference_id, error: err.message });
+  }
+};
+
 const hdfcCallback = async (req, res) => {
   try {
     const apiKey = req.headers['x-api-key'];
@@ -790,8 +826,16 @@ const hdfcCallback = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Missing reference_id or status' });
     }
 
+    const mappedStatus = mapCallbackStatus(status);
+    const failureReason = mappedStatus === 'failed' ? extractFailureReason(req.body) : null;
+
+    // Store the raw callback exactly as received (never blocks the ack).
+    await logGatewayCallback('hdfc', req, {
+      reference_id, status_raw: status, mapped_status: mappedStatus, failure_reason: failureReason,
+    });
+
     await callbackQueue.add(
-      { statuscode: status, apitxnid: reference_id, utr: utr || null, amount, message: 'HDFC UPI payment' },
+      { statuscode: status, apitxnid: reference_id, utr: utr || null, amount, message: 'HDFC UPI payment', rawBody: req.body, failureReason },
       { attempts: 3, backoff: { type: 'exponential', delay: 5000 } }
     );
 
@@ -815,6 +859,13 @@ const airpayCallback = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Missing reference_id or status' });
     }
 
+    const mappedStatus = mapCallbackStatus(status);
+    const failureReason = mappedStatus === 'failed' ? extractFailureReason(req.body) : null;
+
+    await logGatewayCallback('airpay', req, {
+      reference_id, status_raw: status, mapped_status: mappedStatus, failure_reason: failureReason,
+    });
+
     await callbackQueue.add(
       {
         statuscode: status,
@@ -823,6 +874,8 @@ const airpayCallback = async (req, res) => {
         amount,
         message: 'AirPay UPI payment',
         txnid: ap_transaction_id || null,
+        rawBody: req.body,
+        failureReason,
       },
       { attempts: 3, backoff: { type: 'exponential', delay: 5000 } }
     );
@@ -847,6 +900,13 @@ const razorpayCallback = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Missing reference_id or status' });
     }
 
+    const mappedStatus = mapCallbackStatus(status);
+    const failureReason = mappedStatus === 'failed' ? extractFailureReason(req.body) : null;
+
+    await logGatewayCallback('razorpay', req, {
+      reference_id, status_raw: status, mapped_status: mappedStatus, failure_reason: failureReason,
+    });
+
     await callbackQueue.add(
       {
         statuscode: status,
@@ -855,6 +915,8 @@ const razorpayCallback = async (req, res) => {
         amount,
         message: 'Razorpay UPI payment',
         txnid: payment_id || null,
+        rawBody: req.body,
+        failureReason,
       },
       { attempts: 3, backoff: { type: 'exponential', delay: 5000 } }
     );

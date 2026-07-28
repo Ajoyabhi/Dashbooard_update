@@ -41,7 +41,7 @@ callbackQueue.process(async function (job) {
       throw new Error('Job processing timeout');
     }, 300000);
 
-    const { statuscode, amount, apitxnid, txnid, utr, message } = job.data;
+    const { statuscode, amount, apitxnid, txnid, utr, message, rawBody, failureReason } = job.data;
 
     const mappedStatus = (statuscode === 'TXN' || statuscode === 'SUCCESS') ? 'completed' : 'failed';
 
@@ -63,7 +63,11 @@ callbackQueue.process(async function (job) {
           utr,
           status: mappedStatus,
           message: message || 'Transaction processed',
-          raw_response: job.data
+          // Store the acquirer's failure reason so admin/user can see WHY it failed.
+          failure_reason: mappedStatus === 'failed' ? (failureReason || null) : null,
+          // Persist the ORIGINAL gateway payload (falls back to the normalized job
+          // data for older callbacks that didn't forward rawBody).
+          raw_response: rawBody || job.data
         }
       };
 

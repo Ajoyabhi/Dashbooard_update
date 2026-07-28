@@ -59,6 +59,7 @@ const payinTransactionSchema = new mongoose.Schema({
     status: String,
     message: String,
     upi_string: String,
+    failure_reason: String,
     raw_response: mongoose.Schema.Types.Mixed,
   },
   metadata: {
