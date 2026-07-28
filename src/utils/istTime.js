@@ -49,10 +49,49 @@ function istDaySkeleton(days) {
   return skeleton;
 }
 
+/**
+ * Parses a user-supplied date (YYYY-MM-DD, or any ISO string whose first 10
+ * chars are the date) as an IST calendar date and returns the UTC instant of
+ * that IST day's midnight. Returns null for empty/invalid input.
+ *
+ * Use this for report date-range filters so "28 Jul" means the IST day, not the
+ * UTC day — otherwise `new Date('2026-07-28')` is parsed as UTC midnight (05:30
+ * IST), shifting every boundary by 5.5 hours.
+ *
+ * @param {string} dateStr
+ * @returns {Date|null}
+ */
+function istDayStartUtcFromDateString(dateStr) {
+  if (!dateStr) return null;
+  const [y, m, d] = String(dateStr).slice(0, 10).split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(Date.UTC(y, m - 1, d) - IST_OFFSET_MS);
+}
+
+/**
+ * Builds a Mongo `createdAt` range filter for an inclusive IST date range.
+ * `endDate` is treated as a whole IST day (the range extends to the end of that
+ * day). Returns `{}` when neither bound is supplied.
+ *
+ * @param {string} [startDate]
+ * @param {string} [endDate]
+ * @returns {{ $gte?: Date, $lt?: Date }}
+ */
+function istCreatedAtRange(startDate, endDate) {
+  const range = {};
+  const start = istDayStartUtcFromDateString(startDate);
+  const endDayStart = istDayStartUtcFromDateString(endDate);
+  if (start) range.$gte = start;
+  if (endDayStart) range.$lt = new Date(endDayStart.getTime() + DAY_MS);
+  return range;
+}
+
 module.exports = {
   IST_TIMEZONE,
   IST_OFFSET_MS,
   DAY_MS,
   istDayRange,
   istDaySkeleton,
+  istDayStartUtcFromDateString,
+  istCreatedAtRange,
 };

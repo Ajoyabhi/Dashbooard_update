@@ -6,7 +6,7 @@ const PayinTransaction = require('../models/payinTransaction.model');
 const PayoutTransaction = require('../models/payoutTransaction.model');
 
 const { Op } = require('sequelize');
-const { IST_TIMEZONE, istDayRange, istDaySkeleton } = require('../utils/istTime');
+const { IST_TIMEZONE, istDayRange, istDaySkeleton, istCreatedAtRange } = require('../utils/istTime');
 
 
 const getUserProfile = async (req, res) => {
@@ -237,15 +237,11 @@ const getUserPayinReports = async (req, res) => {
       filter.status = req.query.status;
     }
 
-    // Add date range filter if provided
+    // Add date range filter if provided. Dates are interpreted as IST calendar
+    // days (the business timezone) — matching the dashboard's IST bucketing —
+    // so "28 Jul" covers the full IST day, not the UTC day.
     if (req.query.startDate || req.query.endDate) {
-      filter.createdAt = {};
-      if (req.query.startDate) {
-        filter.createdAt.$gte = new Date(req.query.startDate);
-      }
-      if (req.query.endDate) {
-        filter.createdAt.$lte = new Date(req.query.endDate);
-      }
+      filter.createdAt = istCreatedAtRange(req.query.startDate, req.query.endDate);
     }
 
     // Add search filter if provided
@@ -307,15 +303,10 @@ const downloadUserPayinReports = async (req, res) => {
       filter.status = status;
     }
 
-    // Add date range filter if provided
+    // Add date range filter if provided. Interpreted as IST calendar days so the
+    // download matches the on-screen report (see getUserPayinReports).
     if (startDate || endDate) {
-      filter.createdAt = {};
-      if (startDate) {
-        filter.createdAt.$gte = new Date(startDate);
-      }
-      if (endDate) {
-        filter.createdAt.$lte = new Date(endDate);
-      }
+      filter.createdAt = istCreatedAtRange(startDate, endDate);
     }
 
     // Add search filter if provided
