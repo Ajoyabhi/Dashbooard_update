@@ -6,6 +6,7 @@ const PayinTransaction = require('../models/payinTransaction.model');
 const PayoutTransaction = require('../models/payoutTransaction.model');
 
 const { Op } = require('sequelize');
+const { IST_TIMEZONE, istDayRange, istDaySkeleton } = require('../utils/istTime');
 
 
 const getUserProfile = async (req, res) => {
@@ -704,22 +705,41 @@ const getUserDashboard = async (req, res) => {
       where: { user_id: req.user.id }
     });
 
-    // Get today's date in YYYY-MM-DD format
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    // "Today" is the current IST calendar day. Today's figures are aggregated
+    // from the MongoDB transaction stores (the same source of truth as the
+    // "Last 5 Days" overview and the payin reports) — NOT the SQL
+    // TransactionCharges mirror — so both dashboards always agree and the day is
+    // bucketed by the IST business timezone. We derive the exact UTC window the
+    // IST day spans and match Mongo's UTC `createdAt` against it.
+    const { startUtc: today, nextStartUtc: tomorrow } = istDayRange(0);
 
-    // Get today's transactions
-    const todayTransactions = await TransactionCharges.findAll({
-      where: {
-        user_id: req.user.id,
-        created_at: {
-          [Op.gte]: today,
-          [Op.lt]: tomorrow
-        }
-      }
-    });
+    const todaySumGroup = {
+      _id: null,
+      total_amount: { $sum: { $ifNull: ['$amount', 0] } },
+      total_admin_charge: { $sum: { $ifNull: ['$charges.admin_charge', 0] } },
+      total_charges: { $sum: { $ifNull: ['$charges.total_charges', 0] } },
+      total_gst: { $sum: { $ifNull: ['$gst_amount', 0] } },
+      total_platform_fee: { $sum: { $ifNull: ['$platform_fee', 0] } },
+      transaction_count: { $sum: 1 }
+    };
+
+    const todayMatch = {
+      'user.user_id': req.user.id.toString(),
+      status: 'completed',
+      createdAt: { $gte: today, $lt: tomorrow }
+    };
+
+    const [todayPayinAgg, todayPayoutAgg] = await Promise.all([
+      PayinTransaction.aggregate([{ $match: todayMatch }, { $group: todaySumGroup }]),
+      PayoutTransaction.aggregate([{ $match: todayMatch }, { $group: todaySumGroup }])
+    ]);
+
+    const emptyTodayAgg = {
+      total_amount: 0, total_admin_charge: 0, total_charges: 0,
+      total_gst: 0, total_platform_fee: 0, transaction_count: 0
+    };
+    const todayPayinAggregate = todayPayinAgg[0] || emptyTodayAgg;
+    const todayPayoutAggregate = todayPayoutAgg[0] || emptyTodayAgg;
 
     // Get all transactions for total calculations
     const allTransactions = await TransactionCharges.findAll({
@@ -744,39 +764,31 @@ const getUserDashboard = async (req, res) => {
       .limit(10)
       .lean();
 
-    // Calculate today's pay-in and payout with charges handling
-    const todayPayin = todayTransactions
-      .filter(t => t.transaction_type === 'payin' && t.status === 'completed')
-      .reduce((sum, t) => {
-        const amount = parseFloat(t.transaction_amount);
-        const charges = parseFloat(t.total_charges) || 0;
-        const gst = parseFloat(t.gst_amount) || 0;
-        const platformFee = parseFloat(t.platform_fee) || 0;
+    // Today's net pay-in mirrors the wallet-credit formula on completion
+    // (see callback.worker.js: amount - admin_charge - platform_fee - gst).
+    // admin_charge is the Mongo equivalent of the SQL merchant_charge — NOT
+    // total_charges — so the net matches exactly what is credited to the wallet.
+    const todayPayin =
+      todayPayinAggregate.total_amount -
+      todayPayinAggregate.total_admin_charge -
+      todayPayinAggregate.total_gst -
+      todayPayinAggregate.total_platform_fee;
 
-        // Case 1: Deduct charges, GST, platform fee from payin
-        const netAmount = amount - charges - gst - platformFee;
-        return sum + netAmount;
-      }, 0);
-
-    const todayPayout = todayTransactions
-      .filter(t => t.transaction_type === 'payout' && t.status === 'completed')
-      .reduce((sum, t) => {
-        const amount = parseFloat(t.transaction_amount);
-        const charges = parseFloat(t.total_charges) || 0;
-        const gst = parseFloat(t.gst_amount) || 0;
-        const platformFee = parseFloat(t.platform_fee) || 0;
-
-        // Case 2: Add charges, GST, platform fee to payout
-        const totalAmount = amount + charges + gst + platformFee;
-        return sum + totalAmount;
-      }, 0);
+    // Today's payout adds charges, GST and platform fee to the transferred amount.
+    const todayPayout =
+      todayPayoutAggregate.total_amount +
+      todayPayoutAggregate.total_charges +
+      todayPayoutAggregate.total_gst +
+      todayPayoutAggregate.total_platform_fee;
 
     // Calculate total pay-in and payout with charges handling
     const totalPayin = allTransactions
       .filter(t => t.transaction_type === 'payin' && t.status === 'completed')
       .reduce((sum, t) => {
         const amount = parseFloat(t.transaction_amount);
-        const charges = parseFloat(t.total_charges) || 0;
+        // Use merchant_charge (admin charge) only — NOT total_charges — so the
+        // net matches exactly what is credited to the wallet on completion.
+        const charges = parseFloat(t.merchant_charge) || 0;
         const gst = parseFloat(t.gst_amount) || 0;
         const platformFee = parseFloat(t.platform_fee) || 0;
 
@@ -822,8 +834,19 @@ const getUserDashboard = async (req, res) => {
       return breakdown;
     };
 
-    const todayPayinBreakdown = calculateChargesBreakdown(todayTransactions, 'payin');
-    const todayPayoutBreakdown = calculateChargesBreakdown(todayTransactions, 'payout');
+    // Today's breakdowns come from the same Mongo aggregation as the figures above.
+    const todayPayinBreakdown = {
+      total_charges: todayPayinAggregate.total_charges,
+      total_gst: todayPayinAggregate.total_gst,
+      total_platform_fee: todayPayinAggregate.total_platform_fee,
+      total_transactions: todayPayinAggregate.transaction_count
+    };
+    const todayPayoutBreakdown = {
+      total_charges: todayPayoutAggregate.total_charges,
+      total_gst: todayPayoutAggregate.total_gst,
+      total_platform_fee: todayPayoutAggregate.total_platform_fee,
+      total_transactions: todayPayoutAggregate.transaction_count
+    };
     const totalPayinBreakdown = calculateChargesBreakdown(allTransactions, 'payin');
     const totalPayoutBreakdown = calculateChargesBreakdown(allTransactions, 'payout');
 
@@ -925,24 +948,7 @@ const getLastNDaysTransactions = async (req, res) => {
     // Days are bucketed by IST calendar date (the business timezone), matching
     // the reporting scripts. We build the IST day skeleton, derive the exact
     // UTC window it spans, and let MongoDB group by IST date via $dateToString.
-    const IST_TIMEZONE = 'Asia/Kolkata';
-    const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000; // +05:30
-    const DAY_MS = 24 * 60 * 60 * 1000;
-
-    // "Now" shifted into IST wall-clock (UTC getters then read IST values).
-    const nowIst = new Date(Date.now() + IST_OFFSET_MS);
-
-    const daySkeleton = [];
-    for (let i = selectedDays - 1; i >= 0; i--) {
-      const istMidnight = new Date(nowIst);
-      istMidnight.setUTCDate(istMidnight.getUTCDate() - i);
-      istMidnight.setUTCHours(0, 0, 0, 0);
-      const dateLabel = istMidnight.toISOString().split('T')[0]; // IST calendar date
-      // Convert IST midnight back to the real UTC instant for the Mongo query.
-      const startUtc = new Date(istMidnight.getTime() - IST_OFFSET_MS);
-      const endUtc = new Date(startUtc.getTime() + DAY_MS - 1);
-      daySkeleton.push({ dateLabel, startUtc, endUtc });
-    }
+    const daySkeleton = istDaySkeleton(selectedDays);
 
     const rangeStart = daySkeleton[0].startUtc;
     const rangeEnd = daySkeleton[daySkeleton.length - 1].endUtc;

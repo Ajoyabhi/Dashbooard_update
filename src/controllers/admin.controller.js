@@ -14,6 +14,7 @@ const {
   bluswapTransactionStatus
 } = require('../transactionStatusCheck/TransactionCheck');
 const { logger } = require('../utils/logger');
+const { istDayRange, istDaySkeleton } = require('../utils/istTime');
 // const Wallet = require('../models/wallet.model');
 const Transaction = require('../models/transaction.model');
 const UserTransaction = require('../models/userTransaction.model');
@@ -1349,13 +1350,17 @@ const getAdminDashboard = async (req, res) => {
             }
         });
 
+        // "Today" = the current IST calendar day (created_at is stored in UTC).
+        const { startUtc: istTodayStart, nextStartUtc: istTomorrowStart } = istDayRange(0);
+
         // 4. Calculate today's payout
         const todayPayout = await TransactionCharges.sum('merchant_charge', {
             where: {
                 transaction_type: 'payout',
                 status: 'completed',
                 created_at: {
-                    [Op.gte]: new Date().setHours(0, 0, 0, 0)
+                    [Op.gte]: istTodayStart,
+                    [Op.lt]: istTomorrowStart
                 }
             }
         });
@@ -1374,7 +1379,8 @@ const getAdminDashboard = async (req, res) => {
                 transaction_type: 'payin',
                 status: 'completed',
                 created_at: {
-                    [Op.gte]: new Date().setHours(0, 0, 0, 0)
+                    [Op.gte]: istTodayStart,
+                    [Op.lt]: istTomorrowStart
                 }
             }
         });
@@ -1385,22 +1391,15 @@ const getAdminDashboard = async (req, res) => {
         // 8. Calculate today's profit (sum of today's payin and today's payout)
         const todayProfit = (todayPayin || 0) + (todayPayout || 0);
 
-        // 9. Calculate last 7 days payout and payin data
+        // 9. Calculate last 7 days payout and payin data (bucketed by IST day)
         const last7DaysData = [];
-        for (let i = 6; i >= 0; i--) {
-            const startDate = new Date();
-            startDate.setDate(startDate.getDate() - i);
-            startDate.setHours(0, 0, 0, 0);
-
-            const endDate = new Date(startDate);
-            endDate.setHours(23, 59, 59, 999);
-
+        for (const { startUtc, endUtc, dateLabel } of istDaySkeleton(7)) {
             const dayPayout = await TransactionCharges.sum('merchant_charge', {
                 where: {
                     transaction_type: 'payout',
                     status: 'completed',
                     created_at: {
-                        [Op.between]: [startDate, endDate]
+                        [Op.between]: [startUtc, endUtc]
                     }
                 }
             });
@@ -1410,13 +1409,13 @@ const getAdminDashboard = async (req, res) => {
                     transaction_type: 'payin',
                     status: 'completed',
                     created_at: {
-                        [Op.between]: [startDate, endDate]
+                        [Op.between]: [startUtc, endUtc]
                     }
                 }
             });
 
             last7DaysData.push({
-                date: startDate.toISOString().split('T')[0],
+                date: dateLabel,
                 payout: dayPayout || 0,
                 payin: dayPayin || 0,
                 profit: (dayPayout || 0) + (dayPayin || 0)
@@ -3167,23 +3166,9 @@ const getLastNDaysTransactionDetails = async (req, res) => {
 
         const lastNDaysData = [];
 
-        for (let i = selectedDays - 1; i >= 0; i--) {
-            // Get current date and calculate the date range
-            const now = new Date();
-            const targetDate = new Date(now);
-            targetDate.setDate(targetDate.getDate() - i);
-            targetDate.setUTCHours(0, 0, 0, 0); // Start of day in UTC
-
-            // End of day in UTC
-            const endDate = new Date(targetDate);
-            endDate.setUTCHours(23, 59, 59, 999);
-
-            const startDate = targetDate;
-
-            // console.log(`Date: ${targetDate.toISOString().split('T')[0]}`);
-            // console.log(`UTC Start: ${startDate.toISOString()}`);
-            // console.log(`UTC End: ${endDate.toISOString()}`);
-
+        // Bucket by IST calendar day. created_at is stored in UTC (same instant
+        // as Mongo), so each IST day maps to a UTC [startDate, endDate] window.
+        for (const { startUtc: startDate, endUtc: endDate, dateLabel } of istDaySkeleton(selectedDays)) {
             // Get payin transactions for the day
             const payinTransactions = await TransactionCharges.findAll({
                 where: {
@@ -3345,7 +3330,7 @@ const getLastNDaysTransactionDetails = async (req, res) => {
             // })));
 
             lastNDaysData.push({
-                date: targetDate.toISOString().split('T')[0],
+                date: dateLabel,
                 payin: {
                     total_amount: payinTotal,
                     total_charges: payinTotalCharges,
