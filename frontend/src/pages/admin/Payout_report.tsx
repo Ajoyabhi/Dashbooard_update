@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Filter, Search, X, Send, RefreshCw, RotateCw } from 'lucide-react';
+import { Download, Filter, Search, X, Send, RefreshCw, RotateCw, Activity } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../utils/axios';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Table from '../../components/dashboard/Table';
 import DownloadPopup, { DownloadFilters } from '../../components/ui/DownloadPopup';
+import TransactionTraceModal from '../../components/dashboard/TransactionTraceModal';
 import { adminMenuItems } from '../../data/mockData';
 import { formatCurrency, formatDate, getStatusColor } from '../../utils/formatUtils';
 import { FilterOption, DateRange } from '../../types';
@@ -90,6 +91,7 @@ export default function PayoutReport() {
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [checkingId, setCheckingId] = useState<string | null>(null);
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [traceRef, setTraceRef] = useState<string | null>(null);
   const [checkResults, setCheckResults] = useState<Record<string, { live_status: string; mapped_status: string; differs: boolean }>>({});
 
   const handleResendWebhook = async (referenceId: string) => {
@@ -391,16 +393,26 @@ export default function PayoutReport() {
       accessor: 'status',
       cell: (value: string, row: PayoutRecord) => {
         const canResend = value === 'completed' || value === 'failed';
-        if (!canResend) return <span className="text-xs text-gray-400">—</span>;
         return (
-          <button
-            onClick={() => handleResendWebhook(row.reference_id)}
-            disabled={resendingId === row.reference_id}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 whitespace-nowrap transition-colors disabled:opacity-50"
-          >
-            <Send className="h-3 w-3" />
-            {resendingId === row.reference_id ? 'Resending…' : 'Resend Webhook'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setTraceRef(row.reference_id)}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 whitespace-nowrap transition-colors"
+            >
+              <Activity className="h-3 w-3" />
+              Journey
+            </button>
+            {canResend && (
+              <button
+                onClick={() => handleResendWebhook(row.reference_id)}
+                disabled={resendingId === row.reference_id}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 whitespace-nowrap transition-colors disabled:opacity-50"
+              >
+                <Send className="h-3 w-3" />
+                {resendingId === row.reference_id ? 'Resending…' : 'Resend Webhook'}
+              </button>
+            )}
+          </div>
         );
       },
     },
@@ -566,6 +578,7 @@ export default function PayoutReport() {
         statusOptions={statusOptions}
         loading={downloadLoading}
       />
+      <TransactionTraceModal referenceId={traceRef} open={!!traceRef} onClose={() => setTraceRef(null)} />
     </DashboardLayout>
   );
 }

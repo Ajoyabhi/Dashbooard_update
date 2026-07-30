@@ -1,4 +1,5 @@
 const { logger } = require('../utils/logger');
+const { recordTraceEvent, STAGES } = require('./transactionTrace.service');
 const { User, UserStatus, MerchantDetails, MerchantCharges, MerchantModeCharges, FinancialDetails, UserIPs, TransactionCharges, PlatformCharges } = require('../models');
 const PayinTransaction = require('../models/payinTransaction.model');
 const HdfcCustomer = require('../models/HdfcCustomer.model');
@@ -34,6 +35,12 @@ const processPayin = async (data) => {
     logger.info('Starting to process payin request', { transaction_id: data.transaction_id });
 
     const { user_id, order_amount, name, email, phone, reference_id, clientIp } = data;
+
+    recordTraceEvent({
+      reference_id, trace_type: 'payin', stage: STAGES.INITIATED, status: 'info', source: 'api',
+      detail: 'Payin request received',
+      payload: { order_amount, user_id, requested_ip: clientIp }
+    });
 
     // Fetch user, platform charges, and duplicate check all in parallel
     const [user, platformCharges, existingTransaction] = await Promise.all([
@@ -81,6 +88,12 @@ const processPayin = async (data) => {
       order_amount >= parseFloat(b.start_amount) && order_amount <= parseFloat(b.end_amount)
     );
     if (!applicableBracket) throw new Error('No charge bracket found for the given amount');
+
+    recordTraceEvent({
+      reference_id, trace_type: 'payin', stage: STAGES.VALIDATED, status: 'ok', source: 'api',
+      gateway_name: user.MerchantDetail?.payin_merchant_name || null,
+      detail: 'Validation, IP whitelist & duplicate check passed'
+    });
 
     // Calculate charges
     const adminCharge = applicableBracket.admin_payin_charge_type === 'percentage'
@@ -149,6 +162,14 @@ const processPayin = async (data) => {
 
     const payinData = { user_id, order_amount, name, email, phone, reference_id, clientIp, address: data.address || {} };
 
+    recordTraceEvent({
+      reference_id, trace_type: 'payin', stage: STAGES.GATEWAY_REQUEST, status: 'pending', source: 'api',
+      gateway_name: merchantName,
+      detail: `Requesting QR/intent from ${merchantName}`,
+      payload: { order_amount }
+    });
+    const gatewayStartedAt = Date.now();
+
     let result;
     if (merchantName === 'Unpay') {
       result = await unpayPayin(payinData);
@@ -168,7 +189,17 @@ const processPayin = async (data) => {
 
     logger.info('Payment gateway response', { reference_id, statuscode: result?.statuscode });
 
-    if (result?.statuscode === 'TXN' || result?.data?.statuscode === 'TXNS') {
+    const gatewaySucceeded = result?.statuscode === 'TXN' || result?.data?.statuscode === 'TXNS';
+    recordTraceEvent({
+      reference_id, trace_type: 'payin', stage: STAGES.GATEWAY_RESPONSE,
+      status: gatewaySucceeded ? 'ok' : 'failed', source: 'api',
+      gateway_name: merchantName,
+      latency_ms: Date.now() - gatewayStartedAt,
+      detail: gatewaySucceeded ? 'QR/intent generated, awaiting user payment' : 'Gateway rejected the payin request',
+      payload: { statuscode: result?.statuscode || result?.data?.statuscode || null, message: result?.message }
+    });
+
+    if (gatewaySucceeded) {
       await Promise.all([
         PayinTransaction.updateOne(
           { reference_id },
@@ -204,6 +235,11 @@ const processPayin = async (data) => {
     }
   } catch (error) {
     logger.error('Error processing payin request', { error: error.message, stack: error.stack });
+    recordTraceEvent({
+      reference_id: data?.reference_id, trace_type: 'payin', stage: STAGES.REJECTED,
+      status: 'failed', source: 'api',
+      detail: 'Payin rejected before completion', error: error.message
+    });
     return { success: false, message: error.message };
   }
 };

@@ -2,9 +2,9 @@ const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
 const { logger } = require('../utils/logger');
 const { processPayin } = require('../services/payment.service');
-const { callbackQueue, philpayPayoutQueue, bluswapPayoutQueue, createRedisClient } = require('../config/queue.config');
+const { recordTraceEvent, STAGES } = require('../services/transactionTrace.service');
+const { callbackQueue, bluswapPayoutQueue, createRedisClient } = require('../config/queue.config');
 const PayinTransaction = require('../models/payinTransaction.model');
-const GatewayCallbackLog = require('../models/gatewayCallbackLog.model');
 const { extractFailureReason } = require('../utils/failureReason');
 const { MerchantDetails } = require('../models');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
@@ -338,6 +338,15 @@ const handleUnpayCallback = async (req, res) => {
       });
     }
 
+    recordTraceEvent({
+      reference_id: callbackData.apitxnid, trace_type: 'payin', stage: STAGES.CALLBACK_RECEIVED,
+      status: (callbackData.statuscode === 'TXN' || callbackData.status === 'SUCCESS') ? 'ok' : 'failed',
+      source: 'gateway_callback', gateway_name: 'unpay',
+      http: { method: req.method, url: '/api/payments/unpay/callback' },
+      detail: `Inbound unpay callback: ${callbackData.status != null ? callbackData.status : 'unknown'}`,
+      payload: { query: req.query, body: req.body }
+    });
+
     // Add callback to queue
     const transactionInDb = await PayinTransaction.findOne({ reference_id: callbackData.apitxnid });
 
@@ -391,6 +400,11 @@ const handleUnpayCallback = async (req, res) => {
         }
       });
 
+      recordTraceEvent({
+        reference_id: callbackData.apitxnid, trace_type: 'payin', stage: STAGES.QUEUED, status: 'info',
+        source: 'gateway_callback', gateway_name: 'unpay', detail: 'Enqueued to callbackQueue',
+        payload: { jobId: job.id }
+      });
       logger.info('Callback queued for processing', {
         apitxnid: callbackData.apitxnid,
         jobId: job.id
@@ -684,6 +698,15 @@ const handleSpayCallback = async (req, res) => {
       });
     }
 
+    recordTraceEvent({
+      reference_id: mappedData.apitxnid, trace_type: 'payin', stage: STAGES.CALLBACK_RECEIVED,
+      status: (mappedData.statuscode === 'TXN' || mappedData.statuscode === 'SUCCESS') ? 'ok' : 'failed',
+      source: 'gateway_callback', gateway_name: 'spay',
+      http: { method: req.method, url: '/api/payments/spay/callback' },
+      detail: `Inbound spay callback: ${mappedData.statuscode != null ? mappedData.statuscode : 'unknown'}`,
+      payload: { query: req.query, body: req.body }
+    });
+
     // Add callback to queue
     const job = await callbackQueue.add({
       ...mappedData,
@@ -694,6 +717,12 @@ const handleSpayCallback = async (req, res) => {
         type: 'exponential',
         delay: 5000
       }
+    });
+
+    recordTraceEvent({
+      reference_id: mappedData.apitxnid, trace_type: 'payin', stage: STAGES.QUEUED, status: 'info',
+      source: 'gateway_callback', gateway_name: 'spay', detail: 'Enqueued to callbackQueue',
+      payload: { jobId: job.id }
     });
 
     // Send immediate response
@@ -713,47 +742,6 @@ const handleSpayCallback = async (req, res) => {
   }
 };
 
-const handleSpayPayoutCallback = async (req, res) => {
-  try {
-    const callbackData = req.method === 'GET' ? req.query : req.body;
-    logger.info('Received SPay payout callback', {
-      method: req.method,
-      data: callbackData
-    });
-    console.log(callbackData);
-    res.status(200).json({ success: true, message: 'Callback processed successfully' });
-  } catch (error) {
-    logger.error('Error processing SPay payout callback', { error: error.message });
-    res.status(500).json({ success: false, message: 'Error processing callback' });
-  }
-};
-
-const handlePhilpayPayoutCallback = async (req, res) => {
-  try {
-    const callbackData = req.method === 'GET' ? req.query : req.body;
-    logger.info('Received Philpay payout callback', {
-      method: req.method,
-      data: callbackData
-    });
-    console.log("this is callback data of philpay payout", callbackData);
-    const job = await philpayPayoutQueue.add(callbackData, {
-      attempts: 3,
-      backoff: {
-        type: 'exponential',
-        delay: 5000
-      }
-    });
-    res.status(200).json({
-      success: true,
-      message: 'Callback processed successfully',
-      job_id: job.id
-    });
-  } catch (error) {
-    logger.error('Error processing Philpay payout callback', { error: error.message });
-    res.status(500).json({ success: false, message: 'Error processing callback' });
-  }
-};
-
 const handleBluswapPayoutCallback = async (req, res) => {
   try {
     const callbackData = req.method === 'GET' ? req.query : req.body;
@@ -762,6 +750,17 @@ const handleBluswapPayoutCallback = async (req, res) => {
       data: callbackData
     });
     console.log("this is callback data of bluswap payout", callbackData);
+
+    const bluswapRef = callbackData?.data?.order_id || callbackData?.order_id || null;
+    recordTraceEvent({
+      reference_id: bluswapRef, trace_type: 'payout', stage: STAGES.CALLBACK_RECEIVED,
+      status: String(callbackData?.data?.trx_status || '').toUpperCase() === 'SUCCESS' ? 'ok' : 'failed',
+      source: 'gateway_callback', gateway_name: 'BluSwap',
+      http: { method: req.method, url: '/api/payments/bluswap/payout/callback' },
+      detail: `Inbound BluSwap payout callback: ${callbackData?.data?.trx_status != null ? callbackData.data.trx_status : 'unknown'}`,
+      payload: { query: req.query, body: req.body }
+    });
+
     const job = await bluswapPayoutQueue.add(callbackData, {
       attempts: 3,
       backoff: {
@@ -769,6 +768,13 @@ const handleBluswapPayoutCallback = async (req, res) => {
         delay: 5000
       }
     });
+
+    recordTraceEvent({
+      reference_id: bluswapRef, trace_type: 'payout', stage: STAGES.QUEUED, status: 'info',
+      source: 'gateway_callback', gateway_name: 'BluSwap', detail: 'Enqueued to bluswapPayoutQueue',
+      payload: { jobId: job.id }
+    });
+
     res.status(200).json({
       success: true,
       message: 'Callback processed successfully',
@@ -784,33 +790,42 @@ const handleBluswapPayoutCallback = async (req, res) => {
 const mapCallbackStatus = (statuscode) =>
   (statuscode === 'TXN' || statuscode === 'SUCCESS') ? 'completed' : 'failed';
 
-// Header keys that must never be persisted (they carry the shared secret).
-const REDACTED_HEADERS = new Set(['x-api-key', 'authorization', 'cookie']);
-
 /**
- * Persist an inbound gateway callback VERBATIM for investigation/audit. Wrapped
- * so a logging failure can never block the 200 ack back to the gateway.
+ * Record an inbound gateway callback as a CALLBACK_RECEIVED event on the
+ * transaction's journey. Wrapped so it can never block the 200 ack back to the
+ * gateway. The verbatim headers/query/body are captured in the event payload
+ * (redacted + size-capped by the trace service) — this replaces the old
+ * standalone GatewayCallbackLog collection.
+ *
+ * `endpoint` is the callback route that received the hit ('hdfc'/'razorpay'/...).
+ * The TRUE gateway is resolved from the transaction's metadata.gateway_name —
+ * upstream forwarders can post one gateway's result to another's endpoint (e.g.
+ * a Razorpay result arriving at /hdfc/callback), so the endpoint is not reliable.
  */
-const logGatewayCallback = async (gateway, req, { reference_id, status_raw, mapped_status, failure_reason }) => {
+const logGatewayCallback = async (endpoint, req, { reference_id, status_raw, mapped_status, failure_reason }) => {
   try {
-    const headers = { ...req.headers };
-    for (const key of Object.keys(headers)) {
-      if (REDACTED_HEADERS.has(key.toLowerCase())) headers[key] = '[REDACTED]';
+    let gateway = endpoint;
+    if (reference_id) {
+      const txn = await PayinTransaction.findOne({ reference_id }).select('metadata.gateway_name').lean();
+      if (txn?.metadata?.gateway_name) gateway = String(txn.metadata.gateway_name).toLowerCase();
     }
-    await GatewayCallbackLog.create({
-      gateway,
-      reference_id: reference_id || null,
-      http_method: req.method,
-      status_raw: status_raw != null ? String(status_raw) : null,
-      mapped_status: mapped_status || null,
-      failure_reason: failure_reason || null,
-      headers,
-      query: req.query,
-      body: req.body,
+
+    recordTraceEvent({
+      reference_id,
+      trace_type: 'payin',
+      stage: STAGES.CALLBACK_RECEIVED,
+      status: mapped_status === 'completed' ? 'ok' : mapped_status === 'failed' ? 'failed' : 'info',
+      source: 'gateway_callback',
+      gateway_name: gateway,
+      http: { method: req.method, url: `/api/payments/${endpoint}/callback` },
+      detail: `Inbound ${gateway} callback: ${status_raw != null ? status_raw : 'unknown'}`,
+      error: failure_reason || null,
+      // headers/body redaction + size cap is handled by the trace service.
+      payload: { headers: req.headers, query: req.query, body: req.body },
     });
-    logger.info('Gateway callback stored', { gateway, reference_id, mapped_status, has_reason: !!failure_reason });
+    logger.info('Gateway callback traced', { gateway, endpoint, reference_id, mapped_status, has_reason: !!failure_reason });
   } catch (err) {
-    logger.error('Failed to store gateway callback log', { gateway, reference_id, error: err.message });
+    logger.error('Failed to record gateway callback trace', { endpoint, reference_id, error: err.message });
   }
 };
 
@@ -834,12 +849,16 @@ const hdfcCallback = async (req, res) => {
       reference_id, status_raw: status, mapped_status: mappedStatus, failure_reason: failureReason,
     });
 
-    await callbackQueue.add(
+    const job = await callbackQueue.add(
       { statuscode: status, apitxnid: reference_id, utr: utr || null, amount, message: 'HDFC UPI payment', rawBody: req.body, failureReason },
       { attempts: 3, backoff: { type: 'exponential', delay: 5000 } }
     );
 
-    logger.info('HDFC callback queued', { reference_id, status });
+    recordTraceEvent({
+      reference_id, trace_type: 'payin', stage: STAGES.QUEUED, status: 'info', source: 'gateway_callback',
+      gateway_name: 'hdfc', detail: 'Enqueued to callbackQueue', payload: { jobId: job.id }
+    });
+    logger.info('HDFC callback queued', { reference_id, status, jobId: job.id });
     return res.status(200).json({ received: true });
   } catch (error) {
     logger.error('HDFC callback error', { error: error.message });
@@ -866,7 +885,7 @@ const airpayCallback = async (req, res) => {
       reference_id, status_raw: status, mapped_status: mappedStatus, failure_reason: failureReason,
     });
 
-    await callbackQueue.add(
+    const job = await callbackQueue.add(
       {
         statuscode: status,
         apitxnid: reference_id,
@@ -880,7 +899,11 @@ const airpayCallback = async (req, res) => {
       { attempts: 3, backoff: { type: 'exponential', delay: 5000 } }
     );
 
-    logger.info('AirPay callback queued', { reference_id, status });
+    recordTraceEvent({
+      reference_id, trace_type: 'payin', stage: STAGES.QUEUED, status: 'info', source: 'gateway_callback',
+      gateway_name: 'airpay', detail: 'Enqueued to callbackQueue', payload: { jobId: job.id }
+    });
+    logger.info('AirPay callback queued', { reference_id, status, jobId: job.id });
     return res.status(200).json({ received: true });
   } catch (error) {
     logger.error('AirPay callback error', { error: error.message });
@@ -907,7 +930,7 @@ const razorpayCallback = async (req, res) => {
       reference_id, status_raw: status, mapped_status: mappedStatus, failure_reason: failureReason,
     });
 
-    await callbackQueue.add(
+    const job = await callbackQueue.add(
       {
         statuscode: status,
         apitxnid: reference_id,
@@ -921,7 +944,11 @@ const razorpayCallback = async (req, res) => {
       { attempts: 3, backoff: { type: 'exponential', delay: 5000 } }
     );
 
-    logger.info('Razorpay callback queued', { reference_id, status });
+    recordTraceEvent({
+      reference_id, trace_type: 'payin', stage: STAGES.QUEUED, status: 'info', source: 'gateway_callback',
+      gateway_name: 'razorpay', detail: 'Enqueued to callbackQueue', payload: { jobId: job.id }
+    });
+    logger.info('Razorpay callback queued', { reference_id, status, jobId: job.id });
     return res.status(200).json({ received: true });
   } catch (error) {
     logger.error('Razorpay callback error', { error: error.message });
@@ -937,8 +964,6 @@ module.exports = {
   setValidationResult,
   validatePaymentRequestpayin,
   handleSpayCallback,
-  handleSpayPayoutCallback,
-  handlePhilpayPayoutCallback,
   handleBluswapPayoutCallback,
   hdfcCallback,
   airpayCallback,

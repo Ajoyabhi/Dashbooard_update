@@ -58,7 +58,8 @@ const {
   resendPayinWebhook,
   resendPayoutWebhook,
   adminCheckPayoutStatus,
-  adminSyncPayoutStatus
+  adminSyncPayoutStatus,
+  adminGetTransactionTrace
 } = require('../controllers/admin.controller');
 const { registerUser } = require('../controllers/auth.controller');
 const { auth, authorize } = require('../middleware/auth.middleware');
@@ -198,10 +199,13 @@ router.post('/payout/:reference_id/resend-webhook', resendPayoutWebhook);
 router.get('/payout-transactions/:reference_id/check-status', adminCheckPayoutStatus);
 router.post('/payout-transactions/:reference_id/sync-status', adminSyncPayoutStatus);
 
+// Full payment journey (payin or payout) for a single transaction — the trace timeline.
+router.get('/transactions/:reference_id/trace', adminGetTransactionTrace);
+
 // Callback queue health
 router.get('/queue/health', async (req, res) => {
   try {
-    const { callbackQueue, philpayPayoutQueue, bluswapPayoutQueue } = require('../config/queue.config');
+    const { callbackQueue, bluswapPayoutQueue } = require('../config/queue.config');
 
     // Bull requires an explicit range for getFailed; cap it so a huge backlog can't blow up the request.
     const MAX_FAILED_TO_SCAN = 2000;
@@ -232,9 +236,8 @@ router.get('/queue/health', async (req, res) => {
       };
     };
 
-    const [payin, philpayPayout, bluswapPayout] = await Promise.all([
+    const [payin, bluswapPayout] = await Promise.all([
       describeQueue(callbackQueue, 'apitxnid'),
-      describeQueue(philpayPayoutQueue, (data) => data?.data?.object?.merchant_order_id),
       describeQueue(bluswapPayoutQueue, (data) => data?.data?.order_id),
     ]);
 
@@ -243,7 +246,6 @@ router.get('/queue/health', async (req, res) => {
       note: 'Each queue accumulates failed jobs forever (removeOnFail: false) and the same transaction can be queued multiple times if the upstream gateway sends duplicate callbacks — counts.failed is a lifetime total of jobs, not distinct transactions. Use uniqueFailedReferenceIds for the deduplicated count.',
       queues: {
         payin,
-        philpayPayout,
         bluswapPayout,
       },
       // Backward-compatible top-level fields mirroring the payin queue (previous shape of this endpoint)

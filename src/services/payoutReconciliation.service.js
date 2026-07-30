@@ -3,6 +3,7 @@ const { logger } = require('../utils/logger');
 const PayoutTransaction = require('../models/payoutTransaction.model');
 const { TransactionCharges, FinancialDetails, MerchantDetails } = require('../models');
 const { bluswapTransactionStatus } = require('../transactionStatusCheck/TransactionCheck');
+const { recordTraceEvent, STAGES } = require('./transactionTrace.service');
 
 /**
  * Post a payout status update to the merchant's registered callback URL.
@@ -19,6 +20,13 @@ async function sendMerchantPayoutCallback(callbackUrl, callbackData) {
   // console.log('===============================');
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const attemptStartedAt = Date.now();
+    recordTraceEvent({
+      reference_id: callbackData.reference_id, trace_type: 'payout', stage: STAGES.MERCHANT_CALLBACK_ATTEMPT,
+      status: 'pending', source: 'worker', attempt,
+      http: { method: 'POST', url: callbackUrl },
+      detail: `Posting result to merchant callback (attempt ${attempt}/${maxRetries})`
+    });
     try {
       const response = await axios.post(callbackUrl, callbackData, {
         headers: { 'Content-Type': 'application/json' },
@@ -30,6 +38,12 @@ async function sendMerchantPayoutCallback(callbackUrl, callbackData) {
         response_status: response.status,
         attempt
       });
+      recordTraceEvent({
+        reference_id: callbackData.reference_id, trace_type: 'payout', stage: STAGES.MERCHANT_CALLBACK_SENT,
+        status: 'ok', source: 'worker', attempt,
+        http: { method: 'POST', url: callbackUrl, status_code: response.status },
+        latency_ms: Date.now() - attemptStartedAt, detail: 'Merchant acknowledged'
+      });
       return true;
     } catch (error) {
       logger.warn('Payout callback attempt failed', {
@@ -40,6 +54,12 @@ async function sendMerchantPayoutCallback(callbackUrl, callbackData) {
         attempt,
         maxRetries
       });
+      recordTraceEvent({
+        reference_id: callbackData.reference_id, trace_type: 'payout', stage: STAGES.MERCHANT_CALLBACK_ATTEMPT,
+        status: 'failed', source: 'worker', attempt,
+        http: { method: 'POST', url: callbackUrl, status_code: error.response?.status || null },
+        latency_ms: Date.now() - attemptStartedAt, detail: `Attempt ${attempt} failed`, error: error.message
+      });
       if (attempt < maxRetries) {
         await new Promise(resolve => setTimeout(resolve, baseDelay * Math.pow(2, attempt - 1)));
       }
@@ -49,6 +69,11 @@ async function sendMerchantPayoutCallback(callbackUrl, callbackData) {
   logger.error('Failed to send payout callback after all retries', {
     reference_id: callbackData.reference_id,
     callback_url: callbackUrl
+  });
+  recordTraceEvent({
+    reference_id: callbackData.reference_id, trace_type: 'payout', stage: STAGES.MERCHANT_CALLBACK_FAILED,
+    status: 'failed', source: 'worker', http: { method: 'POST', url: callbackUrl },
+    detail: 'Merchant payout callback failed after all retries'
   });
   return false;
 }
@@ -127,6 +152,13 @@ async function finalizePayout({ referenceId, isSuccess, utr = null, gatewayTrans
     }
   }
 
+  recordTraceEvent({
+    reference_id: referenceId, trace_type: 'payout', stage: STAGES.LEDGER_UPDATED,
+    status: isSuccess ? 'ok' : 'failed', source: 'worker',
+    detail: isSuccess ? 'Payout marked completed' : 'Payout marked failed, settlement refunded',
+    payload: { new_status: dbStatus, utr }
+  });
+
   // Notify the merchant of the resolved status. Skipped for synchronous
   // rejections at creation time, where the caller already returns the failure
   // in the HTTP response and a webhook would be redundant.
@@ -183,6 +215,12 @@ async function reconcilePayoutTransaction(payoutTransaction) {
   if (derived !== 'success' && derived !== 'failed') {
     return { referenceId, changed: false, reason: 'still_pending', gatewayStatus: derived || 'unknown' };
   }
+
+  recordTraceEvent({
+    reference_id: referenceId, trace_type: 'payout', stage: STAGES.RECONCILED,
+    status: derived === 'success' ? 'ok' : 'failed', source: 'reconcile', gateway_name: merchantName,
+    detail: `Reconcile resolved gateway status: ${derived}`, payload: { utr, gatewayTransactionId }
+  });
 
   const result = await finalizePayout({
     referenceId,

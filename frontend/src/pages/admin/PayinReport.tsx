@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Filter, Search, X, RefreshCw, CheckCircle, XCircle, Clock, Send } from 'lucide-react';
+import { Download, Filter, Search, X, RefreshCw, CheckCircle, XCircle, Clock, Send, Activity } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../utils/axios';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import Table from '../../components/dashboard/Table';
 import DownloadPopup, { DownloadFilters } from '../../components/ui/DownloadPopup';
+import TransactionTraceModal from '../../components/dashboard/TransactionTraceModal';
 import { adminMenuItems } from '../../data/mockData';
 import { formatCurrency, formatDate, getStatusColor } from '../../utils/formatUtils';
 import { FilterOption, DateRange } from '../../types';
@@ -123,6 +124,7 @@ export default function PayinReport() {
   const [statusCheckError, setStatusCheckError] = useState<string | null>(null);
   const [checkedReferenceId, setCheckedReferenceId] = useState('');
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [traceRef, setTraceRef] = useState<string | null>(null);
 
   const fetchUsers = async () => {
     try {
@@ -399,9 +401,15 @@ export default function PayinReport() {
       cell: (value: string, row: PayinRecord) => {
         const canCheck = value === 'pending' || value === 'failed' || value === 'payin_qr_generated';
         const canResend = value === 'completed';
-        if (!canCheck && !canResend) return <span className="text-xs text-gray-400">—</span>;
         return (
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setTraceRef(row.reference_id)}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 whitespace-nowrap transition-colors"
+            >
+              <Activity className="h-3 w-3" />
+              Journey
+            </button>
             {canCheck && (
               <button
                 onClick={() => handleCheckStatus(row.reference_id)}
@@ -598,6 +606,8 @@ export default function PayinReport() {
       />
 
       {/* Check Status Modal */}
+      <TransactionTraceModal referenceId={traceRef} open={!!traceRef} onClose={() => setTraceRef(null)} />
+
       {statusModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">

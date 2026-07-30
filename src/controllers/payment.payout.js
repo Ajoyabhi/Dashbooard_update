@@ -7,13 +7,14 @@ const { setValidationResult, setThirdPartyApiInfo } = require('../middleware/api
 const { validatePaymentRequest } = require('../controllers/payment.controller');
 const PayoutTransaction = require('../models/payoutTransaction.model');
 const { Op } = require('sequelize');
-const { unpayPayout, spayPayout, philpayPayout, xlitepayPayout, bluswapPayout } = require('../merchant_payin_payout/merchant_payout_request');
+const { bluswapPayout } = require('../merchant_payin_payout/merchant_payout_request');
 const getClientIp = require('../utils/getClientIp');
 const mongoose = require('mongoose');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
 const axios = require('axios');
-const { unpayTransactionStatus, spayTransactionStatus, philpayTransactionStatus, xlitepayTransactionStatus, bluswapTransactionStatus } = require('../transactionStatusCheck/TransactionCheck');
+const { bluswapTransactionStatus } = require('../transactionStatusCheck/TransactionCheck');
 const { reconcilePayoutTransaction, finalizePayout } = require('../services/payoutReconciliation.service');
+const { recordTraceEvent, STAGES } = require('../services/transactionTrace.service');
 
 /**
  * Reverse a payout that failed synchronously at creation time (e.g. the gateway
@@ -51,6 +52,11 @@ const initiatePayout = async (req, res) => {
     }
 
     const { account_number, account_ifsc, bank_name, beneficiary_name, request_type, amount, reference_id } = req.body;
+
+    recordTraceEvent({
+      reference_id, trace_type: 'payout', stage: STAGES.INITIATED, status: 'info', source: 'api',
+      detail: 'Payout request received', payload: { amount, request_type }
+    });
 
     const user_id = req.user.id;
     // Fetch user and all related data
@@ -318,143 +324,16 @@ const initiatePayout = async (req, res) => {
         requested_ip: clientIp
       }
     });
+
+    recordTraceEvent({
+      reference_id, trace_type: 'payout', stage: STAGES.VALIDATED, status: 'ok', source: 'api',
+      gateway_name: user.MerchantDetail.payout_merchant_name || null,
+      detail: 'Validation passed, settlement deducted, payout record created',
+      payload: { amount_to_deduct: amountToDeduct }
+    });
+
     let result;
-    if (user.MerchantDetail.payout_merchant_name === 'Unpay') {
-      const payoutData = {
-        reference_id,
-        user_id,
-        amount,
-        amountToDeduct,
-        beneficiary_details: {
-          account_number,
-          account_ifsc,
-          bank_name,
-          beneficiary_name,
-          mobile: user.mobile
-        }
-      };
-      result = await unpayPayout(payoutData);
-      if (result?.status == 200) {
-        await payoutTransaction.updateOne(
-          { reference_id: reference_id },
-          { $set: { status: "completed", gateway_response: { reference_id, status: "completed", message: result.data.message, merchant_response: result.data.txn_id } } }
-        );
-        await TransactionCharges.update(
-          {
-            status: 'completed',
-            merchant_response: result.data.txn_id
-          },
-          { where: { reference_id: reference_id } }
-        );
-        res.status(200).json({
-          // result od chnages
-          success: true,
-          result: result.data.message,
-          utr: result.data.utr,
-          reference_id: result.data.apitxnid
-        });
-      } else {
-        // Gateway rejected — atomically mark failed and refund the deducted settlement.
-        await failPayoutWithRefund(reference_id, result?.data?.message || 'Unknown error');
-        res.status(400).json({
-          success: false,
-          message: 'Payout processing failed',
-          error: result?.data?.message || 'Unknown error',
-          utr: result.data.utr,
-          reference_id: result.data.apitxnid
-        });
-      }
-    }
-    else if (user.MerchantDetail.payout_merchant_name === 'SPay') {
-      console.log("this is payout data of spay", payoutData)
-      const payoutData = {
-        reference_id,
-        user_id,
-        amount,
-        amountToDeduct,
-        request_type,
-        beneficiary_details: {
-          account_number,
-          account_ifsc,
-          bank_name,
-          beneficiary_name,
-          mobile: user.mobile,
-          email: user.email,
-          address: user.address,
-          upi_on: user.upi_on || ''
-        }
-      };
-      result = await spayPayout(payoutData);
-      console.log("this is result of spay payout", result)
-    }
-    else if (user.MerchantDetail.payout_merchant_name === 'Philpay') {
-      const payoutData = {
-        reference_id,
-        user_id,
-        amount,
-        amountToDeduct,
-        request_type,
-        beneficiary_details: {
-          account_number,
-          account_ifsc,
-          bank_name,
-          beneficiary_name,
-          mobile: user.mobile,
-          email: user.email,
-          address: user.address
-        }
-      };
-      result = await philpayPayout(payoutData);
-      console.log("this is result of philpay payout", result)
-      if (result?.status == 200) {
-        return res.status(200).json({
-          success: true,
-          message: result.data.message || "Payout is processing",
-          merchant_order_id: result.data.merchant_order_id
-        });
-      }
-      else {
-        await failPayoutWithRefund(reference_id, result?.data?.message || 'Payout processing failed');
-        return res.status(400).json({
-          success: false,
-          message: result.data.message || 'Payout processing failed',
-          reference_id: result.data.apitxnid
-        });
-      }
-    }
-    else if (user.MerchantDetail.payout_merchant_name === 'Xlitepay') {
-      const payoutData = {
-        reference_id,
-        user_id,
-        amount,
-        amountToDeduct,
-        beneficiary_details: {
-          account_number,
-          account_ifsc,
-          bank_name,
-          beneficiary_name,
-          mobile: user.mobile
-        }
-      };
-      result = await xlitepayPayout(payoutData);
-      console.log("this is result of xlitepay payout", result)
-      if (result?.status == 200 && result.data.status === 'success') {
-        return res.status(200).json({
-          success: true,
-          message: result.data.message || 'Payout is processing',
-          utr: result.data.utr,
-          reference_id: result.data.apitxnid
-        });
-      } else {
-        await failPayoutWithRefund(reference_id, result?.data?.message || 'Payout processing failed');
-        return res.status(400).json({
-          success: false,
-          message: result?.data?.message || 'Payout processing failed',
-          reference_id: result?.data?.apitxnid || reference_id
-        });
-      }
-    }
-    else if (user.MerchantDetail.payout_merchant_name === 'BluSwap') {
+    if (user.MerchantDetail.payout_merchant_name === 'BluSwap') {
       const payoutData = {
         reference_id,
         user_id,
@@ -487,6 +366,19 @@ const initiatePayout = async (req, res) => {
           reference_id: result?.data?.apitxnid || reference_id
         });
       }
+    } else {
+      // No supported payout gateway configured for this merchant. Reverse the
+      // settlement we already deducted and reject.
+      recordTraceEvent({
+        reference_id, trace_type: 'payout', stage: STAGES.REJECTED, status: 'failed', source: 'api',
+        gateway_name: user.MerchantDetail.payout_merchant_name || null,
+        detail: 'Unsupported payout gateway — settlement reversed'
+      });
+      await failPayoutWithRefund(reference_id, 'Payout gateway not supported');
+      return res.status(400).json({
+        success: false,
+        message: 'Payout gateway not supported for this merchant'
+      });
     }
 
   } catch (error) {
@@ -533,28 +425,14 @@ const getPayoutTransactionStatus = async (req, res) => {
       });
     }
     let result;
-    if (user.MerchantDetail.payout_merchant_name === 'Unpay') {
-      result = await unpayTransactionStatus(transaction_id);
-      console.log("this is result of unpay payout", result)
-    } else if (user.MerchantDetail.payout_merchant_name === 'SPay') {
-      result = await spayTransactionStatus(transaction_id);
-      console.log("this is result of spay payout", result)
-    } else if (user.MerchantDetail.payout_merchant_name === 'Philpay') {
-      result = await philpayTransactionStatus(transaction_id);
-      console.log("this is result of philpay payout", result)
-      if (result && result.data && result.data.response && typeof result.data.response === 'object') {
-        const { metadata, id, vpa, fees, amount, ...sanitized } = result.data.response;
-        // Divide amount by 100 if it exists
-        const adjustedAmount = amount ? amount / 100 : amount;
-        result = { ...result, data: { ...result.data, response: { ...sanitized, amount: adjustedAmount } } };
-      }
-      // console.log("this is result of philpay payout", result)
-    } else if (user.MerchantDetail.payout_merchant_name === 'Xlitepay') {
-      result = await xlitepayTransactionStatus(transaction_id);
-      console.log("this is result of xlitepay payout", result)
-    } else if (user.MerchantDetail.payout_merchant_name === 'BluSwap') {
+    if (user.MerchantDetail.payout_merchant_name === 'BluSwap') {
       result = await bluswapTransactionStatus(transaction_id);
       console.log("this is result of bluswap payout", result)
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: 'Payout gateway not supported for this merchant'
+      });
     }
     if (result.status === 200) {
       // Every gateway status helper already normalizes result.data.status to

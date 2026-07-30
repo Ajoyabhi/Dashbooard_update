@@ -4,8 +4,9 @@
  * know exactly what HDFC / Razorpay send on failure — so this scans a
  * prioritized list of common keys at the top level and one level deep.
  *
- * Once the real payloads are captured (see GatewayCallbackLog) this list can be
- * tuned to the exact fields each gateway uses.
+ * Once the real payloads are captured (see the CALLBACK_RECEIVED events in the
+ * transaction_events trace) this list can be tuned to the exact fields each
+ * gateway uses.
  *
  * @param {object} body - parsed callback payload
  * @returns {string|null}

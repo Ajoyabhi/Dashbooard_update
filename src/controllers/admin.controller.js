@@ -6,11 +6,8 @@ const PayinTransaction = require('../models/payinTransaction.model');
 const axios = require('axios');
 const { encryptText } = require('../merchant_payin_payout/utils_payout');
 const { sendMerchantPayoutCallback, finalizePayout } = require('../services/payoutReconciliation.service');
+const { getTransactionTrace } = require('../services/transactionTrace.service');
 const {
-  unpayTransactionStatus,
-  spayTransactionStatus,
-  philpayTransactionStatus,
-  xlitepayTransactionStatus,
   bluswapTransactionStatus
 } = require('../transactionStatusCheck/TransactionCheck');
 const { logger } = require('../utils/logger');
@@ -3652,10 +3649,6 @@ const getLivePayoutStatus = async (transaction) => {
 
     const statusFns = {
         BluSwap: bluswapTransactionStatus,
-        Philpay: philpayTransactionStatus,
-        Xlitepay: xlitepayTransactionStatus,
-        Unpay: unpayTransactionStatus,
-        SPay: spayTransactionStatus,
     };
     const fn = statusFns[merchantName];
     if (!fn) return { supported: false, merchantName: merchantName || null };
@@ -3835,6 +3828,52 @@ const getGatewayStats = async (req, res) => {
     }
 };
 
+// Return the full ordered journey (INITIATED → … → merchant callback) of a
+// single transaction, payin or payout, keyed by reference_id. Auto-detects the
+// type from whichever transaction record exists and returns a summary alongside
+// the ordered events for the dashboard timeline.
+const adminGetTransactionTrace = async (req, res) => {
+    try {
+        const { reference_id } = req.params;
+
+        const [payin, payout, events] = await Promise.all([
+            PayinTransaction.findOne({ reference_id }).lean(),
+            PayoutTransaction.findOne({ reference_id }).lean(),
+            getTransactionTrace(reference_id),
+        ]);
+
+        const txn = payin || payout;
+        const type = payin ? 'payin' : payout ? 'payout' : (events[0]?.trace_type || null);
+
+        if (!txn && (!events || events.length === 0)) {
+            return res.status(404).json({ success: false, message: 'No transaction or trace found for this reference_id' });
+        }
+
+        const summary = {
+            reference_id,
+            type,
+            status: txn?.status || null,
+            amount: txn?.amount ?? null,
+            gateway_name: txn?.metadata?.gateway_name || events.find(e => e.gateway_name)?.gateway_name || null,
+            utr: txn?.gateway_response?.utr || null,
+            created_at: txn?.createdAt || (events[0]?.ts ?? null),
+            updated_at: txn?.updatedAt || (events[events.length - 1]?.ts ?? null),
+        };
+
+        return res.status(200).json({
+            success: true,
+            reference_id,
+            type,
+            summary,
+            event_count: events.length,
+            events,
+        });
+    } catch (error) {
+        logger.error('Error fetching transaction trace', { error: error.message, reference_id: req.params.reference_id });
+        return res.status(500).json({ success: false, message: 'Error fetching transaction trace', error: error.message });
+    }
+};
+
 module.exports = {
     getAllUsers,
     getAllAgents,
@@ -3893,5 +3932,6 @@ module.exports = {
     resendPayinWebhook,
     resendPayoutWebhook,
     adminCheckPayoutStatus,
-    adminSyncPayoutStatus
+    adminSyncPayoutStatus,
+    adminGetTransactionTrace
 };
