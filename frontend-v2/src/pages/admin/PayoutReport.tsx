@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Button, Chip, IconButton, Tooltip } from '@mui/material'
-import { Download, RefreshCw, Send, RotateCw } from 'lucide-react'
+import { Download, RefreshCw, Send, RotateCw, Activity } from 'lucide-react'
 import DataTable, { Column } from '@/components/ui/DataTable'
+import TransactionTraceModal from '@/components/ui/TransactionTraceModal'
 import api from '@/utils/axios'
 import { formatCurrency, formatDateTime } from '@/utils/formatUtils'
 import toast from 'react-hot-toast'
@@ -41,6 +42,7 @@ export default function AdminPayoutReport() {
   const [resendingId, setResendingId] = useState<string | null>(null)
   const [checkingId, setCheckingId] = useState<string | null>(null)
   const [syncingId, setSyncingId] = useState<string | null>(null)
+  const [traceRef, setTraceRef] = useState<string | null>(null)
   const [checkResults, setCheckResults] = useState<Record<string, { live_status: string; mapped_status: string; differs: boolean }>>({})
 
   const errMsg = (err: unknown) => (err as { response?: { data?: { message?: string } } })?.response?.data?.message
@@ -192,21 +194,26 @@ export default function AdminPayoutReport() {
           )
         }},
         { key: '_actions', label: 'Actions', render: (r) => (
-          (r.status === 'completed' || r.status === 'failed') ? (
-            <Tooltip title="Resend Webhook">
-              <span>
-                <IconButton size="small" disabled={resendingId === r.reference_id}
-                  onClick={() => handleResend(r.reference_id)} sx={{ color: '#4F46E5' }}>
-                  <Send size={15} />
-                </IconButton>
-              </span>
-            </Tooltip>
-          ) : <span className="text-slate-300 text-xs">—</span>
+          <div className="flex items-center gap-1">
+            <Tooltip title="Journey"><IconButton size="small" onClick={() => setTraceRef(r.reference_id)} sx={{ color: '#475569' }}><Activity size={15} /></IconButton></Tooltip>
+            {(r.status === 'completed' || r.status === 'failed') && (
+              <Tooltip title="Resend Webhook">
+                <span>
+                  <IconButton size="small" disabled={resendingId === r.reference_id}
+                    onClick={() => handleResend(r.reference_id)} sx={{ color: '#4F46E5' }}>
+                    <Send size={15} />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            )}
+          </div>
         )}]}
         rows={rows} loading={loading}
         searchKeys={['transaction_id', 'reference_id', 'utr', 'user_name', 'beneficiary_name', 'status']}
         emptyMessage="No payout transactions found"
         serverPagination={{ total: totalItems, page, pageSize, onPageChange: handlePageChange, onPageSizeChange: handlePageSizeChange }} />
+
+      <TransactionTraceModal referenceId={traceRef} open={!!traceRef} onClose={() => setTraceRef(null)} />
     </div>
   )
 }

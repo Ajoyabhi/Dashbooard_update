@@ -1,6 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const Transaction = require('../models/transaction.model');
-const { User, UserStatus, MerchantDetails, MerchantCharges, MerchantModeCharges, FinancialDetails, UserIPs, TransactionCharges, PlatformCharges } = require('../models');
+const { sequelize, User, UserStatus, MerchantDetails, MerchantCharges, MerchantModeCharges, FinancialDetails, UserIPs, TransactionCharges, PlatformCharges } = require('../models');
 // const Agent = require('../models/agent.model');
 const { logger } = require('../utils/logger');
 const { setValidationResult, setThirdPartyApiInfo } = require('../middleware/apiLogger.middleware');
@@ -109,6 +109,12 @@ const initiatePayout = async (req, res) => {
       });
     }
 
+    // Cheap early pre-filter only: reject when the settlement can't even cover the
+    // bare amount. This is a NECESSARY-but-not-sufficient guard — the charges
+    // (admin + gst + platform fee) aren't computed until further below, so the
+    // authoritative, charges-inclusive check is done atomically at debit time
+    // (settlement < amount + charges), under a row lock. Never treat this line as
+    // the balance gate: doing so let charges overdraw the wallet into the negative.
     if (settlementAmount < requestedAmount) {
       return res.status(400).json({
         success: false,
@@ -142,12 +148,6 @@ const initiatePayout = async (req, res) => {
       return res.status(403).json({
         success: false,
         message: 'User payout functionality is disabled'
-      });
-    }
-    if (user.FinancialDetails && user.FinancialDetails.settlement < amount) {
-      return res.status(400).json({
-        success: false,
-        message: 'Insufficient balance'
       });
     }
     if (user.UserStatus.bank_deactive) {
@@ -251,20 +251,60 @@ const initiatePayout = async (req, res) => {
     // Update total charges to include platform fee and GST
     const finalTotalCharges = totalCharges + parseFloat(gstAmount) + parseFloat(platformFee);
 
-    // Calculate final amount to deduct (amount + charges)
-    const amountToDeduct = parseFloat(amount) + finalTotalCharges;
+    // Calculate final amount to deduct (amount + charges), rounded to paise
+    const amountToDeduct = parseFloat((parseFloat(amount) + finalTotalCharges).toFixed(2));
 
-    // Calculate remaining balance
-    const user_balance_left = parseFloat(user.FinancialDetail.settlement) - amountToDeduct;
-
-    // Update settlement in FinancialDetails using Sequelize
-    await FinancialDetails.update(
-      { settlement: user_balance_left },
-      {
-        where: { user_id: user_id },
-        returning: true
+    // Atomically debit the settlement wallet.
+    //
+    // This MUST be race-safe. A high-volume merchant can fire several payouts in
+    // the same instant (observed in production: 3 within ~40ms). The previous code
+    // read the settlement from the request-start snapshot (`user.FinancialDetail`)
+    // and wrote back an absolute value, so simultaneous payouts overwrote each
+    // other's deductions (classic lost update) and the merchant was under-charged
+    // — their settlement stayed higher than it should have.
+    //
+    // We take a row lock (SELECT ... FOR UPDATE) so concurrent payouts for the same
+    // user serialize, re-read the CURRENT balance under the lock, verify it covers
+    // amount + charges (not just the bare amount — the old check let charges
+    // overdraw the wallet), and debit — all in one transaction.
+    try {
+      await sequelize.transaction(async (t) => {
+        const fin = await FinancialDetails.findOne({
+          where: { user_id: user_id },
+          lock: t.LOCK.UPDATE,
+          transaction: t
+        });
+        if (!fin) {
+          const e = new Error('Financial details not found for user');
+          e.code = 'FIN_NOT_FOUND';
+          throw e;
+        }
+        const current = parseFloat(fin.settlement || 0);
+        if (current < amountToDeduct) {
+          const e = new Error('Insufficient balance');
+          e.code = 'INSUFFICIENT';
+          e.available = current;
+          throw e;
+        }
+        fin.settlement = parseFloat((current - amountToDeduct).toFixed(2));
+        await fin.save({ transaction: t });
+      });
+    } catch (e) {
+      if (e.code === 'INSUFFICIENT') {
+        return res.status(400).json({
+          success: false,
+          message: 'Insufficient balance',
+          details: { available: e.available, requested: amountToDeduct }
+        });
       }
-    );
+      if (e.code === 'FIN_NOT_FOUND') {
+        return res.status(400).json({
+          success: false,
+          message: 'Financial details not found for user'
+        });
+      }
+      throw e;
+    }
 
     let payoutTransaction = await PayoutTransaction.create({
       transaction_id: uuidv4(),

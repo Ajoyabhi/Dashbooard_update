@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Button, Chip, IconButton, Tooltip } from '@mui/material'
-import { Download, RefreshCw, Eye, Send } from 'lucide-react'
+import { Download, RefreshCw, Eye, Send, Activity } from 'lucide-react'
 import DataTable, { Column } from '@/components/ui/DataTable'
+import TransactionTraceModal from '@/components/ui/TransactionTraceModal'
 import api from '@/utils/axios'
 import { formatCurrency, formatDateTime } from '@/utils/formatUtils'
 import toast from 'react-hot-toast'
@@ -36,6 +37,7 @@ export default function AdminPayinReport() {
   const [pageSize, setPageSize] = useState(10)
   const [totalItems, setTotalItems] = useState(0)
   const [resendingId, setResendingId] = useState<string | null>(null)
+  const [traceRef, setTraceRef] = useState<string | null>(null)
 
   const handleResend = async (referenceId: string) => {
     if (!window.confirm(`Resend the payin callback for ${referenceId}?`)) return
@@ -112,6 +114,7 @@ export default function AdminPayinReport() {
       <DataTable
         columns={[...columns, { key: '_view', label: 'Actions', render: (r) => (
           <div className="flex items-center gap-1">
+            <Tooltip title="Journey"><IconButton size="small" onClick={() => setTraceRef(r.reference_id)} sx={{ color: '#475569' }}><Activity size={15} /></IconButton></Tooltip>
             <Tooltip title="View Details"><IconButton size="small" sx={{ color: '#1A2744' }}><Eye size={15} /></IconButton></Tooltip>
             {r.status === 'completed' && (
               <Tooltip title="Resend Webhook">
@@ -129,6 +132,8 @@ export default function AdminPayinReport() {
         searchKeys={['transaction_id', 'reference_id', 'utr', 'user_name', 'status']}
         emptyMessage="No payin transactions found"
         serverPagination={{ total: totalItems, page, pageSize, onPageChange: handlePageChange, onPageSizeChange: handlePageSizeChange }} />
+
+      <TransactionTraceModal referenceId={traceRef} open={!!traceRef} onClose={() => setTraceRef(null)} />
     </div>
   )
 }

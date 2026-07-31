@@ -133,23 +133,30 @@ async function finalizePayout({ referenceId, isSuccess, utr = null, gatewayTrans
 
   // Refund the full deducted amount (amount + charges + gst + platform fee) on failure
   if (!isSuccess) {
+    const refundAmount = parseFloat((
+      parseFloat(payout.amount || 0) +
+      parseFloat(payout.charges?.total_charges || 0) +
+      parseFloat(payout.gst_amount || 0) +
+      parseFloat(payout.platform_fee || 0)
+    ).toFixed(2));
+
+    // Atomic credit — MUST NOT read-then-write. A failed-payout refund can race
+    // with a concurrent debit (another payout) or another refund for the same
+    // merchant; an absolute write would clobber the other and drift the balance.
+    // increment issues a single `SET settlement = settlement + :refundAmount`, so
+    // concurrent balance changes compose correctly.
+    await FinancialDetails.increment(
+      'settlement',
+      { by: refundAmount, where: { user_id: parseInt(userId, 10) } }
+    );
+
     const financial = await FinancialDetails.findOne({ where: { user_id: parseInt(userId, 10) } });
-    if (financial) {
-      const refundAmount =
-        parseFloat(payout.amount || 0) +
-        parseFloat(payout.charges?.total_charges || 0) +
-        parseFloat(payout.gst_amount || 0) +
-        parseFloat(payout.platform_fee || 0);
-      const newSettlement = parseFloat((parseFloat(financial.settlement || 0) + refundAmount).toFixed(2));
-      financial.settlement = newSettlement;
-      await financial.save();
-      logger.info('Settlement refunded for failed payout', {
-        reference_id: referenceId,
-        user_id: userId,
-        amount_refunded: refundAmount,
-        new_settlement_balance: newSettlement
-      });
-    }
+    logger.info('Settlement refunded for failed payout', {
+      reference_id: referenceId,
+      user_id: userId,
+      amount_refunded: refundAmount,
+      new_settlement_balance: financial ? parseFloat(financial.settlement) : null
+    });
   }
 
   recordTraceEvent({
