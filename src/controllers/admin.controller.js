@@ -2229,7 +2229,10 @@ const getWalletTransactionsDownload = async (req, res) => {
 // Settle amount for a user
 const settleAmount = async (req, res) => {
     try {
-        const { user_id, amount_, remark } = req.body;
+        // destination:
+        //   'settlement'  -> credit the merchant's Settlement wallet (default, legacy behaviour)
+        //   'direct_bank' -> credit the separate Direct Bank Payout wallet
+        const { user_id, amount_, remark, destination = 'settlement' } = req.body;
 
         if (!user_id || !amount_ || amount_ <= 0) {
             return res.status(400).json({
@@ -2238,9 +2241,17 @@ const settleAmount = async (req, res) => {
             });
         }
 
+        if (!['settlement', 'direct_bank'].includes(destination)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid destination. Must be 'settlement' or 'direct_bank'"
+            });
+        }
+
         // Start a transaction
         const result = await sequelize.transaction(async (t) => {
-            // Get user's financial details
+            // Get user's financial details (row-locked so concurrent settles can't
+            // clobber each other's balance updates).
             const financialDetails = await FinancialDetails.findOne({
                 where: { user_id },
                 transaction: t,
@@ -2253,31 +2264,54 @@ const settleAmount = async (req, res) => {
 
             const walletBalance = parseFloat(financialDetails.wallet) || 0;
             const settlementBalance = parseFloat(financialDetails.settlement) || 0;
+            const directBankBalance = parseFloat(financialDetails.direct_bank_payout) || 0;
             const amount = parseFloat(amount_);
 
-            // Validate wallet balance
+            // Validate wallet balance — both destinations draw from the wallet.
             if (walletBalance < amount) {
                 throw new Error('Insufficient wallet balance');
             }
 
-            // Update financial details
-            await financialDetails.update({
-                wallet: walletBalance - amount,
-                settlement: settlementBalance + amount
-            }, { transaction: t });
+            const walletAfter = parseFloat((walletBalance - amount).toFixed(2));
 
-            // Create settlement transaction record
+            // Build the balance update + audit record based on the chosen destination.
+            let updateFields;
+            let txnFields;
+            if (destination === 'direct_bank') {
+                const directBankAfter = parseFloat((directBankBalance + amount).toFixed(2));
+                updateFields = { wallet: walletAfter, direct_bank_payout: directBankAfter };
+                txnFields = {
+                    // Settlement is untouched, so before === after for audit clarity.
+                    settlement_balance_before: settlementBalance,
+                    settlement_balance_after: settlementBalance,
+                    direct_bank_balance_before: directBankBalance,
+                    direct_bank_balance_after: directBankAfter,
+                    remark: remark || 'Direct bank payout processed'
+                };
+            } else {
+                const settlementAfter = parseFloat((settlementBalance + amount).toFixed(2));
+                updateFields = { wallet: walletAfter, settlement: settlementAfter };
+                txnFields = {
+                    settlement_balance_before: settlementBalance,
+                    settlement_balance_after: settlementAfter,
+                    direct_bank_balance_before: null,
+                    direct_bank_balance_after: null,
+                    remark: remark || 'Settlement processed'
+                };
+            }
+
+            await financialDetails.update(updateFields, { transaction: t });
+
             const settlementTransaction = await SettlementTransaction.create({
                 user_id,
                 amount,
                 wallet_balance_before: walletBalance,
-                wallet_balance_after: walletBalance - amount,
-                settlement_balance_before: settlementBalance,
-                settlement_balance_after: settlementBalance + amount,
+                wallet_balance_after: walletAfter,
+                destination,
                 status: 'completed',
-                remark: remark || 'Settlement processed',
                 created_by: req.user.id,
-                updated_by: req.user.id
+                updated_by: req.user.id,
+                ...txnFields
             }, { transaction: t });
 
             return {
@@ -2288,10 +2322,13 @@ const settleAmount = async (req, res) => {
 
         res.json({
             success: true,
-            message: 'Settlement processed successfully',
+            message: destination === 'direct_bank'
+                ? 'Direct bank payout processed successfully'
+                : 'Settlement processed successfully',
             data: {
                 wallet_balance: result.financialDetails.wallet,
                 settlement_balance: result.financialDetails.settlement,
+                direct_bank_payout_balance: result.financialDetails.direct_bank_payout,
                 transaction: result.settlementTransaction
             }
         });
@@ -2367,7 +2404,7 @@ const getSettlementDashboard = async (req, res) => {
             include: [
                 {
                     model: FinancialDetails,
-                    attributes: ['wallet', 'settlement']
+                    attributes: ['wallet', 'settlement', 'direct_bank_payout']
                 }
             ],
             attributes: ['id', 'name', 'user_name', 'mobile']
@@ -2380,7 +2417,8 @@ const getSettlementDashboard = async (req, res) => {
             user_name: user.user_name,
             mobile: user.mobile,
             wallet: user.FinancialDetail ? Number(user.FinancialDetail.wallet) || 0 : 0,
-            settlement: user.FinancialDetail ? Number(user.FinancialDetail.settlement) || 0 : 0
+            settlement: user.FinancialDetail ? Number(user.FinancialDetail.settlement) || 0 : 0,
+            direct_bank_payout: user.FinancialDetail ? Number(user.FinancialDetail.direct_bank_payout) || 0 : 0
         }));
 
         res.json({

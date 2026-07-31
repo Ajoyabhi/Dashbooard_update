@@ -15,7 +15,10 @@ interface SettlementUser {
   mobile: string;
   wallet: number;
   settlement: number;
+  direct_bank_payout: number;
 }
+
+type SettlementDestination = 'settlement' | 'direct_bank';
 
 export default function Settlement() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -26,6 +29,7 @@ export default function Settlement() {
   const [selectedSettlement, setSelectedSettlement] = useState<any>(null);
   const [settlementAmount, setSettlementAmount] = useState('');
   const [remark, setRemark] = useState('');
+  const [destination, setDestination] = useState<SettlementDestination>('settlement');
   const [isProcessing, setIsProcessing] = useState(false);
   const [users, setUsers] = useState<SettlementUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,6 +67,7 @@ export default function Settlement() {
 
   const handleSettlement = (row: SettlementUser) => {
     setSelectedSettlement(row);
+    setDestination('settlement');
     setShowSettlementModal(true);
   };
 
@@ -87,15 +92,18 @@ export default function Settlement() {
       const response = await api.post('/admin/settle-amount', {
         user_id: selectedSettlement.id,
         amount_: parseFloat(settlementAmount),
-        remark: remark
+        remark: remark,
+        destination
       });
 
       if (response.data.success) {
-        window.showToast('success', 'Settlement processed successfully');
+        window.showToast('success', response.data.message ||
+          (destination === 'direct_bank' ? 'Direct bank payout processed successfully' : 'Settlement processed successfully'));
         setShowSettlementModal(false);
         setSelectedSettlement(null);
         setSettlementAmount('');
         setRemark('');
+        setDestination('settlement');
         fetchSettlementData();
       } else {
         window.showToast('error', response.data.message || 'Failed to process settlement');
@@ -137,6 +145,13 @@ export default function Settlement() {
       accessor: 'settlement',
       cell: (value: number) => (
         <span className="font-medium">{formatCurrency(value)}</span>
+      ),
+    },
+    {
+      header: 'Direct Bank Payout',
+      accessor: 'direct_bank_payout',
+      cell: (value: number) => (
+        <span className="font-medium">{formatCurrency(value || 0)}</span>
       ),
     },
     {
@@ -210,14 +225,57 @@ export default function Settlement() {
                       <p className="text-lg text-primary-600">{formatCurrency(selectedSettlement.wallet || 0)}</p>
                     </div>
 
-                    <div className="p-3 bg-gray-50 rounded-md">
-                      <p className="font-medium text-gray-700">Current Settlement Balance</p>
-                      <p className="text-lg text-primary-600">{formatCurrency(selectedSettlement.settlement || 0)}</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3 bg-gray-50 rounded-md">
+                        <p className="font-medium text-gray-700">Current Settlement Balance</p>
+                        <p className="text-lg text-primary-600">{formatCurrency(selectedSettlement.settlement || 0)}</p>
+                      </div>
+
+                      <div className="p-3 bg-gray-50 rounded-md">
+                        <p className="font-medium text-gray-700">Direct Bank Payout Balance</p>
+                        <p className="text-lg text-primary-600">{formatCurrency(selectedSettlement.direct_bank_payout || 0)}</p>
+                      </div>
+                    </div>
+
+                    {/* Destination selector — where the wallet funds should be routed */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Process To
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDestination('settlement')}
+                          className={`px-3 py-2 rounded-md border text-sm font-medium transition-colors ${
+                            destination === 'settlement'
+                              ? 'border-primary-600 bg-primary-50 text-primary-700'
+                              : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'
+                          }`}
+                        >
+                          Settlement Wallet
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDestination('direct_bank')}
+                          className={`px-3 py-2 rounded-md border text-sm font-medium transition-colors ${
+                            destination === 'direct_bank'
+                              ? 'border-primary-600 bg-primary-50 text-primary-700'
+                              : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'
+                          }`}
+                        >
+                          Direct Bank Payout
+                        </button>
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500">
+                        {destination === 'direct_bank'
+                          ? 'Funds move from Wallet into the Direct Bank Payout wallet.'
+                          : 'Funds move from Wallet into the Settlement wallet.'}
+                      </p>
                     </div>
 
                     <div>
                       <label htmlFor="settlementAmount" className="block text-sm font-medium text-gray-700 mb-1">
-                        Settlement Amount
+                        Amount
                       </label>
                       <input
                         type="number"
@@ -254,6 +312,8 @@ export default function Settlement() {
                       setShowSettlementModal(false);
                       setSelectedSettlement(null);
                       setSettlementAmount('');
+                      setRemark('');
+                      setDestination('settlement');
                     }}
                     className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
                     disabled={isProcessing}
@@ -265,7 +325,9 @@ export default function Settlement() {
                     className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={isProcessing}
                   >
-                    {isProcessing ? 'Processing...' : 'Process Settlement'}
+                    {isProcessing
+                      ? 'Processing...'
+                      : destination === 'direct_bank' ? 'Process Direct Bank Payout' : 'Process Settlement'}
                   </button>
                 </div>
               </div>

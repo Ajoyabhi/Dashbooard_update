@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
 import { Select, MenuItem, FormControl, InputLabel, LinearProgress, Skeleton } from '@mui/material'
-import { Wallet, TrendingDown, TrendingUp, Activity, ArrowUpCircle, BadgeCheck, RefreshCw, ShieldCheck } from 'lucide-react'
+import { Wallet, TrendingDown, TrendingUp, Activity, ArrowUpCircle, BadgeCheck, RefreshCw, ShieldCheck, Landmark } from 'lucide-react'
 // BadgeCheck used in hero card settlement balance icon
 import StatCard from '@/components/ui/StatCard'
 import api from '@/utils/axios'
@@ -53,6 +53,7 @@ export default function UserDashboard() {
   const d = data as Record<string, number | string> | null
   const walletBalance = Number(d?.wallet_balance ?? d?.walletBalance ?? 0)
   const settlementBalance = Number(d?.settlement_balance ?? d?.settlementBalance ?? 0)
+  const directBankPayoutBalance = Number(d?.direct_bank_payout_balance ?? d?.directBankPayoutBalance ?? 0)
   const rollingReserveBalance = Number(d?.rolling_reserve_balance ?? d?.rollingReserveBalance ?? 0)
   const totalPayin = Number(d?.total_payin ?? d?.totalPayin ?? 0)
   const totalPayout = Number(d?.total_payout ?? d?.totalPayout ?? 0)
@@ -85,7 +86,13 @@ export default function UserDashboard() {
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-24 translate-x-20" />
         <div className="absolute bottom-0 right-20 w-40 h-40 bg-[#D4AF37]/10 rounded-full translate-y-16" />
         <div className="relative z-10">
-          <div className={`grid grid-cols-1 gap-6 ${rollingReserveBalance > 0 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+          <div className={`grid grid-cols-1 gap-6 ${
+            ((directBankPayoutBalance > 0 ? 1 : 0) + (rollingReserveBalance > 0 ? 1 : 0)) === 2
+              ? 'sm:grid-cols-4'
+              : (directBankPayoutBalance > 0 || rollingReserveBalance > 0)
+                ? 'sm:grid-cols-3'
+                : 'sm:grid-cols-2'
+          }`}>
             {/* Wallet Balance */}
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -108,6 +115,19 @@ export default function UserDashboard() {
                 : <p className="text-3xl font-bold tracking-tight text-[#D4AF37]">{formatCurrency(settlementBalance)}</p>
               }
             </div>
+            {/* Direct Bank Payout — only shown when funds are earmarked for direct bank payout */}
+            {directBankPayoutBalance > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Landmark size={14} className="text-indigo-300" />
+                  <p className="text-indigo-200/80 text-sm font-medium">Direct Bank Payout</p>
+                </div>
+                {loading
+                  ? <Skeleton variant="rectangular" width={180} height={36} sx={{ borderRadius: 2, bgcolor: 'rgba(255,255,255,0.1)' }} />
+                  : <p className="text-3xl font-bold tracking-tight text-indigo-300">{formatCurrency(directBankPayoutBalance)}</p>
+                }
+              </div>
+            )}
             {/* Rolling Reserve — only shown when funds are held in reserve */}
             {rollingReserveBalance > 0 && (
               <div>

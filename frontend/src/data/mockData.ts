@@ -26,7 +26,8 @@ import {
   FileText,
   UserPlus,
   BarChart2,
-  ShieldCheck
+  ShieldCheck,
+  Banknote
 } from 'lucide-react';
 
 // Mock Users
@@ -410,7 +411,8 @@ export const getIconByName = (iconName: string) => {
     DollarSign,
     FileText,
     UserPlus,
-    ShieldCheck
+    ShieldCheck,
+    Banknote
   };
 
   return icons[iconName as keyof typeof icons] || Users;

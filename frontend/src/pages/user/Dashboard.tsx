@@ -37,6 +37,7 @@ const Dashboard = () => {
   const [dashboardData, setDashboardData] = useState({
     settlement_balance: 0,
     wallet_balance: 0,
+    direct_bank_payout_balance: 0,
     rolling_reserve_balance: 0,
     today_payin: 0,
     today_payout: 0,
@@ -138,6 +139,12 @@ const Dashboard = () => {
       value: `${dashboardData.wallet_balance || 0}`,
       icon: "Wallet",
       color: 'secondary'
+    },
+    {
+      title: 'Direct Bank Payout',
+      value: `${dashboardData.direct_bank_payout_balance || 0}`,
+      icon: "Banknote",
+      color: 'primary'
     },
     // Rolling Reserve card only appears once funds have been moved into reserve
     ...(Number(dashboardData.rolling_reserve_balance) > 0 ? [{

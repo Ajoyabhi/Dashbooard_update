@@ -845,6 +845,7 @@ const getUserDashboard = async (req, res) => {
     const dashboardData = {
       settlement_balance: financialDetails ? parseFloat(financialDetails.settlement) : 0,
       wallet_balance: financialDetails ? parseFloat(financialDetails.wallet) : 0,
+      direct_bank_payout_balance: financialDetails ? parseFloat(financialDetails.direct_bank_payout) || 0 : 0,
       rolling_reserve_balance: financialDetails ? parseFloat(financialDetails.rolling_reserve) || 0 : 0,
 
       // Today's transactions with net amounts (after charges)
@@ -1459,13 +1460,15 @@ const getUserWebhooks = async (req, res) => {
       where: { user_id: req.user.id }
     });
 
+    // NOTE: the gateway/merchant name is deliberately NOT returned to the user.
+    // Which acquirer routes their traffic is internal — exposing it (even just in
+    // the API response) would let a merchant see the underlying gateway. It stays
+    // visible only on the admin callbacks screen.
     res.json({
       success: true,
       data: {
         payin_callback: merchantDetails?.payin_callback || '',
         payout_callback: merchantDetails?.payout_callback || '',
-        payin_merchant_name: merchantDetails?.payin_merchant_name || null,
-        payout_merchant_name: merchantDetails?.payout_merchant_name || null,
         last_updated: merchantDetails?.updated_at || null
       }
     });

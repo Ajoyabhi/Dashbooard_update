@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Background rounded square -->
+  <rect width="64" height="64" rx="14" fill="#1A2744"/>
+
+  <!-- Subtle inner glow ring -->
+  <rect x="3" y="3" width="58" height="58" rx="12" fill="none" stroke="#D4AF37" stroke-width="0.8" stroke-opacity="0.35"/>
+
+  <!-- Shield shape -->
+  <path d="M32 10 L50 18 L50 33 C50 43 41 51 32 54 C23 51 14 43 14 33 L14 18 Z"
+        fill="#D4AF37" fill-opacity="0.12" stroke="#D4AF37" stroke-width="1.2" stroke-opacity="0.6"/>
+
+  <!-- S lettermark -->
+  <text x="32" y="41"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="28"
+        font-weight="700"
+        fill="#D4AF37"
+        text-anchor="middle"
+        letter-spacing="-1">S</text>
+
+  <!-- Bottom accent line -->
+  <line x1="22" y1="52" x2="42" y2="52" stroke="#D4AF37" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.5"/>
+</svg>

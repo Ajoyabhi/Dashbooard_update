@@ -11,12 +11,16 @@ import toast from 'react-hot-toast'
 
 interface SettlementUser {
   id: number; name: string; user_name: string; mobile: string
-  wallet: number; settlement: number
+  wallet: number; settlement: number; direct_bank_payout: number
 }
+
+type SettlementDestination = 'settlement' | 'direct_bank'
 
 interface SettlementTx {
   id: number; amount: number; wallet_balance_before: number; wallet_balance_after: number
   settlement_balance_before: number; settlement_balance_after: number
+  destination?: SettlementDestination
+  direct_bank_balance_before?: number | null; direct_bank_balance_after?: number | null
   status: string; remark: string; created_at: string
   updater?: { name: string; user_name: string }
 }
@@ -31,6 +35,7 @@ export default function AdminSettlement() {
   const [selected, setSelected] = useState<SettlementUser | null>(null)
   const [amount, setAmount] = useState('')
   const [remark, setRemark] = useState('')
+  const [destination, setDestination] = useState<SettlementDestination>('settlement')
   const [processing, setProcessing] = useState(false)
 
   // History modal
@@ -65,7 +70,7 @@ export default function AdminSettlement() {
   }, [])
 
   const openProcess = (user: SettlementUser) => {
-    setSelected(user); setAmount(''); setRemark(''); setProcessOpen(true)
+    setSelected(user); setAmount(''); setRemark(''); setDestination('settlement'); setProcessOpen(true)
   }
 
   const openHistory = (user: SettlementUser) => {
@@ -85,12 +90,14 @@ export default function AdminSettlement() {
       return toast.error('Amount exceeds wallet balance')
     setProcessing(true)
     try {
-      await api.post('/admin/settle-amount', {
+      const res = await api.post('/admin/settle-amount', {
         user_id: selected.id,
         amount_: parseFloat(amount),
         remark,
+        destination,
       })
-      toast.success('Settlement processed successfully')
+      toast.success(res.data?.message ||
+        (destination === 'direct_bank' ? 'Direct bank payout processed successfully' : 'Settlement processed successfully'))
       setProcessOpen(false); fetchUsers()
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
@@ -108,6 +115,7 @@ export default function AdminSettlement() {
 
   const totalWallet = users.reduce((s, u) => s + (u.wallet || 0), 0)
   const totalSettlement = users.reduce((s, u) => s + (u.settlement || 0), 0)
+  const totalDirectBank = users.reduce((s, u) => s + (u.direct_bank_payout || 0), 0)
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -127,6 +135,7 @@ export default function AdminSettlement() {
           { label: 'Total Users', value: users.length, currency: false },
           { label: 'Total Wallet Balance', value: formatCurrency(totalWallet), currency: true },
           { label: 'Total Settlement Balance', value: formatCurrency(totalSettlement), currency: true },
+          { label: 'Total Direct Bank Payout', value: formatCurrency(totalDirectBank), currency: true },
         ].map((s) => (
           <div key={s.label} className="bg-white rounded-xl border border-slate-200 px-4 py-2.5 flex items-center gap-2.5">
             <span className="text-xs text-slate-500">{s.label}</span>
@@ -145,7 +154,7 @@ export default function AdminSettlement() {
           <Table size="small">
             <TableHead>
               <TableRow>
-                {['#', 'Name', 'Username', 'Mobile', 'Wallet Balance', 'Settlement Balance', 'Actions'].map((h) => (
+                {['#', 'Name', 'Username', 'Mobile', 'Wallet Balance', 'Settlement Balance', 'Direct Bank Payout', 'Actions'].map((h) => (
                   <TableCell key={h} sx={{ fontWeight: 600, fontSize: '0.75rem', color: '#64748B' }}>{h}</TableCell>
                 ))}
               </TableRow>
@@ -153,13 +162,13 @@ export default function AdminSettlement() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+                  <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
                     <CircularProgress size={28} sx={{ color: '#1A2744' }} />
                   </TableCell>
                 </TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+                  <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
                     <Typography variant="body2" color="text.secondary">No users found</Typography>
                   </TableCell>
                 </TableRow>
@@ -174,6 +183,9 @@ export default function AdminSettlement() {
                   </TableCell>
                   <TableCell>
                     <span className="font-semibold text-blue-700">{formatCurrency(user.settlement)}</span>
+                  </TableCell>
+                  <TableCell>
+                    <span className="font-semibold text-indigo-700">{formatCurrency(user.direct_bank_payout || 0)}</span>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
@@ -208,7 +220,7 @@ export default function AdminSettlement() {
                 <p><span className="text-slate-500">Name:</span> <span className="font-medium">{selected.name}</span></p>
                 <p><span className="text-slate-500">Username:</span> <span className="font-medium">{selected.user_name}</span></p>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div className="bg-emerald-50 rounded-xl p-3">
                   <p className="text-xs text-slate-500">Wallet Balance</p>
                   <p className="font-bold text-emerald-700 text-base">{formatCurrency(selected.wallet)}</p>
@@ -217,8 +229,38 @@ export default function AdminSettlement() {
                   <p className="text-xs text-slate-500">Settlement Balance</p>
                   <p className="font-bold text-blue-700 text-base">{formatCurrency(selected.settlement)}</p>
                 </div>
+                <div className="bg-indigo-50 rounded-xl p-3">
+                  <p className="text-xs text-slate-500">Direct Bank Payout</p>
+                  <p className="font-bold text-indigo-700 text-base">{formatCurrency(selected.direct_bank_payout || 0)}</p>
+                </div>
               </div>
-              <TextField fullWidth label="Settlement Amount (₹)" type="number" value={amount}
+
+              {/* Destination — where the wallet funds are routed */}
+              <div>
+                <p className="text-xs font-medium text-slate-600 mb-1.5">Process To</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { key: 'settlement', label: 'Settlement Wallet' },
+                    { key: 'direct_bank', label: 'Direct Bank Payout' },
+                  ] as { key: SettlementDestination; label: string }[]).map((opt) => (
+                    <button key={opt.key} type="button" onClick={() => setDestination(opt.key)}
+                      className={`px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                        destination === opt.key
+                          ? 'border-[#1A2744] bg-[#1A2744]/5 text-[#1A2744]'
+                          : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
+                      }`}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1 text-xs text-slate-400">
+                  {destination === 'direct_bank'
+                    ? 'Funds move from Wallet into the Direct Bank Payout wallet.'
+                    : 'Funds move from Wallet into the Settlement wallet.'}
+                </p>
+              </div>
+
+              <TextField fullWidth label="Amount (₹)" type="number" value={amount}
                 onChange={(e) => setAmount(e.target.value)} autoFocus
                 inputProps={{ min: 1, max: selected.wallet, step: 0.01 }}
                 helperText={`Max: ${formatCurrency(selected.wallet)}`} />
@@ -230,7 +272,9 @@ export default function AdminSettlement() {
           <Button onClick={() => setProcessOpen(false)} sx={{ color: '#64748B', borderRadius: 2 }}>Cancel</Button>
           <Button variant="contained" onClick={processSettlement} disabled={processing}
             sx={{ bgcolor: '#1A2744', borderRadius: 2, '&:hover': { bgcolor: '#0E172A' } }}>
-            {processing ? 'Processing...' : 'Process Settlement'}
+            {processing
+              ? 'Processing...'
+              : destination === 'direct_bank' ? 'Process Direct Bank Payout' : 'Process Settlement'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -250,7 +294,7 @@ export default function AdminSettlement() {
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    {['Date', 'Amount', 'Wallet Before→After', 'Settlement Before→After', 'Status', 'Processed By', 'Remark'].map((h) => (
+                    {['Date', 'Amount', 'Destination', 'Wallet Before→After', 'Destination Before→After', 'Status', 'Processed By', 'Remark'].map((h) => (
                       <TableCell key={h} sx={{ fontWeight: 600, fontSize: '0.72rem', color: '#64748B', bgcolor: '#F8FAFC' }}>{h}</TableCell>
                     ))}
                   </TableRow>
@@ -260,15 +304,33 @@ export default function AdminSettlement() {
                     <TableRow key={tx.id} hover>
                       <TableCell sx={{ fontSize: '0.75rem', color: '#64748B' }}>{formatDateTime(tx.created_at)}</TableCell>
                       <TableCell sx={{ fontWeight: 600, color: '#1A2744' }}>{formatCurrency(tx.amount)}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={tx.destination === 'direct_bank' ? 'Direct Bank' : 'Settlement'}
+                          size="small"
+                          color={tx.destination === 'direct_bank' ? 'secondary' : 'primary'}
+                          variant="outlined"
+                          sx={{ fontSize: '0.65rem', height: 20, borderRadius: '5px' }} />
+                      </TableCell>
                       <TableCell sx={{ fontSize: '0.75rem' }}>
                         <span className="text-slate-500">{formatCurrency(tx.wallet_balance_before)}</span>
                         <span className="text-slate-400 mx-1">→</span>
                         <span className="text-emerald-700 font-medium">{formatCurrency(tx.wallet_balance_after)}</span>
                       </TableCell>
                       <TableCell sx={{ fontSize: '0.75rem' }}>
-                        <span className="text-slate-500">{formatCurrency(tx.settlement_balance_before)}</span>
-                        <span className="text-slate-400 mx-1">→</span>
-                        <span className="text-blue-700 font-medium">{formatCurrency(tx.settlement_balance_after)}</span>
+                        {tx.destination === 'direct_bank' ? (
+                          <>
+                            <span className="text-slate-500">{formatCurrency(tx.direct_bank_balance_before ?? 0)}</span>
+                            <span className="text-slate-400 mx-1">→</span>
+                            <span className="text-indigo-700 font-medium">{formatCurrency(tx.direct_bank_balance_after ?? 0)}</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-slate-500">{formatCurrency(tx.settlement_balance_before)}</span>
+                            <span className="text-slate-400 mx-1">→</span>
+                            <span className="text-blue-700 font-medium">{formatCurrency(tx.settlement_balance_after)}</span>
+                          </>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Chip label={tx.status} size="small"

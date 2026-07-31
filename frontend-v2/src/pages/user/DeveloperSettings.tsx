@@ -15,8 +15,6 @@ export default function DeveloperSettings() {
   // Webhook configuration state
   const [payinCallback, setPayinCallback] = useState('')
   const [payoutCallback, setPayoutCallback] = useState('')
-  const [payinMerchant, setPayinMerchant] = useState<string | null>(null)
-  const [payoutMerchant, setPayoutMerchant] = useState<string | null>(null)
   const [savingWebhooks, setSavingWebhooks] = useState(false)
 
   useEffect(() => {
@@ -47,8 +45,6 @@ export default function DeveloperSettings() {
         const d = r.data?.data ?? {}
         setPayinCallback(d.payin_callback || '')
         setPayoutCallback(d.payout_callback || '')
-        setPayinMerchant(d.payin_merchant_name || null)
-        setPayoutMerchant(d.payout_merchant_name || null)
       })
       .catch(() => { /* leave webhook fields empty on failure */ })
   }, [])
@@ -160,7 +156,6 @@ export default function DeveloperSettings() {
             <div>
               <label className="text-xs font-medium text-slate-600 mb-1 block">
                 Payin Webhook URL
-                {payinMerchant && <span className="ml-2 text-slate-400">(gateway: {payinMerchant})</span>}
               </label>
               <TextField fullWidth size="small" placeholder="https://your-domain.com/webhooks/payin"
                 value={payinCallback} onChange={(e) => setPayinCallback(e.target.value)}
@@ -170,7 +165,6 @@ export default function DeveloperSettings() {
             <div>
               <label className="text-xs font-medium text-slate-600 mb-1 block">
                 Payout Webhook URL
-                {payoutMerchant && <span className="ml-2 text-slate-400">(gateway: {payoutMerchant})</span>}
               </label>
               <TextField fullWidth size="small" placeholder="https://your-domain.com/webhooks/payout"
                 value={payoutCallback} onChange={(e) => setPayoutCallback(e.target.value)}

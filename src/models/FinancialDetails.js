@@ -19,6 +19,13 @@ module.exports = (sequelize) => {
             type: DataTypes.DECIMAL(15, 2),
             defaultValue: 0
         },
+        // Funds earmarked to be paid to the merchant's bank directly, tracked
+        // separately from the settlement wallet. Credited when an admin processes
+        // a settlement with destination = 'direct_bank'.
+        direct_bank_payout: {
+            type: DataTypes.DECIMAL(15, 2),
+            defaultValue: 0
+        },
         wallet: {
             type: DataTypes.DECIMAL(15, 2),
             defaultValue: 0

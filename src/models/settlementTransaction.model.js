@@ -35,6 +35,22 @@ module.exports = (sequelize) => {
             type: DataTypes.DECIMAL(20, 2),
             allowNull: false
         },
+        // Which wallet the processed funds were routed to.
+        destination: {
+            type: DataTypes.ENUM('settlement', 'direct_bank'),
+            allowNull: false,
+            defaultValue: 'settlement'
+        },
+        // Before/after of the Direct Bank Payout bucket. Only populated when
+        // destination = 'direct_bank'; null for plain settlement moves.
+        direct_bank_balance_before: {
+            type: DataTypes.DECIMAL(20, 2),
+            allowNull: true
+        },
+        direct_bank_balance_after: {
+            type: DataTypes.DECIMAL(20, 2),
+            allowNull: true
+        },
         status: {
             type: DataTypes.ENUM('completed', 'failed'),
             defaultValue: 'completed'

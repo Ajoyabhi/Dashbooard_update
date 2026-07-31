@@ -15,8 +15,6 @@ const DeveloperSettings = () => {
   // Webhook configuration state
   const [payinCallback, setPayinCallback] = useState('');
   const [payoutCallback, setPayoutCallback] = useState('');
-  const [payinMerchant, setPayinMerchant] = useState<string | null>(null);
-  const [payoutMerchant, setPayoutMerchant] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -35,8 +33,6 @@ const DeveloperSettings = () => {
           const d = response.data.data;
           setPayinCallback(d.payin_callback || '');
           setPayoutCallback(d.payout_callback || '');
-          setPayinMerchant(d.payin_merchant_name || null);
-          setPayoutMerchant(d.payout_merchant_name || null);
         }
       } catch (error) {
         toast.error('Failed to load webhook configuration');
@@ -142,11 +138,6 @@ const DeveloperSettings = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Payin Webhook URL
-                  {payinMerchant && (
-                    <span className="ml-2 text-xs font-normal text-gray-400">
-                      (gateway: {payinMerchant})
-                    </span>
-                  )}
                 </label>
                 <input
                   type="url"
@@ -160,11 +151,6 @@ const DeveloperSettings = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Payout Webhook URL
-                  {payoutMerchant && (
-                    <span className="ml-2 text-xs font-normal text-gray-400">
-                      (gateway: {payoutMerchant})
-                    </span>
-                  )}
                 </label>
                 <input
                   type="url"

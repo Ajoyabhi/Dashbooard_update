@@ -598,12 +598,14 @@ const handleBalanceCheck = async (req, res) => {
     }
     const walletBalance = parseFloat(financialDetails.wallet);
     const settlementBalance = parseFloat(financialDetails.settlement);
+    const directBankPayoutBalance = parseFloat(financialDetails.direct_bank_payout) || 0;
     return res.status(200).json({
       success: true,
       message: 'Balance check successful',
       data: {
         wallet_balance: walletBalance,
-        settlement_balance: settlementBalance
+        settlement_balance: settlementBalance,
+        direct_bank_payout_balance: directBankPayoutBalance
       }
     });
   } catch (error) {
