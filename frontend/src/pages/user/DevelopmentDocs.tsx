@@ -289,7 +289,7 @@ export default function DevelopmentDocs() {
               <h3 className="text-lg font-semibold text-neutral-900 mb-2">Payin Status</h3>
               <div className="bg-neutral-100 rounded-xl p-4">
                 <pre className="text-sm text-neutral-800 overflow-x-auto">
-                  {`curl --location 'https://dashboard.accuzpay.in/api/payments/payin/transaction/{transaction_id}' \\
+                  {`curl --location 'https://dashboard.accuzpay.in/api/payments/payin/transaction/{order_id}' \\
 --header 'Authorization: YOUR_JWT_TOKEN'`}
                 </pre>
               </div>
@@ -315,7 +315,7 @@ export default function DevelopmentDocs() {
               <h3 className="text-lg font-semibold text-neutral-900 mb-2">Payout Status</h3>
               <div className="bg-neutral-100 rounded-xl p-4">
                 <pre className="text-sm text-neutral-800 overflow-x-auto">
-                  {`curl --location 'https://dashboard.accuzpay.in/api/payments/payout/transaction/{transaction_id}' \\
+                  {`curl --location 'https://dashboard.accuzpay.in/api/payments/payout/transaction/{order_id}' \\
 --header 'Authorization: YOUR_JWT_TOKEN'`}
                 </pre>
               </div>

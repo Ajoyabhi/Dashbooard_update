@@ -301,7 +301,7 @@ export default function DevelopmentDocs() {
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Payin Status</p>
             <div className="flex items-center gap-2">
               <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2.5 py-1 rounded-md">GET</span>
-              <code className="font-mono text-slate-700 text-xs bg-slate-100 px-3 py-1.5 rounded-lg flex-1">{BASE_URL}/api/payments/payin/transaction/{'{transaction_id}'}</code>
+              <code className="font-mono text-slate-700 text-xs bg-slate-100 px-3 py-1.5 rounded-lg flex-1">{BASE_URL}/api/payments/payin/transaction/{'{order_id}'}</code>
             </div>
             <CodeBlock title="curl" code={`curl --location '${BASE_URL}/api/payments/payin/transaction/TXN123456ABCD' \\
 --header 'Authorization: YOUR_JWT_TOKEN'`} />
@@ -323,7 +323,7 @@ export default function DevelopmentDocs() {
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Payout Status</p>
             <div className="flex items-center gap-2">
               <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2.5 py-1 rounded-md">GET</span>
-              <code className="font-mono text-slate-700 text-xs bg-slate-100 px-3 py-1.5 rounded-lg flex-1">{BASE_URL}/api/payments/payout/transaction/{'{transaction_id}'}</code>
+              <code className="font-mono text-slate-700 text-xs bg-slate-100 px-3 py-1.5 rounded-lg flex-1">{BASE_URL}/api/payments/payout/transaction/{'{order_id}'}</code>
             </div>
             <CodeBlock title="curl" code={`curl --location '${BASE_URL}/api/payments/payout/transaction/PAYOUT123456ABCD' \\
 --header 'Authorization: YOUR_JWT_TOKEN'`} />
