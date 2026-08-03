@@ -7,7 +7,6 @@ const { callbackQueue, bluswapPayoutQueue, createRedisClient } = require('../con
 const PayinTransaction = require('../models/payinTransaction.model');
 const { extractFailureReason } = require('../utils/failureReason');
 const { MerchantDetails } = require('../models');
-const { encryptText } = require('../merchant_payin_payout/utils_payout');
 // TEMP TESTING: pool of fake customer identities used by the test-beneficiary
 // feature. Moved to its own module (src/data/testIdentities.js) to keep this
 // controller lean. Remove both once testing is done.
@@ -312,122 +311,6 @@ const initiatePayment = async (req, res) => {
 };
 
 /**
- * Handle Unpay payment callback
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- */
-const handleUnpayCallback = async (req, res) => {
-  try {
-    // Get callback data from either query params (GET) or body (POST)
-    const callbackData = req.method === 'GET' ? req.query : req.body;
-
-    logger.info('Received Unpay callback', {
-      method: req.method,
-      data: callbackData
-    });
-
-    // Validate required parameters
-    const requiredParams = ['statuscode', 'status', 'amount', 'apitxnid', 'txnid', 'utr'];
-    const missingParams = requiredParams.filter(param => !callbackData[param]);
-
-    if (missingParams.length > 0) {
-      logger.error('Missing required parameters in callback', { missingParams });
-      return res.status(400).json({
-        success: false,
-        message: `Missing required parameters: ${missingParams.join(', ')}`
-      });
-    }
-
-    recordTraceEvent({
-      reference_id: callbackData.apitxnid, trace_type: 'payin', stage: STAGES.CALLBACK_RECEIVED,
-      status: (callbackData.statuscode === 'TXN' || callbackData.status === 'SUCCESS') ? 'ok' : 'failed',
-      source: 'gateway_callback', gateway_name: 'unpay',
-      http: { method: req.method, url: '/api/payments/unpay/callback' },
-      detail: `Inbound unpay callback: ${callbackData.status != null ? callbackData.status : 'unknown'}`,
-      payload: { query: req.query, body: req.body }
-    });
-
-    // Add callback to queue
-    const transactionInDb = await PayinTransaction.findOne({ reference_id: callbackData.apitxnid });
-
-    logger.info('Checking if transaction exists in database', {
-      apitxnid: callbackData.apitxnid,
-      transactionFound: !!transactionInDb
-    });
-
-    if (!transactionInDb) {
-      logger.warn('Transaction not found in database - forwarding to payzutech', {
-        apitxnid: callbackData.apitxnid,
-        amount: callbackData.amount,
-        status: callbackData.status
-      });
-
-      try {
-        const response = await axios.post('https://dashboard.payzutech.in/api/payments/unpay/callback', {
-          callbackData
-        });
-        logger.info('Callback forwarded to payzutech successfully', {
-          apitxnid: callbackData.apitxnid,
-          payzutechResponseStatus: response.status
-        });
-        res.status(200).json({
-          success: true,
-          message: 'Callback processed successfully',
-          response: response.data
-        });
-      } catch (error) {
-        logger.error('Error forwarding callback to payzutech', {
-          apitxnid: callbackData.apitxnid,
-          error: error.message,
-          stack: error.stack
-        });
-        res.status(500).json({
-          success: false,
-          message: 'Error forwarding callback to payzutech'
-        });
-      }
-    } else {
-      logger.info('Transaction found in database - adding to callback queue', {
-        apitxnid: callbackData.apitxnid,
-        transactionId: transactionInDb._id
-      });
-
-      const job = await callbackQueue.add(callbackData, {
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 5000
-        }
-      });
-
-      recordTraceEvent({
-        reference_id: callbackData.apitxnid, trace_type: 'payin', stage: STAGES.QUEUED, status: 'info',
-        source: 'gateway_callback', gateway_name: 'unpay', detail: 'Enqueued to callbackQueue',
-        payload: { jobId: job.id }
-      });
-      logger.info('Callback queued for processing', {
-        apitxnid: callbackData.apitxnid,
-        jobId: job.id
-      });
-
-      res.status(200).json({
-        success: true,
-        message: 'Callback queued for processing',
-        job_id: job.id
-      });
-    }
-
-  } catch (error) {
-    logger.error('Error queuing Unpay callback', {
-      error: error.message,
-      stack: error.stack,
-      data: req.method === 'GET' ? req.query : req.body
-    });
-    res.status(500).json({ success: false, message: 'Error processing callback' });
-  }
-};
-
-/**
  * Get transaction status
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
@@ -592,67 +475,30 @@ const getTransactionStatus = async (req, res) => {
       });
     }
 
-    // Default: Unpay gateway
-    const requestBody = {
-      partner_id: "4071",
-      apitxnid: searchTransactionId
-    };
-    const aesKey = "XRUhoLqUBgmZFLdWT5PiuNQnGhI9l6Pc";
-    const aesIV = "oR21lVkifQEBNRQS";
-    const apiKey = "QPf0uqDt0EjQqkseizXyr1Ydn21HF9cOiQEFtjrV";
-    const encryptedRequestBody = await encryptText(JSON.stringify(requestBody), aesKey, aesIV);
+    // Unknown/legacy gateway (only HDFC, AirPay, Razorpay are live) — no external
+    // status API to query. Serve the authoritative status from our own record.
+    const localStatus = transaction.status === 'completed' ? 'success'
+      : transaction.status === 'failed' ? 'failed'
+        : 'pending';
 
-    // Make API request to Unpay
-    const response = await fetch('https://unpay.in/tech/api/next/upi/request/qrstatus', {
-      method: 'POST',
-      headers: {
-        'accept': 'application/json',
-        'api-key': apiKey,
-        'content-type': 'application/json'
-      },
-      body: JSON.stringify({
-        body: encryptedRequestBody
-      })
+    logger.info('Payin status served from local record (unsupported/legacy gateway)', {
+      reference_id: searchTransactionId, merchantName, local_status: transaction.status
     });
 
-    const result = await response.json();
-
-    // Log the actual response to debug
-    logger.info('Unpay API Response:', { result, status: response.status });
-
-    if (!response.ok) {
-      throw new Error(`API error: ${result.message || 'Unknown error'}`);
-    }
-
-    // Check if result.data exists
-    if (!result.data) {
-      logger.error('No data property in API response:', { result });
-      return res.status(500).json({
-        success: false,
-        message: 'Invalid response from payment gateway'
-      });
-    }
-
-    const unpayStatusMap = { TXN: 'success', SUCCESS: 'success', FAILED: 'failed', TXF: 'failed', PENDING: 'pending' };
-    const unpayStatus = unpayStatusMap[String(result.data.paymentStatus || '').toUpperCase()]
-      || String(result.data.paymentStatus || 'unknown').toLowerCase();
-
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       transaction: {
         reference_id: transaction.reference_id,
         type: 'payin',
-        status: unpayStatus,
+        status: localStatus,
         amount: transaction.amount,
-        utr: result.data.rrnNumber || null,
-        message: unpayStatus === 'success'
+        utr: transaction.gateway_response?.utr || null,
+        message: localStatus === 'success'
           ? 'Transaction processed'
-          : unpayStatus === 'pending'
+          : localStatus === 'pending'
             ? 'Transaction is pending'
             : 'Transaction failed',
-        timestamp: transaction.updatedAt || transaction.createdAt || new Date().toISOString(),
-        payerVpa: result.data.payerVpa || null,
-        npciTxnId: result.data.npciTxnId || null
+        timestamp: transaction.updatedAt || transaction.createdAt || new Date().toISOString()
       }
     });
 
@@ -662,83 +508,6 @@ const getTransactionStatus = async (req, res) => {
       success: false,
       message: 'Error getting transaction status'
     });
-  }
-};
-
-const handleSpayCallback = async (req, res) => {
-  try {
-    // Get callback data from either query params (GET) or body (POST)
-    const callbackData = req.method === 'GET' ? req.query : req.body;
-    console.log("callbackData", callbackData);
-
-    logger.info('Received SPay callback', {
-      method: req.method,
-      data: callbackData
-    });
-
-    // Map SPay callback data to expected format
-    const mappedData = {
-      statuscode: callbackData.status,
-      utr: callbackData.UTR,
-      amount: callbackData.amount,
-      apitxnid: callbackData.clienttxnid,
-      txnid: callbackData.txnid,
-      timestamp: callbackData.timestamp
-    };
-
-    // Validate required parameters
-    const requiredParams = ['statuscode', 'apitxnid', 'amount', 'utr'];
-    const missingParams = requiredParams.filter(param => !mappedData[param]);
-
-    if (missingParams.length > 0) {
-      logger.error('Missing required parameters in callback', { missingParams });
-      return res.status(400).json({
-        success: false,
-        message: `Missing required parameters: ${missingParams.join(', ')}`
-      });
-    }
-
-    recordTraceEvent({
-      reference_id: mappedData.apitxnid, trace_type: 'payin', stage: STAGES.CALLBACK_RECEIVED,
-      status: (mappedData.statuscode === 'TXN' || mappedData.statuscode === 'SUCCESS') ? 'ok' : 'failed',
-      source: 'gateway_callback', gateway_name: 'spay',
-      http: { method: req.method, url: '/api/payments/spay/callback' },
-      detail: `Inbound spay callback: ${mappedData.statuscode != null ? mappedData.statuscode : 'unknown'}`,
-      payload: { query: req.query, body: req.body }
-    });
-
-    // Add callback to queue
-    const job = await callbackQueue.add({
-      ...mappedData,
-      provider: 'SPAY' // Add provider identifier
-    }, {
-      attempts: 3,
-      backoff: {
-        type: 'exponential',
-        delay: 5000
-      }
-    });
-
-    recordTraceEvent({
-      reference_id: mappedData.apitxnid, trace_type: 'payin', stage: STAGES.QUEUED, status: 'info',
-      source: 'gateway_callback', gateway_name: 'spay', detail: 'Enqueued to callbackQueue',
-      payload: { jobId: job.id }
-    });
-
-    // Send immediate response
-    res.json({
-      success: true,
-      message: 'Callback queued for processing',
-      job_id: job.id
-    });
-
-  } catch (error) {
-    logger.error('Error queuing SPay callback', {
-      error: error.message,
-      stack: error.stack,
-      data: req.method === 'GET' ? req.query : req.body
-    });
-    res.status(500).json({ success: false, message: 'Error processing callback' });
   }
 };
 
@@ -958,12 +727,10 @@ const razorpayCallback = async (req, res) => {
 
 module.exports = {
   initiatePayment,
-  handleUnpayCallback,
   getTransactionStatus,
   validatePaymentRequest,
   setValidationResult,
   validatePaymentRequestpayin,
-  handleSpayCallback,
   handleBluswapPayoutCallback,
   hdfcCallback,
   airpayCallback,

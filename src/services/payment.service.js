@@ -4,31 +4,8 @@ const { User, UserStatus, MerchantDetails, MerchantCharges, MerchantModeCharges,
 const PayinTransaction = require('../models/payinTransaction.model');
 const HdfcCustomer = require('../models/HdfcCustomer.model');
 const mongoose = require('mongoose');
-const { encryptText } = require('../merchant_payin_payout/utils_payout');
 const { randomUUID } = require('crypto');
 const axios = require('axios');
-const os = require('os');
-const dns = require('dns');
-const http = require('http');
-const https = require('https');
-
-const getServerIp = () => {
-  const interfaces = os.networkInterfaces();
-  for (const interfaceName in interfaces) {
-    for (const address of interfaces[interfaceName]) {
-      if (!address.internal && address.family === 'IPv4') return address.address;
-    }
-  }
-  return '127.0.0.1';
-};
-
-const createIPv4Agents = () => {
-  const lookup = (hostname, options, callback) => dns.lookup(hostname, { family: 4, ...options }, callback);
-  return {
-    httpAgent: new http.Agent({ family: 4, lookup }),
-    httpsAgent: new https.Agent({ family: 4, lookup })
-  };
-};
 
 const processPayin = async (data) => {
   try {
@@ -171,13 +148,7 @@ const processPayin = async (data) => {
     const gatewayStartedAt = Date.now();
 
     let result;
-    if (merchantName === 'Unpay') {
-      result = await unpayPayin(payinData);
-    } else if (merchantName === 'Spay') {
-      result = await spayPayin(payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee);
-    } else if (merchantName === 'SpayIcici') {
-      result = await spayPayinIcici(payinData);
-    } else if (merchantName === 'HDFC') {
+    if (merchantName === 'HDFC') {
       result = await hdfcPayin(payinData);
     } else if (merchantName === 'AirPay') {
       result = await airpayPayin(payinData);
@@ -189,7 +160,7 @@ const processPayin = async (data) => {
 
     logger.info('Payment gateway response', { reference_id, statuscode: result?.statuscode });
 
-    const gatewaySucceeded = result?.statuscode === 'TXN' || result?.data?.statuscode === 'TXNS';
+    const gatewaySucceeded = result?.statuscode === 'TXN';
     recordTraceEvent({
       reference_id, trace_type: 'payin', stage: STAGES.GATEWAY_RESPONSE,
       status: gatewaySucceeded ? 'ok' : 'failed', source: 'api',
@@ -241,108 +212,6 @@ const processPayin = async (data) => {
       detail: 'Payin rejected before completion', error: error.message
     });
     return { success: false, message: error.message };
-  }
-};
-
-const unpayPayin = async (payinData) => {
-  try {
-    const { order_amount, reference_id } = payinData;
-
-    const aesKey = "XRUhoLqUBgmZFLdWT5PiuNQnGhI9l6Pc";
-    const aesIV = "oR21lVkifQEBNRQS";
-    const apiKey = "QPf0uqDt0EjQqkseizXyr1Ydn21HF9cOiQEFtjrV";
-    const partnerId = "4071";
-    const webhookUrl = "https://dashboard.accuzpay.in/api/payments/unpay/callback";
-
-    const requestBody = {
-      partner_id: partnerId,
-      amount: parseInt(order_amount),
-      apitxnid: reference_id,
-      webhook: webhookUrl
-    };
-
-    const encryptedRequestBody = await encryptText(JSON.stringify(requestBody), aesKey, aesIV);
-    const { httpAgent, httpsAgent } = createIPv4Agents();
-
-    const response = await axios.post(
-      'https://unpay.in/tech/api/next/upi/request/qr',
-      { body: encryptedRequestBody },
-      {
-        headers: {
-          'accept': 'application/json',
-          'api-key': apiKey,
-          'content-type': 'application/json'
-        },
-        httpAgent,
-        httpsAgent
-      }
-    );
-
-    const result = response.data;
-    if (result.statuscode === 'TXN') {
-      return {
-        statuscode: result.statuscode,
-        message: result.message,
-        data: { apitxnid: result.data?.apitxnid, qrString: result.data?.qrString }
-      };
-    }
-    return { statuscode: result.statuscode, message: result.message, data: result.data };
-  } catch (error) {
-    logger.error('Error processing unpay payin', { error: error.message, stack: error.stack });
-    throw error;
-  }
-};
-
-const spayPayin = async (payinData, adminCharge, agentCharge, totalCharges, user_id, clientIp, gstAmount, platformFee) => {
-  try {
-    if (!payinData.name || !payinData.email || !payinData.phone || !payinData.order_amount) {
-      throw new Error('Missing required fields: name, email, mobile, or amount');
-    }
-
-    const requestBody = {
-      token: "JPi2bq7JPPaiEaFDBp0WtGcVTEjTMG",
-      apitxnid: payinData.reference_id,
-      name: payinData.name,
-      email: payinData.email,
-      mobile: payinData.phone,
-      amount: payinData.order_amount.toString(),
-      return_url: "https://api.zentexpay.in/api/payments/spay/callback"
-    };
-
-    const response = await axios.post('https://dashboard.spay.live/api/upiintent/vp2/create', requestBody, {
-      headers: { 'Content-Type': 'application/json' }
-    });
-
-    if (response.data.statuscode === 'TXNS') {
-      return {
-        success: true,
-        data: {
-          statuscode: response.data.statuscode,
-          qrString: response.data.payment_link,
-          message: response.data.message,
-          apitxnid: payinData.reference_id
-        }
-      };
-    }
-    throw new Error(response.data.message || 'Payment initiation failed');
-  } catch (error) {
-    if (error.response) {
-      const statusMap = { 400: 'Missing required fields', 401: 'Invalid amount format', 409: 'Transaction ID already exists', 500: 'Internal server error' };
-      throw new Error(statusMap[error.response.status] || error.response.data?.message || 'Payment initiation failed');
-    }
-    throw error;
-  }
-};
-
-const spayPayinIcici = async (payinData) => {
-  try {
-    if (!payinData.name || !payinData.email || !payinData.phone || !payinData.order_amount) {
-      throw new Error('Missing required fields: name, email, mobile, or amount');
-    }
-    throw new Error('SpayIcici not implemented');
-  } catch (error) {
-    logger.error('Error processing spayPayinIcici', { error: error.message, stack: error.stack });
-    throw error;
   }
 };
 

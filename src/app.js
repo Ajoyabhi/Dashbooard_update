@@ -29,35 +29,9 @@ const app = express();
 // Trust proxy
 app.set('trust proxy', true);
 
-// Connect to MongoDB
-const mongoOptions = {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  serverSelectionTimeoutMS: 5000,
-  socketTimeoutMS: 45000,
-  family: 4,  // Force IPv4
-  directConnection: true,
-  retryWrites: true,
-  w: 'majority'
-};
-
-logger.info('Attempting to connect to MongoDB with URI:', config.mongodb.uri);
-
-mongoose.connect(config.mongodb.uri, mongoOptions)
-  .then(() => {
-    logger.info('Connected to MongoDB successfully');
-  })
-  .catch(err => {
-    logger.error('MongoDB connection error:', err);
-    if (err.name === 'MongooseServerSelectionError') {
-      logger.error('MongoDB connection details:', {
-        uri: config.mongodb.uri,
-        error: err.message,
-        code: err.code,
-        name: err.name
-      });
-    }
-  });
+// Connect to MongoDB (shared, warm-pooled, Atlas-correct connector)
+const { connectMongo } = require('./config/mongoConnect');
+connectMongo().catch(() => { /* logged inside connectMongo; server keeps trying on next call */ });
 
 // Middleware
 app.use(helmet());

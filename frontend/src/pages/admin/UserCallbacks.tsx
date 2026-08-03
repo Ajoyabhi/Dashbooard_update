@@ -212,13 +212,9 @@ export default function UserCallbacks() {
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                 >
                   <option value="">Select Merchant</option>
-                  <option value="Unpay">Unpay</option>
-                  <option value="Spay">Spay</option>
-                  <option value="SpayIcici">SpayIcici</option>
                   <option value="HDFC">HDFC</option>
                   <option value="AirPay">AirPay</option>
                   <option value="Razorpay">Razorpay</option>
-                  <option value="Philpay">Philpay</option>
                 </select>
               </div>
               <button
@@ -250,10 +246,6 @@ export default function UserCallbacks() {
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                 >
                   <option value="">Select Merchant</option>
-                  <option value="Unpay">Unpay</option>
-                  <option value="Spay">Spay</option>
-                  <option value="Philpay">Philpay</option>
-                  <option value="Xlitepay">Xlitepay</option>
                   <option value="BluSwap">BluSwap</option>
                 </select>
               </div>

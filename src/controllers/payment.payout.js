@@ -10,7 +10,6 @@ const { Op } = require('sequelize');
 const { bluswapPayout } = require('../merchant_payin_payout/merchant_payout_request');
 const getClientIp = require('../utils/getClientIp');
 const mongoose = require('mongoose');
-const { encryptText } = require('../merchant_payin_payout/utils_payout');
 const axios = require('axios');
 const { bluswapTransactionStatus } = require('../transactionStatusCheck/TransactionCheck');
 const { reconcilePayoutTransaction, finalizePayout } = require('../services/payoutReconciliation.service');

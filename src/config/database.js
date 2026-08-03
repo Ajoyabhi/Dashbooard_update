@@ -14,11 +14,15 @@ const sequelize = new Sequelize(
         port: config.database.port,
         dialect: 'mysql',
         logging: process.env.NODE_ENV === 'development' ? (msg) => logger.debug(msg) : false,
+        // Env-driven so the co-located VPS (API + MySQL + Redis share the box) can
+        // be tuned without code changes. Remember: total MySQL connections =
+        // DB_POOL_MAX × number of processes, and must stay under MySQL's
+        // max_connections. Default bumped 5 -> 15 as a safe starting point.
         pool: {
-            max: 5,
-            min: 0,
-            acquire: 30000,
-            idle: 10000
+            max: parseInt(process.env.DB_POOL_MAX || '15', 10),
+            min: parseInt(process.env.DB_POOL_MIN || '0', 10),
+            acquire: parseInt(process.env.DB_POOL_ACQUIRE || '30000', 10),
+            idle: parseInt(process.env.DB_POOL_IDLE || '10000', 10)
         },
         define: {
             timestamps: true,
@@ -38,16 +42,13 @@ sequelize.authenticate()
         process.exit(1); // Exit if database connection fails
     });
 
-// MongoDB Configuration
-mongoose.connect(config.mongodb.uri, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true
-})
-    .then(() => logger.info('Connected to MongoDB'))
-    .catch(err => {
-        logger.error('MongoDB connection error:', err);
-        process.exit(1); // Exit if database connection fails
-    });
+// MongoDB Configuration — use the shared, warm-pooled, Atlas-correct connector.
+// Idempotent: no-ops if another module already connected.
+const { connectMongo } = require('./mongoConnect');
+connectMongo().catch(err => {
+    logger.error('MongoDB connection error:', err);
+    process.exit(1); // Exit if database connection fails
+});
 
 module.exports = {
     sequelize,

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { auth } = require('../middleware/auth.middleware');
 const { checkRole } = require('../middleware/role.middleware');
-const { initiatePayment, getTransactionStatus, handleUnpayCallback, handleSpayCallback,
+const { initiatePayment, getTransactionStatus,
   handleBluswapPayoutCallback, hdfcCallback, airpayCallback, razorpayCallback } = require('../controllers/payment.controller');
 const { initiatePayout , getPayoutTransactionStatus, handleBalanceCheck, reconcilePayoutByReference, reconcileProcessingPayouts } = require('../controllers/payment.payout');
 
@@ -49,15 +49,6 @@ router.post('/payout/reconcile/:reference_id',
   checkRole(['admin', 'agent', 'user', 'payin_payout', 'payout_only', 'payin_only']),
   reconcilePayoutByReference
 );
-
-// router.get
-// Unpay callback route - no authentication needed as it's called by Unpay
-router.get('/unpay/callback', handleUnpayCallback);
-router.post('/unpay/callback', handleUnpayCallback);
-
-// Spay callback route - no authentication needed as it's called by Spay
-router.get('/spay/callback', handleSpayCallback);
-router.post('/spay/callback', handleSpayCallback);
 
 // BluSwap callback route - no authentication needed as it's called by BluSwap
 router.get('/bluswap/payout/callback', handleBluswapPayoutCallback);

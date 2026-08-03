@@ -4,7 +4,6 @@ const { sequelize } = require('../config/database');
 const PayoutTransaction = require('../models/payoutTransaction.model');
 const PayinTransaction = require('../models/payinTransaction.model');
 const axios = require('axios');
-const { encryptText } = require('../merchant_payin_payout/utils_payout');
 const { sendMerchantPayoutCallback, finalizePayout } = require('../services/payoutReconciliation.service');
 const { getTransactionTrace } = require('../services/transactionTrace.service');
 const {
@@ -3523,42 +3522,57 @@ const adminCheckPayinStatus = async (req, res) => {
             });
         }
 
-        // Default: Unpay gateway
-        const requestBody = { partner_id: "4071", apitxnid: reference_id };
-        const aesKey = "XRUhoLqUBgmZFLdWT5PiuNQnGhI9l6Pc";
-        const aesIV = "oR21lVkifQEBNRQS";
-        const apiKey = "QPf0uqDt0EjQqkseizXyr1Ydn21HF9cOiQEFtjrV";
-        const encryptedBody = await encryptText(JSON.stringify(requestBody), aesKey, aesIV);
-
-        const response = await fetch('https://unpay.in/tech/api/next/upi/request/qrstatus', {
-            method: 'POST',
-            headers: { 'accept': 'application/json', 'api-key': apiKey, 'content-type': 'application/json' },
-            body: JSON.stringify({ body: encryptedBody })
-        });
-
-        const result = await response.json();
-        if (!response.ok || !result.data) {
-            return res.status(502).json({ success: false, message: 'Invalid response from payment gateway' });
+        if (merchantName === 'Razorpay') {
+            const response = await axios.get(
+                `${process.env.ECOMMERCE_API_URL}/api/v1/payments/razorpay/rp-check`,
+                {
+                    params: { reference_id },
+                    headers: { 'x-api-key': process.env.RAZORPAY_SHARED_SECRET, 'Content-Type': 'application/json' },
+                    timeout: 30000
+                }
+            );
+            const result = response.data;
+            const normalizeRazorpayStatus = (s) => {
+                if (!s) return 'pending';
+                const u = s.toUpperCase();
+                if (u === 'TXN' || u === 'CAPTURED' || u === 'FORWARDED') return 'success';
+                if (['FAILED', 'FAILURE', 'CANCELLED', 'CANCEL', 'ERROR', 'EXPIRED'].includes(u)) return 'failed';
+                return 'pending';
+            };
+            const rpNormalized = normalizeRazorpayStatus(result.razorpay_status || result.status);
+            return res.status(200).json({
+                success: true,
+                transaction: {
+                    reference_id: result.reference_id ?? transaction.reference_id,
+                    type: 'payin',
+                    status: rpNormalized,
+                    amount: result.amount ?? transaction.amount,
+                    utr: rpNormalized === 'success' ? (result.utr || null) : null,
+                    message: rpNormalized === 'success'
+                        ? 'Transaction processed'
+                        : rpNormalized === 'pending' ? 'Transaction is pending' : 'Transaction failed',
+                    timestamp: transaction.updatedAt || transaction.createdAt || new Date().toISOString(),
+                }
+            });
         }
 
-        const unpayStatusMap = { TXN: 'success', SUCCESS: 'success', FAILED: 'failed', TXF: 'failed', PENDING: 'pending' };
-        const unpayStatus = unpayStatusMap[String(result.data.paymentStatus || '').toUpperCase()]
-            || String(result.data.paymentStatus || 'unknown').toLowerCase();
-
+        // Unknown/legacy gateway (only HDFC, AirPay, Razorpay are live) — no external
+        // status API to query. Serve the authoritative status from our own record.
+        const localStatus = transaction.status === 'completed' ? 'success'
+            : transaction.status === 'failed' ? 'failed'
+                : 'pending';
         return res.status(200).json({
             success: true,
             transaction: {
                 reference_id: transaction.reference_id,
                 type: 'payin',
-                status: unpayStatus,
+                status: localStatus,
                 amount: transaction.amount,
-                utr: result.data.rrnNumber || null,
-                message: unpayStatus === 'success'
+                utr: transaction.gateway_response?.utr || null,
+                message: localStatus === 'success'
                     ? 'Transaction processed'
-                    : unpayStatus === 'pending' ? 'Transaction is pending' : 'Transaction failed',
-                timestamp: transaction.updatedAt || transaction.createdAt || new Date().toISOString(),
-                payerVpa: result.data.payerVpa || null,
-                npciTxnId: result.data.npciTxnId || null
+                    : localStatus === 'pending' ? 'Transaction is pending' : 'Transaction failed',
+                timestamp: transaction.updatedAt || transaction.createdAt || new Date().toISOString()
             }
         });
     } catch (error) {

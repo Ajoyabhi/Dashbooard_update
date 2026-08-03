@@ -15,13 +15,9 @@ callbackQueue.on('error', (error) => {
   logger.error('Queue error:', error);
 });
 
-// Connect to MongoDB
-mongoose.connect(config.mongodb.uri, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  serverSelectionTimeoutMS: 5000,
-  socketTimeoutMS: 45000,
-})
+// Connect to MongoDB (shared, warm-pooled, Atlas-correct connector)
+const { connectMongo } = require('../config/mongoConnect');
+connectMongo()
   .then(() => {
     logger.info('MongoDB connected successfully in callback worker');
   })
