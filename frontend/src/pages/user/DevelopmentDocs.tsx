@@ -243,13 +243,14 @@ export default function DevelopmentDocs() {
               <p className="text-sm font-semibold text-neutral-700 mb-1">Validation Error</p>
               <p className="text-sm text-neutral-600 mb-2">
                 Returned when the payout or beneficiary details fail the payment gateway's validation checks — for
-                example a malformed account number or IFSC, an unsupported amount, or a missing beneficiary field.
+                example a malformed account number or IFSC, an unsupported amount, or a missing beneficiary field. The
+                <span className="font-mono"> message</span> names the specific field and reason that failed.
               </p>
               <div className="bg-neutral-100 rounded-xl p-4">
                 <pre className="text-sm text-neutral-800 overflow-x-auto">
 {`{
   "success": false,
-  "message": "Validation error.",
+  "message": "bank_account_number: Invalid Bank Account Number",
   "reference_id": "PAYOUT123456ABCD"
 }`}
                 </pre>

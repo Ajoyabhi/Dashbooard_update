@@ -273,11 +273,11 @@ export default function DevelopmentDocs() {
           </p>
           <p className="text-xs font-semibold text-slate-600">Validation Error</p>
           <p className="text-xs text-slate-500">
-            Returned when the payout or beneficiary details fail the payment gateway's validation checks — for example a malformed account number or IFSC, an unsupported amount, or a missing beneficiary field.
+            Returned when the payout or beneficiary details fail the payment gateway's validation checks — for example a malformed account number or IFSC, an unsupported amount, or a missing beneficiary field. The <span className="font-mono">message</span> names the specific field and reason that failed.
           </p>
           <CodeBlock title="json" code={`{
   "success": false,
-  "message": "Validation error.",
+  "message": "bank_account_number: Invalid Bank Account Number",
   "reference_id": "PAYOUT123456ABCD"
 }`} />
           <p className="text-xs text-slate-500">

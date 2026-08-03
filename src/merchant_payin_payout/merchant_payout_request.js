@@ -25,6 +25,44 @@ if (process.env.NODE_ENV !== 'production') {
     }));
 }
 
+/**
+ * Build a human-readable error message from a BluSwap error body.
+ *
+ * BluSwap returns a generic top-level `message` (e.g. "Validation error.")
+ * while the actionable reason lives in `detail` — usually an array of
+ * "field: reason" strings, e.g. ["bank_account_number: Invalid Bank Account Number"].
+ * We prefer `detail` so the merchant sees the real cause instead of the generic
+ * validation message.
+ *
+ * @param {any} body     the parsed BluSwap response body (err.response.data)
+ * @param {string} fallback message to use when nothing usable is present
+ * @returns {string}
+ */
+function bluswapErrorMessage(body, fallback = 'Payout processing failed') {
+    if (!body || typeof body !== 'object') return fallback;
+
+    const { detail, message } = body;
+
+    let detailText = null;
+    if (Array.isArray(detail) && detail.length) {
+        detailText = detail
+            .map((d) => (typeof d === 'string' ? d : (d && (d.msg || d.message)) || JSON.stringify(d)))
+            .filter(Boolean)
+            .join(', ');
+    } else if (typeof detail === 'string' && detail.trim()) {
+        detailText = detail.trim();
+    } else if (detail && typeof detail === 'object') {
+        detailText = JSON.stringify(detail);
+    }
+
+    const msg = typeof message === 'string' ? message.trim() : '';
+    // "Validation error." (with or without the trailing dot) carries no information.
+    const generic = msg === '' || /^validation error\.?$/i.test(msg);
+
+    if (detailText) return generic ? detailText : `${msg} — ${detailText}`;
+    return msg || fallback;
+}
+
 async function createBluswapContact(payoutData) {
     const baseUrl = process.env.BLUSWAP_BASE_URL;
     const apiKey = process.env.BLUSWAP_API_KEY;
@@ -59,7 +97,7 @@ async function bluswapPayout(payoutData) {
         const ip = process.env.BLUSWAP_IP || '0.0.0.0';
         const vaId = process.env.BLUSWAP_VA_ID;
         if (!baseUrl || !apiKey || !vaId) {
-            throw new Error('BluSwap credentials or VA ID not set in environment variables');
+            throw new Error('credentials or VA ID not set in environment variables');
         }
 
         // Beneficiary must be registered as a contact before a payout can be initiated
@@ -68,19 +106,20 @@ async function bluswapPayout(payoutData) {
             contactResponse = await createBluswapContact(payoutData);
         } catch (err) {
             const errData = err.response ? err.response.data : { message: err.message };
+            const contactError = bluswapErrorMessage(errData, err.message || 'Failed to create BluSwap contact');
             recordTraceEvent({
                 reference_id: payoutData.reference_id, trace_type: 'payout', stage: STAGES.GATEWAY_RESPONSE,
                 status: 'failed', source: 'api', gateway_name: 'BluSwap',
                 latency_ms: Date.now() - startTime,
                 detail: 'BluSwap create-contact step failed',
-                error: errData.message || err.message, payload: { step: 'create_contact', response: errData }
+                error: contactError, payload: { step: 'create_contact', response: errData }
             });
-            throw new Error(errData.message || 'Failed to create BluSwap contact');
+            throw new Error(contactError);
         }
 
         const contactId = contactResponse.data?.data?.contact_id;
         if (!contactId) {
-            throw new Error(contactResponse.data?.message || 'BluSwap contact creation did not return a contact_id');
+            throw new Error(bluswapErrorMessage(contactResponse.data, 'contact creation did not return a contact_id'));
         }
 
         const payload = {
@@ -126,8 +165,8 @@ async function bluswapPayout(payoutData) {
             status: result.status === 'SUCCESS' ? 'ok' : 'failed', source: 'api', gateway_name: 'BluSwap',
             latency_ms: Date.now() - startTime,
             detail: result.status === 'SUCCESS' ? 'BluSwap accepted payout (processing)' : 'BluSwap rejected payout',
-            error: result.status === 'SUCCESS' ? null : (result.message || null),
-            payload: { status: result.status, message: result.message, transaction_id: result.data?.bluswap_transaction_id || null }
+            error: result.status === 'SUCCESS' ? null : bluswapErrorMessage(result, null),
+            payload: { status: result.status, message: result.message, detail: result.detail || null, transaction_id: result.data?.bluswap_transaction_id || null }
         });
 
         if (result.status === 'SUCCESS') {
@@ -176,7 +215,7 @@ async function bluswapPayout(payoutData) {
             return {
                 data: {
                     status: 'failed',
-                    message: result.message || 'Payout processing failed',
+                    message: bluswapErrorMessage(result, 'Payout processing failed'),
                     apitxnid: payoutData.reference_id
                 },
                 status: 400

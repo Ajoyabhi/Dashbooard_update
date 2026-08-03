@@ -545,9 +545,36 @@ const getPayoutTransactionStatus = async (req, res) => {
       });
     }
     else {
-      return res.status(400).json({
-        success: false,
-        message: 'Transaction status not found'
+      // The gateway could not return a status for this reference. The most common
+      // reason is that the payout failed *before* it ever reached the gateway
+      // (e.g. beneficiary/contact validation failed), so the gateway has no record
+      // of it and responds 404 — but our own DB already holds the authoritative
+      // terminal status. Fall back to our stored status instead of erroring, so the
+      // merchant always gets a real status for a transaction we know about.
+      const localStatus = transaction.status === 'processing' ? 'pending' : (transaction.status || 'pending');
+      const message = localStatus === 'success'
+        ? 'Transaction processed'
+        : localStatus === 'failed'
+          ? 'Transaction failed'
+          : 'Transaction is pending';
+
+      logger.info('Payout status served from local record (gateway had no status)', {
+        reference_id: transaction.reference_id,
+        local_status: transaction.status,
+        gateway_http: result?.status || null
+      });
+
+      return res.status(200).json({
+        success: true,
+        transaction: {
+          reference_id: transaction.reference_id,
+          type: 'payout',
+          status: localStatus,
+          amount: transaction.amount,
+          utr: transaction.gateway_response?.utr || null,
+          message,
+          timestamp: transaction.updatedAt || new Date().toISOString()
+        }
       });
     }
   } catch (error) {
