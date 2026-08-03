@@ -4,7 +4,7 @@ import DashboardLayout from '../../components/layout/DashboardLayout';
 import Table from '../../components/dashboard/Table';
 import { getMenuItems } from '../../utils/menuItems';
 import { useAuth } from '../../context/AuthContext';
-import { formatCurrency, formatDate, getStatusColor } from '../../utils/formatUtils';
+import { formatCurrency, formatDate, getStatusColor, formatPayoutReason } from '../../utils/formatUtils';
 import api from '../../utils/axios';
 
 interface PayoutRecord {
@@ -271,6 +271,21 @@ export default function PayoutReport() {
           {value.charAt(0).toUpperCase() + value.slice(1)}
         </span>
       ),
+    },
+    {
+      header: 'Reason',
+      accessor: 'gateway_response',
+      cell: (value: any, row: PayoutRecord) => {
+        const reason = formatPayoutReason(value?.message);
+        if (!reason || row.status === 'completed') {
+          return <span className="text-gray-400">—</span>;
+        }
+        return (
+          <span className="text-error-700 text-xs" title={value?.message}>
+            {reason}
+          </span>
+        );
+      },
     },
     {
       header: 'Date',

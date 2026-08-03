@@ -3,7 +3,7 @@ import { Button, Chip, MenuItem, Select, FormControl, InputLabel, TextField } fr
 import { Download, RefreshCw, Filter, X } from 'lucide-react'
 import DataTable, { Column } from '@/components/ui/DataTable'
 import api from '@/utils/axios'
-import { formatCurrency, formatDateTime } from '@/utils/formatUtils'
+import { formatCurrency, formatDateTime, formatPayoutReason } from '@/utils/formatUtils'
 import toast from 'react-hot-toast'
 
 interface PayoutRow {
@@ -40,6 +40,14 @@ const columns: Column<PayoutRow>[] = [
   {
     key: 'status', label: 'Status',
     render: (r) => <Chip label={r.status} size="small" color={statusColor(r.status)} sx={{ fontSize: '0.65rem', height: 20, borderRadius: '5px' }} />
+  },
+  {
+    key: 'reason', label: 'Reason',
+    render: (r) => {
+      const reason = formatPayoutReason(r.gateway_response?.message)
+      if (!reason || r.status === 'completed') return <span className="text-slate-300">—</span>
+      return <span className="text-red-600 text-xs" title={r.gateway_response?.message}>{reason}</span>
+    }
   },
   { key: 'createdAt', label: 'Date', render: (r) => <span className="text-xs text-slate-500">{formatDateTime(r.createdAt)}</span> },
 ]
