@@ -265,6 +265,28 @@ export default function DevelopmentDocs() {
             A <span className="font-mono">200</span> means the payout was <strong>accepted and is processing</strong> — not yet settled. The final <span className="font-mono">success</span> / <span className="font-mono">failed</span> status arrives via the webhook or the <strong>Check Transaction Status</strong> API. On rejection the API returns HTTP <span className="font-mono">400</span> with <span className="font-mono bg-slate-100 px-1 rounded">{`{ "success": false, "message": "...", "reference_id": "..." }`}</span>.
           </p>
         </div>
+
+        <div className="space-y-3">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Error Responses</p>
+          <p className="text-xs text-slate-500">
+            If the payout cannot be processed, the API responds with HTTP <span className="font-mono">400</span> and <span className="font-mono">success: false</span> along with a descriptive <span className="font-mono">message</span>.
+          </p>
+          <p className="text-xs font-semibold text-slate-600">Validation Error</p>
+          <p className="text-xs text-slate-500">
+            Returned when the payout or beneficiary details fail the payment gateway's validation checks — for example a malformed account number or IFSC, an unsupported amount, or a missing beneficiary field.
+          </p>
+          <CodeBlock title="json" code={`{
+  "success": false,
+  "message": "Validation error.",
+  "reference_id": "PAYOUT123456ABCD"
+}`} />
+          <p className="text-xs text-slate-500">
+            <strong>Recommended Action:</strong> Recheck the payout request fields (<span className="font-mono">account_number</span>, <span className="font-mono">account_ifsc</span>, <span className="font-mono">beneficiary_name</span>, <span className="font-mono">amount</span>, <span className="font-mono">request_type</span>) and re-submit with corrected details.
+          </p>
+          <p className="text-xs text-slate-500">
+            <strong>Note:</strong> Every payout rejection is returned as HTTP <span className="font-mono">400</span> with the shape <span className="font-mono bg-slate-100 px-1 rounded">{`{ "success": false, "message": "...", "reference_id": "..." }`}</span>. The <span className="font-mono">message</span> is passed through from the payment gateway, so treat it as a human-readable reason rather than a fixed set of values — always read <span className="font-mono">message</span> for the exact cause, and reconcile the final outcome via the <strong>Check Transaction Status</strong> API.
+          </p>
+        </div>
       </Section>
 
       {/* Transaction Status */}

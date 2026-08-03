@@ -232,6 +232,45 @@ export default function DevelopmentDocs() {
                 </pre>
               </div>
             </div>
+            <div>
+              <h3 className="text-lg font-semibold text-neutral-900 mb-2">Error Responses</h3>
+              <p className="text-neutral-600 mb-3">
+                If the payout cannot be processed, the API responds with HTTP <span className="font-mono">400</span> and
+                <span className="font-mono"> success: false</span> along with a descriptive
+                <span className="font-mono"> message</span>.
+              </p>
+
+              <p className="text-sm font-semibold text-neutral-700 mb-1">Validation Error</p>
+              <p className="text-sm text-neutral-600 mb-2">
+                Returned when the payout or beneficiary details fail the payment gateway's validation checks — for
+                example a malformed account number or IFSC, an unsupported amount, or a missing beneficiary field.
+              </p>
+              <div className="bg-neutral-100 rounded-xl p-4">
+                <pre className="text-sm text-neutral-800 overflow-x-auto">
+{`{
+  "success": false,
+  "message": "Validation error.",
+  "reference_id": "PAYOUT123456ABCD"
+}`}
+                </pre>
+              </div>
+              <p className="text-sm text-neutral-500 mt-2 mb-4">
+                <span className="font-semibold">Recommended Action:</span> Recheck the payout request fields
+                (<span className="font-mono">account_number</span>, <span className="font-mono">account_ifsc</span>,
+                <span className="font-mono"> beneficiary_name</span>, <span className="font-mono">amount</span>,
+                <span className="font-mono"> request_type</span>) and re-submit with corrected details.
+              </p>
+
+              <p className="text-sm text-neutral-500">
+                <span className="font-semibold">Note:</span> Every payout rejection is returned as HTTP{' '}
+                <span className="font-mono">400</span> with the shape{' '}
+                <span className="font-mono">{`{ "success": false, "message": "...", "reference_id": "..." }`}</span>.
+                The <span className="font-mono">message</span> is passed through from the payment gateway, so treat it as
+                a human-readable reason rather than a fixed set of values — always read{' '}
+                <span className="font-mono">message</span> for the exact cause, and reconcile the final outcome via the
+                Check Transaction Status API.
+              </p>
+            </div>
           </div>
         </div>
 
