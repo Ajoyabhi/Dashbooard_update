@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AccuzPay API Documentation</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #fff;
+        }
+
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+
+        h2 {
+            color: #34495e;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 8px;
+            margin-top: 40px;
+            margin-bottom: 20px;
+        }
+
+        h3 {
+            color: #2c3e50;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+
+        h4 {
+            color: #7f8c8d;
+            margin-top: 25px;
+            margin-bottom: 10px;
+        }
+
+        code {
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9em;
+            color: #e74c3c;
+        }
+
+        pre {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 15px 0;
+            border-left: 4px solid #3498db;
+        }
+
+        pre code {
+            background: none;
+            color: #ecf0f1;
+            padding: 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: #fff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        th,
+        td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background: #3498db;
+            color: white;
+            font-weight: 600;
+        }
+
+        tr:hover {
+            background: #f5f5f5;
+        }
+
+        .toc {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            border-left: 4px solid #3498db;
+        }
+
+        .toc ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .toc a {
+            color: #3498db;
+            text-decoration: none;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+        .endpoint {
+            background: #e8f5e8;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-weight: bold;
+            color: #27ae60;
+            margin: 10px 0;
+        }
+
+        .note {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+
+        .warning {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+
+        ul,
+        ol {
+            margin: 15px 0;
+            padding-left: 30px;
+        }
+
+        li {
+            margin: 8px 0;
+        }
+
+        .footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #ecf0f1;
+            text-align: center;
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+
+        @media print {
+            body {
+                font-size: 12pt;
+                line-height: 1.4;
+            }
+
+            h1,
+            h2,
+            h3 {
+                page-break-after: avoid;
+            }
+
+            pre,
+            table {
+                page-break-inside: avoid;
+            }
+
+            /* Hide file path and URL from print */
+            @page {
+                margin: 1in;
+
+                @bottom-center {
+                    content: "";
+                }
+
+                @bottom-left {
+                    content: "";
+                }
+
+                @bottom-right {
+                    content: "";
+                }
+            }
+
+            /* Additional CSS to prevent URL display */
+            body::after {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <h1>AccuzPay API Documentation</h1>
+
+    <div class="toc">
+        <h2>Table of Contents</h2>
+        <ul>
+            <li><a href="#introduction">Introduction</a></li>
+            <li><a href="#base-url">Base URL</a></li>
+            <li><a href="#authentication">Authentication</a></li>
+            <li><a href="#create-payin-transaction">Create Payin Transaction</a></li>
+            <li><a href="#create-payout-transaction">Create Payout Transaction</a></li>
+            <li><a href="#check-transaction-status">Check Transaction Status</a></li>
+            <li><a href="#check-account-balance">Check Account Balance</a></li>
+            <li><a href="#webhooks">Webhook / Callback Notifications</a></li>
+            <li><a href="#notes-requirements">Notes & Requirements</a></li>
+            <li><a href="#error-handling">Error Handling</a></li>
+            <li><a href="#best-practices">Best Practices</a></li>
+        </ul>
+    </div>
+
+    <h2 id="introduction">Introduction</h2>
+    <p>Use AccuzPay APIs to create payin and payout transactions and to track their status. This guide covers
+        authentication, endpoints, request/response formats, and best practices for integrating with our payment
+        gateway.</p>
+
+    <p>AccuzPay provides a comprehensive payment gateway solution that allows you to:</p>
+    <ul>
+        <li>Accept payments from customers (Payin)</li>
+        <li>Transfer money to beneficiaries (Payout)</li>
+        <li>Track transaction status in real-time</li>
+        <li>Monitor account balances and transaction limits</li>
+        <li>Receive real-time webhook notifications on status changes</li>
+    </ul>
+
+    <h2 id="base-url">Base URL</h2>
+    <p>All API endpoints are hosted at:</p>
+    <div class="endpoint">https://dashboard.accuzpay.in</div>
+
+    <h2 id="authentication">Authentication</h2>
+    <p>All API requests require authentication using JWT tokens. Include the token in the <code>Authorization</code>
+        header of your requests.</p>
+
+    <h3>Header Format</h3>
+    <pre><code>Authorization: YOUR_JWT_TOKEN
+Content-Type: application/json</code></pre>
+
+    <h3>Example</h3>
+    <pre><code>curl --location 'https://dashboard.accuzpay.in/api/payments/payin' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: YOUR_JWT_TOKEN' \
+--data '{...}'</code></pre>
+
+    <div class="note">
+        <strong>Note:</strong> Get your JWT token from the <a href="#">Developer Settings</a> section in your
+        dashboard.
+    </div>
+
+    <h2 id="create-payin-transaction">Create Payin Transaction</h2>
+    <p>Accept a payment from a customer. On success, you receive a payment URL / UPI intent to redirect or render for
+        the customer.</p>
+
+    <h3>Endpoint</h3>
+    <div class="endpoint">POST https://dashboard.accuzpay.in/api/payments/payin</div>
+
+    <h3>Request Body</h3>
+    <pre><code>{
+  "order_amount": 1000,
+  "name": "John Doe",
+  "email": "john@example.com",
+  "phone": "9876543210",
+  "reference_id": "TXN123456ABCD",
+  "address": {
+    "line1": "123 Main Street",
+    "line2": "Apt 4B",
+    "city": "Mumbai",
+    "state": "Maharashtra",
+    "pincode": "400001",
+    "country": "India"
+  }
+}</code></pre>
+
+    <h3>Parameters</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Parameter</th>
+                <th>Type</th>
+                <th>Required</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>order_amount</code></td>
+                <td>number</td>
+                <td>Yes</td>
+                <td>Amount in paise (₹10 = 1000 paise)</td>
+            </tr>
+            <tr>
+                <td><code>name</code></td>
+                <td>string</td>
+                <td>Yes</td>
+                <td>Customer's full name</td>
+            </tr>
+            <tr>
+                <td><code>email</code></td>
+                <td>string</td>
+                <td>Yes</td>
+                <td>Customer's email address</td>
+            </tr>
+            <tr>
+                <td><code>phone</code></td>
+                <td>string</td>
+                <td>Yes</td>
+                <td>Customer's phone number (exactly 10 digits)</td>
+            </tr>
+            <tr>
+                <td><code>reference_id</code></td>
+                <td>string</td>
+                <td>Yes</td>
+                <td>Your unique order ID (12–25 alphanumeric characters)</td>
+            </tr>
+            <tr>
+                <td><code>address</code></td>
+                <td>object</td>
+                <td>Yes</td>
+                <td>Customer's billing address object</td>
+            </tr>
+            <tr>
+                <td><code>address.pincode</code></td>
+                <td>string</td>
+                <td>Yes</td>
+                <td>6-digit postal/PIN code</td>
+            </tr>
+            <tr>
+                <td><code>address.line1</code></td>
+                <td>string</td>
+                <td>No</td>
+                <td>Street address line 1</td>
+            </tr>
+            <tr>
+                <td><code>address.line2</code></td>
+                <td>string</td>
+                <td>No</td>
+                <td>Street address line 2 (apartment, suite, etc.)</td>
+            </tr>
+            <tr>
+                <td><code>address.city</code></td>
+                <td>string</td>
+                <td>No</td>
+                <td>City name</td>
+            </tr>
+            <tr>
+                <td><code>address.state</code></td>
+                <td>string</td>
+                <td>No</td>
+                <td>State name</td>
+            </tr>
+            <tr>
+                <td><code>address.country</code></td>
+                <td>string</td>
+                <td>No</td>
+                <td>Country (default: India)</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="note">
+        <strong>Note:</strong> The <code>address</code> object itself is required, but only <code>address.pincode</code>
+        is validated as mandatory within it. The remaining address fields are optional and passed through as provided.
+    </div>
+
+    <h3>cURL Example</h3>
+    <pre><code>curl --location 'https://dashboard.accuzpay.in/api/payments/payin' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: YOUR_JWT_TOKEN' \
+--data '{
+  "order_amount": 1000,
+  "name": "John Doe",
+  "email": "john@example.com",
+  "phone": "9876543210",
+  "reference_id": "TXN123456ABCD",
+  "address": {
+    "line1": "123 Main Street",
+    "line2": "Apt 4B",
+    "city": "Mumbai",
+    "state": "Maharashtra",
+    "pincode": "400001",
+    "country": "India"
+  }
+}'</code></pre>
+
+    <h3>Response Example (200 OK)</h3>
+    <pre><code>{
+  "transaction_id": "550e8400-e29b-41d4-a716-446655440000",
+  "result": {
+    "success": true,
+    "reference_id": "APX1728394857123",
+    "payment_url": "upi://pay?pa=merchant@ybl&pn=AccuzPay&am=10.00&cu=INR&tn=TXN123456ABCD"
+  }
+}</code></pre>
+
+    <h4>Response Fields</h4>
+    <table>
+        <thead>
+            <tr>
+                <th>Field</th>
+                <th>Type</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>transaction_id</code></td>
+                <td>string</td>
+                <td>Internal transaction ID (UUID). Use this to trace the payment on your dashboard</td>
+            </tr>
+            <tr>
+                <td><code>result.success</code></td>
+                <td>boolean</td>
+                <td>true when the QR / payment intent was generated successfully</td>
+            </tr>
+            <tr>
+                <td><code>result.reference_id</code></td>
+                <td>string</td>
+                <td>Gateway's transaction reference. This differs from the <code>reference_id</code> you submitted</td>
+            </tr>
+            <tr>
+                <td><code>result.payment_url</code></td>
+                <td>string</td>
+                <td>UPI intent / QR string. Redirect or render this so the customer can complete payment</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="note">
+        <strong>Note:</strong> The payment is <code>pending</code> at this point — the customer still has to pay. Final
+        status arrives via the webhook or the <strong>Check Transaction Status</strong> API. On failure the API returns
+        HTTP <code>400</code> with <code>{ "success": false, "message": "..." }</code>.
+    </div>
+
+    <h2 id="create-payout-transaction">Create Payout Transaction</h2>
+    <p>Transfer money directly to a beneficiary bank account.</p>
+
+    <h3>Endpoint</h3>
+    <div class="endpoint">POST https://dashboard.accuzpay.in/api/payments/payout</div>
+
+    <h3>Request Body</h3>
+    <pre><code>{
+  "amount": "1000",
+  "account_number": "1234567890",
+  "account_ifsc": "SBIN0001234",
+  "bank_name": "State Bank of India",
+  "beneficiary_name": "John Doe",
+  "request_type": "IMPS",
+  "reference_id": "PAYOUT123456ABCD"
+}</code></pre>
+
+    <h3>Parameters</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Parameter</th>
+                <th>Type</th>
+                <th>Required</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>amount</code></td>
+                <td>string</td>
+                <td>Yes</td>
+                <td>Amount in rupees as a string (e.g. "1000"). Minimum ₹300</td>
+            </tr>
+            <tr>
+                <td><code>account_number</code></td>
+                <td>string</td>
+                <td>Yes</td>
+                <td>Beneficiary's bank account number</td>
+            </tr>
+            <tr>
+                <td><code>account_ifsc</code></td>
+                <td>string</td>
+                <td>Yes</td>
+                <td>IFSC code of the beneficiary bank branch</td>
+            </tr>
+            <tr>
+                <td><code>bank_name</code></td>
+                <td>string</td>
+                <td>Yes</td>
+                <td>Name of the beneficiary bank</td>
+            </tr>
+            <tr>
+                <td><code>beneficiary_name</code></td>
+                <td>string</td>
+                <td>Yes</td>
+                <td>Full name of the account holder</td>
+            </tr>
+            <tr>
+                <td><code>request_type</code></td>
+                <td>string</td>
+                <td>Yes</td>
+                <td>Transfer mode: <code>IMPS</code>, <code>NEFT</code>, or <code>RTGS</code></td>
+            </tr>
+            <tr>
+                <td><code>reference_id</code></td>
+                <td>string</td>
+                <td>Yes</td>
+                <td>Your unique payout ID (12–25 alphanumeric characters)</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>cURL Example</h3>
+    <pre><code>curl --location 'https://dashboard.accuzpay.in/api/payments/payout' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: YOUR_JWT_TOKEN' \
+--data '{
+  "amount": "1000",
+  "account_number": "1234567890",
+  "account_ifsc": "SBIN0001234",
+  "bank_name": "State Bank of India",
+  "beneficiary_name": "John Doe",
+  "request_type": "IMPS",
+  "reference_id": "PAYOUT123456ABCD"
+}'</code></pre>
+
+    <h3>Response Example (200 OK)</h3>
+    <pre><code>{
+  "success": true,
+  "message": "Payout initiated, awaiting confirmation",
+  "reference_id": "APX1728394857987",
+  "transaction_id": "TXN_ABC1234567"
+}</code></pre>
+
+    <h4>Response Fields</h4>
+    <table>
+        <thead>
+            <tr>
+                <th>Field</th>
+                <th>Type</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>success</code></td>
+                <td>boolean</td>
+                <td>true when the payout was accepted by the gateway</td>
+            </tr>
+            <tr>
+                <td><code>message</code></td>
+                <td>string</td>
+                <td>Human-readable status message</td>
+            </tr>
+            <tr>
+                <td><code>reference_id</code></td>
+                <td>string</td>
+                <td>Gateway's transaction reference for this payout</td>
+            </tr>
+            <tr>
+                <td><code>transaction_id</code></td>
+                <td>string</td>
+                <td>Gateway transaction ID for tracking / reconciliation</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="note">
+        <strong>Note:</strong> A <code>200</code> means the payout was <strong>accepted and is processing</strong> — not
+        yet settled. The final <code>success</code> / <code>failed</code> status arrives via the webhook or the
+        <strong>Check Transaction Status</strong> API. On rejection the API returns HTTP <code>400</code> with
+        <code>{ "success": false, "message": "...", "reference_id": "..." }</code>.
+    </div>
+
+    <h3>Error Responses</h3>
+    <p>If the payout cannot be processed, the API responds with an HTTP <code>400</code> and <code>success: false</code>
+        along with a descriptive <code>message</code>.</p>
+
+    <h4>Validation Error</h4>
+    <p>Returned when the payout or beneficiary details fail the payment gateway's validation checks — for example a
+        malformed account number or IFSC, an unsupported amount, or a missing beneficiary field. The
+        <code>message</code> names the specific field and reason that failed.
+    </p>
+    <pre><code>{
+  "success": false,
+  "message": "bank_account_number: Invalid Bank Account Number",
+  "reference_id": "PAYOUT123456ABCD"
+}</code></pre>
+    <div class="warning">
+        <strong>Recommended Action:</strong> Recheck the payout request fields (<code>account_number</code>,
+        <code>account_ifsc</code>, <code>beneficiary_name</code>, <code>amount</code>, <code>request_type</code>) and
+        re-submit with corrected details.
+    </div>
+
+    <div class="note">
+        <strong>Note:</strong> Every payout rejection is returned as HTTP <code>400</code> with the shape
+        <code>{ "success": false, "message": "...", "reference_id": "..." }</code>. The <code>message</code> is passed
+        through from the payment gateway, so treat it as a human-readable reason rather than a fixed set of values —
+        always read <code>message</code> to determine the exact cause, and reconcile the final outcome via the
+        <strong>Check Transaction Status</strong> API.
+    </div>
+
+    <h2 id="check-transaction-status">Check Transaction Status</h2>
+    <p>Check the status of payin and payout transactions using their reference ID. Both endpoints return the same
+        uniform <code>transaction</code> object.</p>
+
+    <h3>Payin Status</h3>
+
+    <h4>Endpoint</h4>
+    <div class="endpoint">GET https://dashboard.accuzpay.in/api/payments/payin/transaction/{order_id}</div>
+
+    <h4>cURL Example</h4>
+    <pre><code>curl --location 'https://dashboard.accuzpay.in/api/payments/payin/transaction/TXN123456ABCD' \
+--header 'Authorization: YOUR_JWT_TOKEN'</code></pre>
+
+    <h4>Response Example</h4>
+    <pre><code>{
+  "success": true,
+  "transaction": {
+    "reference_id": "TXN123456ABCD",
+    "type": "payin",
+    "status": "success",
+    "amount": 100,
+    "utr": "UTR123456789",
+    "message": "Transaction processed",
+    "timestamp": "2026-06-21T10:30:00.000Z"
+  }
+}</code></pre>
+
+    <h3>Payout Status</h3>
+
+    <h4>Endpoint</h4>
+    <div class="endpoint">GET https://dashboard.accuzpay.in/api/payments/payout/transaction/{order_id}</div>
+
+    <h4>cURL Example</h4>
+    <pre><code>curl --location 'https://dashboard.accuzpay.in/api/payments/payout/transaction/PAYOUT123456ABCD' \
+--header 'Authorization: YOUR_JWT_TOKEN'</code></pre>
+
+    <h4>Response Example</h4>
+    <pre><code>{
+  "success": true,
+  "transaction": {
+    "reference_id": "PAYOUT123456ABCD",
+    "type": "payout",
+    "status": "success",
+    "amount": 300,
+    "utr": "UTR123456789",
+    "message": "Transaction processed",
+    "timestamp": "2026-06-21T10:30:00.000Z"
+  }
+}</code></pre>
+
+    <div class="note">
+        <strong>Note:</strong> Both status APIs return the same uniform <code>transaction</code> object.
+        <code>status</code> is always one of <code>success</code>, <code>failed</code> or <code>pending</code>, and
+        <code>utr</code> is <code>null</code> unless the transaction succeeded.
+    </div>
+
+    <h3>Transaction Status Values</h3>
+    <p>Every merchant-facing payload (both status APIs and both webhooks) uses the same <code>status</code> values:</p>
+    <ul>
+        <li><code>success</code> - Transaction completed successfully</li>
+        <li><code>failed</code> - Transaction failed</li>
+        <li><code>pending</code> - Transaction is still being processed</li>
+    </ul>
+
+    <h2 id="check-account-balance">Check Account Balance</h2>
+    <p>Retrieve your current wallet balance and available limits.</p>
+
+    <h3>Endpoint</h3>
+    <div class="endpoint">GET https://dashboard.accuzpay.in/api/payments/balanceCheck</div>
+
+    <h3>cURL Example</h3>
+    <pre><code>curl --location 'https://dashboard.accuzpay.in/api/payments/balanceCheck' \
+--header 'Authorization: YOUR_JWT_TOKEN'</code></pre>
+
+    <h3>Response Example</h3>
+    <pre><code>{
+  "success": true,
+  "message": "Balance check successful",
+  "data": {
+    "wallet_balance": 50000,
+    "settlement_balance": 25000
+  }
+}</code></pre>
+
+    <h2 id="webhooks">Webhook / Callback Notifications</h2>
+    <p>AccuzPay sends an HTTP <code>POST</code> request to your registered callback URL whenever a transaction status
+        changes. Configure your callback URLs in the Developer Settings section of your dashboard.</p>
+
+    <h3>Payin Callback Payload</h3>
+    <p>Sent when a payin transaction succeeds or fails.</p>
+    <pre><code>{
+  "reference_id": "TXN123456ABCD",
+  "type": "payin",
+  "status": "success",
+  "amount": 1000,
+  "utr": "UTR123456789",
+  "message": "Transaction processed",
+  "timestamp": "2026-06-21T10:30:00.000Z"
+}</code></pre>
+
+    <h3>Payout Callback Payload</h3>
+    <p>Sent when a payout transaction succeeds or fails.</p>
+    <pre><code>{
+  "reference_id": "PAYOUT123456ABCD",
+  "type": "payout",
+  "status": "success",
+  "amount": 1000,
+  "utr": "UTR123456789",
+  "message": "Transaction processed",
+  "timestamp": "2026-06-21T10:30:00.000Z"
+}</code></pre>
+
+    <div class="note">
+        <strong>Note:</strong> Payin and payout callbacks share the same structure and the same key order.
+        <code>status</code>
+        is always one of <code>success</code>, <code>failed</code> or <code>pending</code> for both, and
+        <code>type</code>
+        distinguishes a payin from a payout. On a failed transaction, <code>utr</code> is <code>null</code>.
+    </div>
+
+    <h3>Callback Fields</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Field</th>
+                <th>Type</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>reference_id</code></td>
+                <td>string</td>
+                <td>Your unique reference ID sent during transaction initiation</td>
+            </tr>
+            <tr>
+                <td><code>type</code></td>
+                <td>string</td>
+                <td>Transaction type: <code>payin</code> or <code>payout</code></td>
+            </tr>
+            <tr>
+                <td><code>status</code></td>
+                <td>string</td>
+                <td>Transaction status: <code>success</code>, <code>failed</code> or <code>pending</code> (same values
+                    for payin and payout)</td>
+            </tr>
+            <tr>
+                <td><code>amount</code></td>
+                <td>number</td>
+                <td>Transaction amount</td>
+            </tr>
+            <tr>
+                <td><code>utr</code></td>
+                <td>string</td>
+                <td>Unique Transaction Reference from the bank. null if failed</td>
+            </tr>
+            <tr>
+                <td><code>message</code></td>
+                <td>string</td>
+                <td>Human-readable status message</td>
+            </tr>
+            <tr>
+                <td><code>timestamp</code></td>
+                <td>string</td>
+                <td>ISO 8601 timestamp of when the callback was sent</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="success">
+        <h4>Callback Best Practices</h4>
+        <ul>
+            <li>Always return a <code>200 OK</code> response from your callback endpoint, otherwise AccuzPay will
+                retry (up to 3 attempts with exponential backoff).</li>
+            <li>Verify the <code>reference_id</code> against your own records before updating transaction status.</li>
+            <li>Do not rely solely on the callback — use the <strong>Check Transaction Status</strong> API as a
+                fallback.</li>
+            <li>Your callback endpoint must respond within <strong>5 seconds</strong> to avoid a timeout.</li>
+        </ul>
+    </div>
+
+    <h2 id="notes-requirements">Notes & Requirements</h2>
+
+    <h3>Important Guidelines</h3>
+
+    <div class="note">
+        <h4>1. Reference ID Requirements</h4>
+        <ul>
+            <li><code>reference_id</code> must be a unique alphanumeric string</li>
+            <li>Length should be between 12 to 25 characters</li>
+            <li>Must be unique across all your transactions</li>
+        </ul>
+    </div>
+
+    <div class="note">
+        <h4>2. Data Format Requirements</h4>
+        <ul>
+            <li>Phone numbers must be exactly 10 digits</li>
+            <li>Email addresses should be valid format</li>
+            <li>The <code>address</code> object is required for payin; at minimum, <code>address.pincode</code> must
+                be provided</li>
+        </ul>
+    </div>
+
+    <div class="note">
+        <h4>3. Request Headers</h4>
+        <ul>
+            <li>Always include <code>Content-Type: application/json</code> for POST requests</li>
+            <li>Include <code>Authorization: YOUR_JWT_TOKEN</code> in all requests</li>
+        </ul>
+    </div>
+
+    <div class="warning">
+        <h4>4. Authentication</h4>
+        <ul>
+            <li>Get your JWT token from Developer Settings in your dashboard</li>
+            <li>Keep your token secure and don't share it publicly</li>
+            <li>Tokens may expire and need to be refreshed</li>
+        </ul>
+    </div>
+
+    <div class="note">
+        <h4>5. Payout Minimums</h4>
+        <ul>
+            <li>Minimum payout amount is ₹300</li>
+            <li>Duplicate <code>reference_id</code> values are rejected</li>
+            <li>The IP address making the payout request must be whitelisted for your account</li>
+        </ul>
+    </div>
+
+    <h2 id="error-handling">Error Handling</h2>
+
+    <h3>Common Error Responses</h3>
+
+    <h4>400 Bad Request</h4>
+    <pre><code>{
+  "success": false,
+  "message": "Invalid request parameters"
+}</code></pre>
+
+    <h4>401 Unauthorized</h4>
+    <pre><code>{
+  "success": false,
+  "message": "Invalid or expired JWT token"
+}</code></pre>
+
+    <h4>403 Forbidden</h4>
+    <pre><code>{
+  "success": false,
+  "message": "Insufficient balance for transaction"
+}</code></pre>
+
+    <h4>404 Not Found</h4>
+    <pre><code>{
+  "success": false,
+  "message": "Transaction not found"
+}</code></pre>
+
+    <h4>429 Too Many Requests</h4>
+    <pre><code>{
+  "success": false,
+  "message": "Too many repeated requests with the same amount, please try again later"
+}</code></pre>
+
+    <h4>500 Internal Server Error</h4>
+    <pre><code>{
+  "success": false,
+  "message": "An unexpected error occurred"
+}</code></pre>
+
+    <h3>Error Handling Best Practices</h3>
+    <ol>
+        <li>Always check the <code>success</code> field in responses</li>
+        <li>Handle different HTTP status codes appropriately</li>
+        <li>Implement retry logic for transient errors</li>
+        <li>Log errors for debugging purposes</li>
+        <li>Display user-friendly error messages</li>
+    </ol>
+
+    <h2 id="best-practices">Best Practices</h2>
+
+    <h3>Security</h3>
+    <ol>
+        <li><strong>Never expose your JWT token</strong> in client-side code</li>
+        <li><strong>Use HTTPS</strong> for all API communications</li>
+        <li><strong>Validate all inputs</strong> before sending requests</li>
+        <li><strong>Implement proper error handling</strong> to avoid exposing sensitive information</li>
+    </ol>
+
+    <h3>Integration</h3>
+    <ol>
+        <li><strong>Use unique <code>reference_id</code> values</strong> for every transaction — duplicates are
+            rejected outright</li>
+        <li><strong>Use webhooks</strong> for real-time transaction status updates instead of polling</li>
+        <li><strong>Always confirm with the Check Transaction Status API</strong> before treating a webhook as the
+            sole source of truth</li>
+        <li><strong>Keep transaction records</strong> for reconciliation</li>
+        <li><strong>Whitelist your server IP</strong> before attempting payouts</li>
+    </ol>
+
+    <h3>Monitoring</h3>
+    <ol>
+        <li><strong>Monitor API response times</strong> and error rates</li>
+        <li><strong>Set up alerts</strong> for failed transactions</li>
+        <li><strong>Track transaction volumes</strong> and patterns</li>
+        <li><strong>Regular reconciliation</strong> of transactions</li>
+    </ol>
+
+    <h2>Support</h2>
+    <p>For technical support and questions:</p>
+    <ul>
+        <li>Email: support@accuzpay.in</li>
+        <li>Documentation: Available in your dashboard under Development Docs</li>
+        <li>Status Page: Check for service updates</li>
+    </ul>
+
+    <div class="footer">
+        <p><strong>Document Version:</strong> 2.0<br>
+            <strong>Last Updated:</strong> July 2026<br>
+            <strong>API Version:</strong> v1
+        </p>
+
+        <p><em>This documentation is provided as-is and may be updated periodically. Please refer to the latest version
+                in your dashboard for the most current information.</em></p>
+    </div>
+</body>
+
+</html>
