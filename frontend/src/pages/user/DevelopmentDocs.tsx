@@ -127,17 +127,17 @@ export default function DevelopmentDocs() {
                   <tbody className="divide-y divide-gray-200">
                     {[
                       { param: 'order_amount', type: 'number', required: 'Yes', desc: 'Amount to be charged (in paise)' },
-                      { param: 'name',         type: 'string', required: 'Yes', desc: "Customer's full name" },
-                      { param: 'email',        type: 'string', required: 'Yes', desc: "Customer's email address" },
-                      { param: 'phone',        type: 'string', required: 'Yes', desc: "Customer's phone number (10 digits)" },
+                      { param: 'name', type: 'string', required: 'Yes', desc: "Customer's full name" },
+                      { param: 'email', type: 'string', required: 'Yes', desc: "Customer's email address" },
+                      { param: 'phone', type: 'string', required: 'Yes', desc: "Customer's phone number (10 digits)" },
                       { param: 'reference_id', type: 'string', required: 'Yes', desc: 'Unique reference ID (12-25 alphanumeric characters)' },
-                      { param: 'address',          type: 'object', required: 'Yes', desc: "Customer's billing address" },
-                      { param: 'address.pincode',  type: 'string', required: 'Yes', desc: '6-digit postal/PIN code' },
-                      { param: 'address.line1',    type: 'string', required: 'No',  desc: 'Street address line 1' },
-                      { param: 'address.line2',    type: 'string', required: 'No',  desc: 'Street address line 2 (apartment, suite, etc.)' },
-                      { param: 'address.city',     type: 'string', required: 'No',  desc: 'City name' },
-                      { param: 'address.state',    type: 'string', required: 'No',  desc: 'State name' },
-                      { param: 'address.country',  type: 'string', required: 'No',  desc: 'Country name (default: India)' },
+                      { param: 'address', type: 'object', required: 'Yes', desc: "Customer's billing address" },
+                      { param: 'address.pincode', type: 'string', required: 'Yes', desc: '6-digit postal/PIN code' },
+                      { param: 'address.line1', type: 'string', required: 'No', desc: 'Street address line 1' },
+                      { param: 'address.line2', type: 'string', required: 'No', desc: 'Street address line 2 (apartment, suite, etc.)' },
+                      { param: 'address.city', type: 'string', required: 'No', desc: 'City name' },
+                      { param: 'address.state', type: 'string', required: 'No', desc: 'State name' },
+                      { param: 'address.country', type: 'string', required: 'No', desc: 'Country name (default: India)' },
                     ].map(({ param, type, required, desc }) => (
                       <tr key={param} className="bg-white hover:bg-gray-50">
                         <td className="px-4 py-2 font-mono text-indigo-700">{param}</td>
@@ -248,7 +248,7 @@ export default function DevelopmentDocs() {
               </p>
               <div className="bg-neutral-100 rounded-xl p-4">
                 <pre className="text-sm text-neutral-800 overflow-x-auto">
-{`{
+                  {`{
   "success": false,
   "message": "bank_account_number: Invalid Bank Account Number",
   "reference_id": "PAYOUT123456ABCD"
@@ -262,15 +262,6 @@ export default function DevelopmentDocs() {
                 <span className="font-mono"> request_type</span>) and re-submit with corrected details.
               </p>
 
-              <p className="text-sm text-neutral-500">
-                <span className="font-semibold">Note:</span> Every payout rejection is returned as HTTP{' '}
-                <span className="font-mono">400</span> with the shape{' '}
-                <span className="font-mono">{`{ "success": false, "message": "...", "reference_id": "..." }`}</span>.
-                The <span className="font-mono">message</span> is passed through from the payment gateway, so treat it as
-                a human-readable reason rather than a fixed set of values — always read{' '}
-                <span className="font-mono">message</span> for the exact cause, and reconcile the final outcome via the
-                Check Transaction Status API.
-              </p>
             </div>
           </div>
         </div>
@@ -296,7 +287,7 @@ export default function DevelopmentDocs() {
               <p className="text-sm text-neutral-500 mt-2 mb-1">Response</p>
               <div className="bg-neutral-100 rounded-xl p-4">
                 <pre className="text-sm text-neutral-800 overflow-x-auto">
-{`{
+                  {`{
   "success": true,
   "transaction": {
     "reference_id": "TXN123456ABCD",
@@ -322,7 +313,7 @@ export default function DevelopmentDocs() {
               <p className="text-sm text-neutral-500 mt-2 mb-1">Response</p>
               <div className="bg-neutral-100 rounded-xl p-4">
                 <pre className="text-sm text-neutral-800 overflow-x-auto">
-{`{
+                  {`{
   "success": true,
   "transaction": {
     "reference_id": "PAYOUT123456ABCD",
@@ -389,7 +380,7 @@ export default function DevelopmentDocs() {
               <p className="text-sm text-neutral-500 mb-3">Sent when a payin transaction succeeds or fails.</p>
               <div className="bg-neutral-100 rounded-xl p-4">
                 <pre className="text-sm text-neutral-800 overflow-x-auto">
-{`{
+                  {`{
   "reference_id": "PAYO454789251396",
   "type": "payin",
   "status": "success",
@@ -408,7 +399,7 @@ export default function DevelopmentDocs() {
               <p className="text-sm text-neutral-500 mb-3">Sent when a payout transaction succeeds or fails.</p>
               <div className="bg-neutral-100 rounded-xl p-4">
                 <pre className="text-sm text-neutral-800 overflow-x-auto">
-{`{
+                  {`{
   "reference_id": "PAYOUT123456",
   "type": "payout",
   "status": "success",
@@ -436,12 +427,12 @@ export default function DevelopmentDocs() {
                   <tbody className="divide-y divide-gray-200">
                     {[
                       { field: 'reference_id', type: 'string', desc: 'Your unique reference ID sent during transaction initiation' },
-                      { field: 'type',         type: 'string', desc: 'Transaction type: "payin" or "payout"' },
-                      { field: 'status',       type: 'string', desc: 'Transaction status: "success", "failed" or "pending" (same values for payin and payout)' },
-                      { field: 'amount',       type: 'number', desc: 'Transaction amount' },
-                      { field: 'utr',          type: 'string', desc: 'Unique Transaction Reference from the bank. null if failed' },
-                      { field: 'message',      type: 'string', desc: 'Human-readable status message' },
-                      { field: 'timestamp',    type: 'string', desc: 'ISO 8601 timestamp of when the callback was sent' },
+                      { field: 'type', type: 'string', desc: 'Transaction type: "payin" or "payout"' },
+                      { field: 'status', type: 'string', desc: 'Transaction status: "success", "failed" or "pending" (same values for payin and payout)' },
+                      { field: 'amount', type: 'number', desc: 'Transaction amount' },
+                      { field: 'utr', type: 'string', desc: 'Unique Transaction Reference from the bank. null if failed' },
+                      { field: 'message', type: 'string', desc: 'Human-readable status message' },
+                      { field: 'timestamp', type: 'string', desc: 'ISO 8601 timestamp of when the callback was sent' },
                     ].map(({ field, type, desc }) => (
                       <tr key={field} className="bg-white hover:bg-gray-50">
                         <td className="px-4 py-2 font-mono text-indigo-700">{field}</td>
