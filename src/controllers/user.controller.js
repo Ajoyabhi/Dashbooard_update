@@ -732,12 +732,23 @@ const getUserDashboard = async (req, res) => {
     const todayPayinAggregate = todayPayinAgg[0] || emptyTodayAgg;
     const todayPayoutAggregate = todayPayoutAgg[0] || emptyTodayAgg;
 
-    // Get all transactions for total calculations
-    const allTransactions = await TransactionCharges.findAll({
-      where: {
-        user_id: req.user.id
-      }
-    });
+    // Total (all-time) figures come from the same MongoDB source of truth as the
+    // "today" figures above — NOT the SQL TransactionCharges mirror, which is
+    // missing rows whenever TransactionCharges.create fails validation on
+    // completion. Using the same all-time match (no IST day window) guarantees
+    // total == today for a user whose only transactions are from today.
+    const allTimeMatch = {
+      'user.user_id': req.user.id.toString(),
+      status: 'completed'
+    };
+
+    const [totalPayinAgg, totalPayoutAgg] = await Promise.all([
+      PayinTransaction.aggregate([{ $match: allTimeMatch }, { $group: todaySumGroup }]),
+      PayoutTransaction.aggregate([{ $match: allTimeMatch }, { $group: todaySumGroup }])
+    ]);
+
+    const totalPayinAggregate = totalPayinAgg[0] || emptyTodayAgg;
+    const totalPayoutAggregate = totalPayoutAgg[0] || emptyTodayAgg;
 
     // Get recent payin transactions
     const recentPayins = await PayinTransaction.find({
@@ -772,58 +783,21 @@ const getUserDashboard = async (req, res) => {
       todayPayoutAggregate.total_gst +
       todayPayoutAggregate.total_platform_fee;
 
-    // Calculate total pay-in and payout with charges handling
-    const totalPayin = allTransactions
-      .filter(t => t.transaction_type === 'payin' && t.status === 'completed')
-      .reduce((sum, t) => {
-        const amount = parseFloat(t.transaction_amount);
-        // Use merchant_charge (admin charge) only — NOT total_charges — so the
-        // net matches exactly what is credited to the wallet on completion.
-        const charges = parseFloat(t.merchant_charge) || 0;
-        const gst = parseFloat(t.gst_amount) || 0;
-        const platformFee = parseFloat(t.platform_fee) || 0;
+    // Total net pay-in mirrors the today formula: amount - admin_charge (==
+    // merchant_charge) - gst - platform_fee, so the net matches exactly what is
+    // credited to the wallet on completion.
+    const totalPayin =
+      totalPayinAggregate.total_amount -
+      totalPayinAggregate.total_admin_charge -
+      totalPayinAggregate.total_gst -
+      totalPayinAggregate.total_platform_fee;
 
-        // Case 1: Deduct charges, GST, platform fee from payin
-        const netAmount = amount - charges - gst - platformFee;
-        return sum + netAmount;
-      }, 0);
-
-    const totalPayout = allTransactions
-      .filter(t => t.transaction_type === 'payout' && t.status === 'completed')
-      .reduce((sum, t) => {
-        const amount = parseFloat(t.transaction_amount);
-        const charges = parseFloat(t.total_charges) || 0;
-        const gst = parseFloat(t.gst_amount) || 0;
-        const platformFee = parseFloat(t.platform_fee) || 0;
-
-        // Case 2: Add charges, GST, platform fee to payout
-        const totalAmount = amount + charges + gst + platformFee;
-        return sum + totalAmount;
-      }, 0);
-    // Calculate detailed breakdown for charges
-    const calculateChargesBreakdown = (transactions, type) => {
-      const filteredTransactions = transactions.filter(t => t.transaction_type === type && t.status === 'completed');
-
-      const breakdown = filteredTransactions.reduce((acc, t) => {
-        const charges = parseFloat(t.total_charges) || 0;
-        const gst = parseFloat(t.gst_amount) || 0;
-        const platformFee = parseFloat(t.platform_fee) || 0;
-
-        acc.total_charges += charges;
-        acc.total_gst += gst;
-        acc.total_platform_fee += platformFee;
-        acc.total_transactions += 1;
-
-        return acc;
-      }, {
-        total_charges: 0,
-        total_gst: 0,
-        total_platform_fee: 0,
-        total_transactions: 0
-      });
-
-      return breakdown;
-    };
+    // Total payout adds charges, GST and platform fee to the transferred amount.
+    const totalPayout =
+      totalPayoutAggregate.total_amount +
+      totalPayoutAggregate.total_charges +
+      totalPayoutAggregate.total_gst +
+      totalPayoutAggregate.total_platform_fee;
 
     // Today's breakdowns come from the same Mongo aggregation as the figures above.
     const todayPayinBreakdown = {
@@ -838,8 +812,19 @@ const getUserDashboard = async (req, res) => {
       total_platform_fee: todayPayoutAggregate.total_platform_fee,
       total_transactions: todayPayoutAggregate.transaction_count
     };
-    const totalPayinBreakdown = calculateChargesBreakdown(allTransactions, 'payin');
-    const totalPayoutBreakdown = calculateChargesBreakdown(allTransactions, 'payout');
+    // Total breakdowns come from the same all-time Mongo aggregation as the figures above.
+    const totalPayinBreakdown = {
+      total_charges: totalPayinAggregate.total_charges,
+      total_gst: totalPayinAggregate.total_gst,
+      total_platform_fee: totalPayinAggregate.total_platform_fee,
+      total_transactions: totalPayinAggregate.transaction_count
+    };
+    const totalPayoutBreakdown = {
+      total_charges: totalPayoutAggregate.total_charges,
+      total_gst: totalPayoutAggregate.total_gst,
+      total_platform_fee: totalPayoutAggregate.total_platform_fee,
+      total_transactions: totalPayoutAggregate.transaction_count
+    };
 
     // Prepare response object
     const dashboardData = {
