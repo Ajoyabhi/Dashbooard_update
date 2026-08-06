@@ -8,10 +8,12 @@ const { validatePaymentRequest } = require('../controllers/payment.controller');
 const PayoutTransaction = require('../models/payoutTransaction.model');
 const { Op } = require('sequelize');
 const { bluswapPayout } = require('../merchant_payin_payout/merchant_payout_request');
+const { mizorpayPayout } = require('../merchant_payin_payout/mizorpay_payout_request');
+const { getRandomMizorpayContact } = require('../utils/mizorpayContact');
 const getClientIp = require('../utils/getClientIp');
 const mongoose = require('mongoose');
 const axios = require('axios');
-const { bluswapTransactionStatus } = require('../transactionStatusCheck/TransactionCheck');
+const { bluswapTransactionStatus, mizorpayTransactionStatus } = require('../transactionStatusCheck/TransactionCheck');
 const { reconcilePayoutTransaction, finalizePayout } = require('../services/payoutReconciliation.service');
 const { recordTraceEvent, STAGES } = require('../services/transactionTrace.service');
 
@@ -243,8 +245,12 @@ const initiatePayout = async (req, res) => {
       platformFee = (totalCharges * parseFloat(platformCharges.charge)) / 100;
     }
 
-    if (platformCharges?.gst) {
-      gstAmount = (totalCharges * parseFloat(platformCharges.gst)) / 100;
+    // Per-user GST override: use the merchant's own gst % when set (incl. 0%),
+    // otherwise fall back to the global PlatformCharges.gst. `?? ` (not `||`) so a
+    // deliberate 0% override is honoured instead of falling through to global.
+    const gstRate = user.MerchantDetail?.gst ?? platformCharges?.gst;
+    if (gstRate) {
+      gstAmount = (totalCharges * parseFloat(gstRate)) / 100;
     }
 
     // Update total charges to include platform fee and GST
@@ -405,6 +411,43 @@ const initiatePayout = async (req, res) => {
           reference_id: result?.data?.apitxnid || reference_id
         });
       }
+    } else if (user.MerchantDetail.payout_merchant_name === 'MizorPay') {
+      // MizorPay requires beneficiary email + mobile (contract §1), which our
+      // upstream payout request does not carry. We inject a random pair from the
+      // synthetic pool — used ONLY on the MizorPay path (see utils/mizorpayContact.js).
+      const mizorContact = getRandomMizorpayContact();
+      const payoutData = {
+        reference_id,
+        user_id,
+        amount,
+        amountToDeduct,
+        request_type,
+        beneficiary_details: {
+          account_number,
+          account_ifsc,
+          bank_name,
+          beneficiary_name,
+          mobile: mizorContact.mobile,
+          email: mizorContact.email
+        }
+      };
+      result = await mizorpayPayout(payoutData);
+      console.log("this is result of mizorpay payout", result)
+      if (result?.status == 200 && result.data.status === 'processing') {
+        return res.status(200).json({
+          success: true,
+          message: result.data.message || 'Payout initiated, awaiting confirmation',
+          reference_id: result.data.apitxnid,
+          transaction_id: result.data.transaction_id
+        });
+      } else {
+        await failPayoutWithRefund(reference_id, result?.data?.message || 'Payout processing failed');
+        return res.status(400).json({
+          success: false,
+          message: result?.data?.message || 'Payout processing failed',
+          reference_id: result?.data?.apitxnid || reference_id
+        });
+      }
     } else {
       // No supported payout gateway configured for this merchant. Reverse the
       // settlement we already deducted and reject.
@@ -467,6 +510,9 @@ const getPayoutTransactionStatus = async (req, res) => {
     if (user.MerchantDetail.payout_merchant_name === 'BluSwap') {
       result = await bluswapTransactionStatus(transaction_id);
       console.log("this is result of bluswap payout", result)
+    } else if (user.MerchantDetail.payout_merchant_name === 'MizorPay') {
+      result = await mizorpayTransactionStatus(transaction_id);
+      console.log("this is result of mizorpay payout", result)
     } else {
       return res.status(400).json({
         success: false,
@@ -496,7 +542,7 @@ const getPayoutTransactionStatus = async (req, res) => {
       ) {
         try {
           const gatewayTransactionId =
-            gw.bluswap_transaction_id || gw.transaction_id || gw.txn_id || gw.merchant_order_id || null;
+            gw.bluswap_transaction_id || gw.provider_payout_id || gw.payout_order_id || gw.transaction_id || gw.txn_id || gw.merchant_order_id || null;
           const reconciliation = await finalizePayout({
             referenceId: transaction.reference_id,
             isSuccess: normalizedStatus === 'success',

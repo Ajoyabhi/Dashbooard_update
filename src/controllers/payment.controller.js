@@ -3,7 +3,7 @@ const axios = require('axios');
 const { logger } = require('../utils/logger');
 const { processPayin } = require('../services/payment.service');
 const { recordTraceEvent, STAGES } = require('../services/transactionTrace.service');
-const { callbackQueue, bluswapPayoutQueue, createRedisClient } = require('../config/queue.config');
+const { callbackQueue, bluswapPayoutQueue, mizorpayPayoutQueue, createRedisClient } = require('../config/queue.config');
 const PayinTransaction = require('../models/payinTransaction.model');
 const { extractFailureReason } = require('../utils/failureReason');
 const { MerchantDetails } = require('../models');
@@ -555,6 +555,53 @@ const handleBluswapPayoutCallback = async (req, res) => {
   }
 };
 
+const handleMizorpayPayoutCallback = async (req, res) => {
+  try {
+    const callbackData = req.method === 'GET' ? req.query : req.body;
+    logger.info('Received MizorPay payout callback', {
+      method: req.method,
+      data: callbackData
+    });
+
+    // Contract §3 body:
+    // { reference_id, status: 'TXN'|'FAILED', utr, amount, payment_id, error_message }
+    const mizorpayRef = callbackData?.reference_id || null;
+    const isSuccess = String(callbackData?.status || '').toUpperCase() === 'TXN';
+
+    recordTraceEvent({
+      reference_id: mizorpayRef, trace_type: 'payout', stage: STAGES.CALLBACK_RECEIVED,
+      status: isSuccess ? 'ok' : 'failed',
+      source: 'gateway_callback', gateway_name: 'MizorPay',
+      http: { method: req.method, url: '/api/payments/mizorpay/payout/callback' },
+      detail: `Inbound MizorPay payout callback: ${callbackData?.status != null ? callbackData.status : 'unknown'}`,
+      payload: { query: req.query, body: req.body }
+    });
+
+    const job = await mizorpayPayoutQueue.add(callbackData, {
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 5000
+      }
+    });
+
+    recordTraceEvent({
+      reference_id: mizorpayRef, trace_type: 'payout', stage: STAGES.QUEUED, status: 'info',
+      source: 'gateway_callback', gateway_name: 'MizorPay', detail: 'Enqueued to mizorpayPayoutQueue',
+      payload: { jobId: job.id }
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Callback processed successfully',
+      job_id: job.id
+    });
+  } catch (error) {
+    logger.error('Error processing MizorPay payout callback', { error: error.message });
+    res.status(500).json({ success: false, message: 'Error processing callback' });
+  }
+};
+
 // Map a gateway's raw status to our internal status (same rule as the worker).
 const mapCallbackStatus = (statuscode) =>
   (statuscode === 'TXN' || statuscode === 'SUCCESS') ? 'completed' : 'failed';
@@ -732,6 +779,7 @@ module.exports = {
   setValidationResult,
   validatePaymentRequestpayin,
   handleBluswapPayoutCallback,
+  handleMizorpayPayoutCallback,
   hdfcCallback,
   airpayCallback,
   razorpayCallback

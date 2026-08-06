@@ -38,6 +38,12 @@ module.exports = (sequelize) => {
         },
         payout_callback: {
             type: DataTypes.STRING(255)
+        },
+        gst: {
+            type: DataTypes.DECIMAL(10, 2),
+            allowNull: true,
+            defaultValue: null,
+            comment: 'Per-user GST percentage; NULL falls back to global PlatformCharges.gst'
         }
     }, {
         tableName: 'merchant_details',

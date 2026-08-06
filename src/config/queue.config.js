@@ -206,6 +206,43 @@ bluswapPayoutQueue.on('failed', (job, error) => {
 
 
 
+const mizorpayPayoutQueue = new Bull('mizorpayPayout', queueOptions);
+logger.info("MizorPay payout queue created with proper Redis configuration");
+
+mizorpayPayoutQueue.on('error', (error) => {
+  logger.error('MizorPay payout queue error:', error);
+  if (error.message.includes('Connection is closed')) {
+    logger.info('Attempting to recover from connection error...');
+    mizorpayPayoutQueue.resume();
+  }
+});
+
+mizorpayPayoutQueue.on('ready', () => {
+  logger.info('MizorPay payout queue is ready and connected to Redis');
+});
+
+mizorpayPayoutQueue.on('active', (job) => {
+  logger.info('MizorPay payout job started processing', {
+    jobId: job.id,
+    timestamp: new Date().toISOString()
+  });
+});
+
+mizorpayPayoutQueue.on('completed', (job) => {
+  logger.info('MizorPay payout job completed', {
+    jobId: job.id,
+    timestamp: new Date().toISOString()
+  });
+});
+
+mizorpayPayoutQueue.on('failed', (job, error) => {
+  logger.error('MizorPay payout job failed', {
+    jobId: job.id,
+    error: error.message,
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Apply event handlers to all clients
 handleRedisEvents(createRedisClient('client'), 'client');
 handleRedisEvents(createRedisClient('subscriber'), 'subscriber');
@@ -216,11 +253,13 @@ process.on('SIGTERM', async () => {
   logger.info('Shutting down queues...');
   await callbackQueue.close();
   await bluswapPayoutQueue.close();
+  await mizorpayPayoutQueue.close();
   process.exit(0);
 });
 
 module.exports = {
   callbackQueue,
   bluswapPayoutQueue,
+  mizorpayPayoutQueue,
   createRedisClient
 };

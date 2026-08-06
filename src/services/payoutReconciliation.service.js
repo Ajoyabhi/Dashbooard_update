@@ -2,7 +2,7 @@ const axios = require('axios');
 const { logger } = require('../utils/logger');
 const PayoutTransaction = require('../models/payoutTransaction.model');
 const { TransactionCharges, FinancialDetails, MerchantDetails } = require('../models');
-const { bluswapTransactionStatus } = require('../transactionStatusCheck/TransactionCheck');
+const { bluswapTransactionStatus, mizorpayTransactionStatus } = require('../transactionStatusCheck/TransactionCheck');
 const { recordTraceEvent, STAGES } = require('./transactionTrace.service');
 
 /**
@@ -215,6 +215,14 @@ async function reconcilePayoutTransaction(payoutTransaction) {
     utr = gatewayData.utr || null;
     gatewayTransactionId = gatewayData.bluswap_transaction_id || null;
     message = gatewayData.status_description || null;
+  } else if (merchantName === 'MizorPay') {
+    // MizorPay /check returns a flat body (contract §2), not nested under `data`.
+    const statusResult = await mizorpayTransactionStatus(referenceId);
+    const gatewayData = statusResult?.data?.response || {};
+    derived = statusResult?.data?.status; // 'success' | 'failed' | 'pending'
+    utr = gatewayData.utr || null;
+    gatewayTransactionId = gatewayData.provider_payout_id || gatewayData.payout_order_id || null;
+    message = gatewayData.failure_reason || null;
   } else {
     return { referenceId, changed: false, reason: 'unsupported_gateway', merchant: merchantName || null };
   }

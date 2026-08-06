@@ -83,7 +83,11 @@ const processPayin = async (data) => {
 
     const totalCharges = parseFloat(adminCharge);
     const platformFee = platformCharges?.charge ? (totalCharges * parseFloat(platformCharges.charge)) / 100 : 0;
-    const gstAmount = platformCharges?.gst ? (totalCharges * parseFloat(platformCharges.gst)) / 100 : 0;
+    // Per-user GST override: use the merchant's own gst % when set (incl. 0%),
+    // otherwise fall back to the global PlatformCharges.gst. `?? ` (not `||`) so a
+    // deliberate 0% override is honoured instead of falling through to global.
+    const gstRate = user.MerchantDetail?.gst ?? platformCharges?.gst;
+    const gstAmount = gstRate ? (totalCharges * parseFloat(gstRate)) / 100 : 0;
 
     // Initialize wallet if needed
     if (!user.FinancialDetail || user.FinancialDetail.wallet === null) {

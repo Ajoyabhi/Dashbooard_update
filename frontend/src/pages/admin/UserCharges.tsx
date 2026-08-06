@@ -53,10 +53,16 @@ export default function UserCharges() {
   const [newPlatformCharge, setNewPlatformCharge] = useState<Partial<PlatformCharge>>({});
   const [newIP, setNewIP] = useState<Partial<IPAddress>>({});
 
+  // Per-user GST override. Stored on the user's merchant_details row; an empty
+  // value means NULL in the DB, i.e. fall back to the global platform GST.
+  const [userGst, setUserGst] = useState<string>('');
+  const [savingGst, setSavingGst] = useState(false);
+
   useEffect(() => {
     fetchCharges();
     fetchPlatformCharges();
     fetchIPAddresses();
+    fetchUserGst();
   }, [userId]);
 
   const fetchCharges = async () => {
@@ -129,6 +135,58 @@ export default function UserCharges() {
       console.error('Error fetching IP addresses:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchUserGst = async () => {
+    try {
+      const response = await api.get(`/admin/users/${userId}/merchant-details`);
+      if (response.data.success && response.data.data) {
+        const gst = response.data.data.gst;
+        // null/undefined => no per-user override set yet; leave the field blank.
+        setUserGst(gst === null || gst === undefined ? '' : String(parseFloat(gst)));
+      } else {
+        setUserGst('');
+      }
+    } catch (err: any) {
+      console.error('Error fetching user GST:', err);
+    }
+  };
+
+  const handleSaveUserGst = async () => {
+    // Empty input clears the override -> send null so the user falls back to the
+    // global platform GST. Otherwise validate a 0-100 percentage.
+    const trimmed = userGst.trim();
+    let gstValue: number | null;
+    if (trimmed === '') {
+      gstValue = null;
+    } else {
+      const parsed = parseFloat(trimmed);
+      if (Number.isNaN(parsed) || parsed < 0 || parsed > 100) {
+        toast.error('GST must be a number between 0 and 100');
+        return;
+      }
+      gstValue = parsed;
+    }
+
+    try {
+      setSavingGst(true);
+      const response = await api.post(`/admin/users/${userId}/merchant-details`, { gst: gstValue });
+      if (response.data.success) {
+        setError(null);
+        toast.success(
+          gstValue === null
+            ? 'Per-user GST cleared — this user now uses the global GST'
+            : 'Per-user GST saved successfully'
+        );
+      } else {
+        toast.error(response.data.message || 'Failed to save GST');
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to save GST');
+      console.error('Error saving user GST:', err);
+    } finally {
+      setSavingGst(false);
     }
   };
 
@@ -562,6 +620,49 @@ export default function UserCharges() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        {/* Per-User GST */}
+        <div className="bg-white shadow-sm rounded-lg">
+          <div className="p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-medium text-gray-900">Per-User GST</h2>
+            </div>
+
+            <p className="text-sm text-gray-500 mb-4">
+              Overrides the global platform GST for this user only. Leave blank to
+              use the global GST
+              {platformCharges.length > 0 && (
+                <span className="font-medium text-gray-700"> (currently {platformCharges[0].gst}%)</span>
+              )}
+              . GST is charged as a percentage of the admin charge.
+            </p>
+
+            <div className="flex items-end gap-4">
+              <div className="w-48">
+                <label className="block text-sm font-medium text-gray-700">GST (%)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={userGst}
+                  onChange={(e) => setUserGst(e.target.value)}
+                  placeholder="Use global GST"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleSaveUserGst}
+                disabled={savingGst}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                {savingGst ? 'Saving...' : 'Save GST'}
+              </button>
+            </div>
           </div>
         </div>
 

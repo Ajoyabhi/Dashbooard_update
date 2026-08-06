@@ -1,4 +1,4 @@
-const { callbackQueue, bluswapPayoutQueue } = require('../config/queue.config');
+const { callbackQueue, bluswapPayoutQueue, mizorpayPayoutQueue } = require('../config/queue.config');
 const { finalizePayout } = require('../services/payoutReconciliation.service');
 const { recordTraceEvent, STAGES } = require('../services/transactionTrace.service');
 const { logger } = require('../utils/logger');
@@ -327,12 +327,74 @@ bluswapPayoutQueue.on('stalled', (job) => {
 });
 
 
+mizorpayPayoutQueue.process(async function (job) {
+  try {
+    logger.info('Processing mizorpay payout job', {
+      jobId: job.id,
+      data: job.data,
+      attempts: job.attemptsMade
+    });
+
+    // MizorPay result callback (contract §3):
+    // { reference_id, status: 'TXN'|'FAILED', utr, amount, payment_id, error_message }
+    const status = String(job.data?.status || '').toUpperCase();
+    const referenceId = job.data?.reference_id;
+    const utr = job.data?.utr || null;
+    const paymentId = job.data?.payment_id || null;
+    const isSuccess = status === 'TXN';
+
+    // Shared, idempotent finalization — same path used by BluSwap and the
+    // reconcile routes. Guards against double refund / duplicate merchant
+    // callback if a late webhook and a manual reconcile race each other.
+    const result = await finalizePayout({
+      referenceId,
+      isSuccess,
+      utr,
+      gatewayTransactionId: paymentId,
+      message: job.data?.error_message || null
+    });
+
+    logger.info('MizorPay payout finalized via callback', { jobId: job.id, referenceId, result });
+    return { success: true, jobId: job.id, ...result };
+  } catch (error) {
+    logger.error('Error processing mizorpay payout job', {
+      jobId: job.id,
+      error: error.message,
+      stack: error.stack,
+      attempts: job.attemptsMade
+    });
+    return { success: false, error: `Error is ${error}`, jobId: job.id };
+  }
+});
+
+mizorpayPayoutQueue.on('completed', (job, result) => {
+  logger.info('MizorPay payout job completed successfully', { jobId: job.id, result });
+});
+
+mizorpayPayoutQueue.on('failed', (job, error) => {
+  logger.error('MizorPay payout job failed', {
+    jobId: job.id,
+    error: error.message,
+    stack: error.stack,
+    attempts: job.attemptsMade
+  });
+});
+
+mizorpayPayoutQueue.on('stalled', (job) => {
+  logger.warn('MizorPay payout job stalled', {
+    jobId: job.id,
+    attempts: job.attemptsMade
+  });
+});
+
+
 // Handle process events
 process.on('SIGTERM', async () => {
   logger.info('Shutting down callback worker...');
   await mongoose.connection.close();
   await callbackQueue.close();
   await bluswapPayoutQueue.close();
+  await mizorpayPayoutQueue.close();
   process.exit(0);
 });
 

@@ -7,7 +7,8 @@ const axios = require('axios');
 const { sendMerchantPayoutCallback, finalizePayout } = require('../services/payoutReconciliation.service');
 const { getTransactionTrace } = require('../services/transactionTrace.service');
 const {
-  bluswapTransactionStatus
+  bluswapTransactionStatus,
+  mizorpayTransactionStatus
 } = require('../transactionStatusCheck/TransactionCheck');
 const { logger } = require('../utils/logger');
 const { istDayRange, istDaySkeleton } = require('../utils/istTime');
@@ -163,7 +164,8 @@ const addOrUpdateMerchantDetails = async (req, res) => {
             user_key,
             user_token,
             payin_callback,
-            payout_callback
+            payout_callback,
+            gst
         } = req.body;
 
         // Check if user exists
@@ -186,7 +188,9 @@ const addOrUpdateMerchantDetails = async (req, res) => {
                 user_key,
                 user_token,
                 payin_callback,
-                payout_callback
+                payout_callback,
+                // gst: per-user GST %; omit/undefined -> column default NULL (uses global GST).
+                gst
             }
         });
 
@@ -199,7 +203,11 @@ const addOrUpdateMerchantDetails = async (req, res) => {
                 user_key,
                 user_token,
                 payin_callback,
-                payout_callback
+                payout_callback,
+                // Send gst: <number> to set a per-user rate, gst: null to clear back to
+                // global. Undefined (field omitted) is ignored by Sequelize, so existing
+                // callers that don't send gst won't wipe an already-configured value.
+                gst
             });
         }
 
@@ -3701,6 +3709,7 @@ const getLivePayoutStatus = async (transaction) => {
 
     const statusFns = {
         BluSwap: bluswapTransactionStatus,
+        MizorPay: mizorpayTransactionStatus,
     };
     const fn = statusFns[merchantName];
     if (!fn) return { supported: false, merchantName: merchantName || null };
@@ -3720,8 +3729,8 @@ const getLivePayoutStatus = async (transaction) => {
         merchantName,
         derived,
         utr: gw.utr || gw.rrn || gw.bank_reference_id || transaction.gateway_response?.utr || null,
-        gatewayTransactionId: gw.bluswap_transaction_id || gw.transaction_id || null,
-        message: gw.status_description || gw.message || null,
+        gatewayTransactionId: gw.bluswap_transaction_id || gw.provider_payout_id || gw.payout_order_id || gw.transaction_id || null,
+        message: gw.status_description || gw.failure_reason || gw.message || null,
     };
 };
 

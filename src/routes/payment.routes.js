@@ -3,7 +3,7 @@ const router = express.Router();
 const { auth } = require('../middleware/auth.middleware');
 const { checkRole } = require('../middleware/role.middleware');
 const { initiatePayment, getTransactionStatus,
-  handleBluswapPayoutCallback, hdfcCallback, airpayCallback, razorpayCallback } = require('../controllers/payment.controller');
+  handleBluswapPayoutCallback, handleMizorpayPayoutCallback, hdfcCallback, airpayCallback, razorpayCallback } = require('../controllers/payment.controller');
 const { initiatePayout , getPayoutTransactionStatus, handleBalanceCheck, reconcilePayoutByReference, reconcileProcessingPayouts } = require('../controllers/payment.payout');
 
 
@@ -53,6 +53,11 @@ router.post('/payout/reconcile/:reference_id',
 // BluSwap callback route - no authentication needed as it's called by BluSwap
 router.get('/bluswap/payout/callback', handleBluswapPayoutCallback);
 router.post('/bluswap/payout/callback', handleBluswapPayoutCallback);
+
+// MizorPay result callback - authenticated by MizorPay's x-api-key at the app level;
+// no JWT since it's a server-to-server gateway callback (contract §3).
+router.get('/mizorpay/payout/callback', handleMizorpayPayoutCallback);
+router.post('/mizorpay/payout/callback', handleMizorpayPayoutCallback);
 
 // HDFC callback — called by ecommerce after HDFC notifies payment result
 router.post('/hdfc/callback', hdfcCallback);
