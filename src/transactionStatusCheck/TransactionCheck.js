@@ -48,6 +48,58 @@ const bluswapTransactionStatus = async (transaction_id) => {
   }
 }
 
+/**
+ * Check a MizorPay payout status.
+ *
+ * Contract §2: GET {MIZORPAY_BASE_URL}/check?reference_id=...  (auth: x-api-key).
+ * AccuzPay-facing `status`: TXN (success) | PENDING | PROCESSING | FAILED.
+ * We normalize to success | failed | pending so callers (getPayoutTransactionStatus,
+ * reconciliation) can treat every gateway uniformly.
+ */
+const mizorpayTransactionStatus = async (reference_id) => {
+  const baseUrl = process.env.MIZORPAY_BASE_URL;
+  const apiKey = process.env.MIZORPAY_API_KEY;
+
+  if (!baseUrl || !apiKey) {
+    throw new Error('MizorPay credentials or base URL not set in environment variables');
+  }
+
+  try {
+    const response = await axios.get(`${baseUrl}/check`, {
+      params: { reference_id },
+      headers: {
+        'x-api-key': apiKey,
+        'Content-Type': 'application/json'
+      }
+    });
+    const result = response.data;
+
+    const s = String(result?.status || '').toUpperCase();
+    let derived = 'pending';
+    if (s === 'TXN') derived = 'success';
+    else if (s === 'FAILED') derived = 'failed';
+
+    return {
+      data: {
+        status: derived,
+        response: result
+      },
+      status: 200
+    };
+  } catch (err) {
+    const statusCode = err.response?.status || 500;
+    const result = err.response ? err.response.data : { message: err.message };
+    return {
+      data: {
+        status: 'error',
+        response: result
+      },
+      status: statusCode
+    };
+  }
+};
+
 module.exports = {
-  bluswapTransactionStatus
+  bluswapTransactionStatus,
+  mizorpayTransactionStatus
 }
