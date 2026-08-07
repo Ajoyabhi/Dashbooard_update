@@ -11,6 +11,8 @@ import { formatDateTime } from '@/utils/formatUtils'
 
 interface ChargeRange {
   id: string; start_amount: number; end_amount: number
+  payin_start_amount: number | null; payin_end_amount: number | null
+  payout_start_amount: number | null; payout_end_amount: number | null
   admin_payin_charge: number; admin_payout_charge: number
   admin_payin_charge_type: 'percentage' | 'fixed'; admin_payout_charge_type: 'percentage' | 'fixed'
 }
@@ -18,7 +20,9 @@ interface PlatformCharge { id: string; charge: number; gst: number; updated_at: 
 interface IPAddress { id: string; ip_address: string; updated_at: string }
 
 const emptyRange = {
-  start_amount: '', end_amount: '', admin_payin_charge: '', admin_payout_charge: '',
+  payin_start_amount: '', payin_end_amount: '',
+  payout_start_amount: '', payout_end_amount: '',
+  admin_payin_charge: '', admin_payout_charge: '',
   admin_payin_charge_type: 'percentage', admin_payout_charge_type: 'percentage',
 }
 
@@ -84,13 +88,17 @@ export default function UserCharges() {
   useEffect(() => { fetchAll() }, [fetchAll])
 
   const handleAddRange = async () => {
-    if (!rangeForm.start_amount || !rangeForm.end_amount) return toast.error('Start and end amount required')
-    if (Number(rangeForm.start_amount) >= Number(rangeForm.end_amount)) return toast.error('Start must be less than end amount')
+    if (!rangeForm.payin_start_amount || !rangeForm.payin_end_amount) return toast.error('Payin start and end amount required')
+    if (Number(rangeForm.payin_start_amount) >= Number(rangeForm.payin_end_amount)) return toast.error('Payin start must be less than payin end amount')
+    if (!rangeForm.payout_start_amount || !rangeForm.payout_end_amount) return toast.error('Payout start and end amount required')
+    if (Number(rangeForm.payout_start_amount) >= Number(rangeForm.payout_end_amount)) return toast.error('Payout start must be less than payout end amount')
     setSaving(true)
     try {
       await api.post(`/admin/users/${userId}/merchant-charges`, {
-        start_amount: Number(rangeForm.start_amount),
-        end_amount: Number(rangeForm.end_amount),
+        payin_start_amount: Number(rangeForm.payin_start_amount),
+        payin_end_amount: Number(rangeForm.payin_end_amount),
+        payout_start_amount: Number(rangeForm.payout_start_amount),
+        payout_end_amount: Number(rangeForm.payout_end_amount),
         admin_payin_charge: Number(rangeForm.admin_payin_charge) || 0,
         admin_payout_charge: Number(rangeForm.admin_payout_charge) || 0,
         admin_payin_charge_type: rangeForm.admin_payin_charge_type,
@@ -196,17 +204,18 @@ export default function UserCharges() {
               <div className="flex items-center justify-center h-24 text-slate-400 text-sm">No charge ranges configured</div>
             ) : (
               <table className="w-full text-sm">
-                <THead cols={['Amount Range', 'Payin Charge', 'Payin Type', 'Payout Charge', 'Payout Type', '']} />
+                <THead cols={['Payin Range', 'Payin Charge', 'Payin Type', 'Payout Range', 'Payout Charge', 'Payout Type', '']} />
                 <tbody>
                   {charges.map((c) => (
                     <tr key={c.id} className="border-b border-slate-50 hover:bg-slate-50/50">
-                      <td className="px-4 py-3 font-medium text-slate-700">₹{c.start_amount} – ₹{c.end_amount}</td>
+                      <td className="px-4 py-3 font-medium text-slate-700">₹{c.payin_start_amount ?? c.start_amount} – ₹{c.payin_end_amount ?? c.end_amount}</td>
                       <td className="px-4 py-3">{c.admin_payin_charge}{c.admin_payin_charge_type === 'percentage' ? '%' : ' ₹'}</td>
                       <td className="px-4 py-3">
                         <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${c.admin_payin_charge_type === 'percentage' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>
                           {c.admin_payin_charge_type}
                         </span>
                       </td>
+                      <td className="px-4 py-3 font-medium text-slate-700">₹{c.payout_start_amount ?? c.start_amount} – ₹{c.payout_end_amount ?? c.end_amount}</td>
                       <td className="px-4 py-3">{c.admin_payout_charge}{c.admin_payout_charge_type === 'percentage' ? '%' : ' ₹'}</td>
                       <td className="px-4 py-3">
                         <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${c.admin_payout_charge_type === 'percentage' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>
@@ -295,10 +304,11 @@ export default function UserCharges() {
         <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem' }}>Add Charge Range</DialogTitle>
         <DialogContent sx={{ pt: 2 }}>
           <div className="grid grid-cols-2 gap-3 mt-1">
-            <TextField label="Start Amount *" type="number" size="small" value={rangeForm.start_amount}
-              onChange={(e) => setRangeForm((p) => ({ ...p, start_amount: e.target.value }))} />
-            <TextField label="End Amount *" type="number" size="small" value={rangeForm.end_amount}
-              onChange={(e) => setRangeForm((p) => ({ ...p, end_amount: e.target.value }))} />
+            <div className="col-span-2 text-xs font-semibold text-slate-500 uppercase tracking-wide mt-1">Payin</div>
+            <TextField label="Payin Start Amount *" type="number" size="small" value={rangeForm.payin_start_amount}
+              onChange={(e) => setRangeForm((p) => ({ ...p, payin_start_amount: e.target.value }))} />
+            <TextField label="Payin End Amount *" type="number" size="small" value={rangeForm.payin_end_amount}
+              onChange={(e) => setRangeForm((p) => ({ ...p, payin_end_amount: e.target.value }))} />
             <TextField label="Payin Charge" type="number" size="small" value={rangeForm.admin_payin_charge}
               onChange={(e) => setRangeForm((p) => ({ ...p, admin_payin_charge: e.target.value }))} />
             <FormControl size="small">
@@ -309,6 +319,11 @@ export default function UserCharges() {
                 <MenuItem value="fixed">Fixed</MenuItem>
               </Select>
             </FormControl>
+            <div className="col-span-2 text-xs font-semibold text-slate-500 uppercase tracking-wide mt-2">Payout</div>
+            <TextField label="Payout Start Amount *" type="number" size="small" value={rangeForm.payout_start_amount}
+              onChange={(e) => setRangeForm((p) => ({ ...p, payout_start_amount: e.target.value }))} />
+            <TextField label="Payout End Amount *" type="number" size="small" value={rangeForm.payout_end_amount}
+              onChange={(e) => setRangeForm((p) => ({ ...p, payout_end_amount: e.target.value }))} />
             <TextField label="Payout Charge" type="number" size="small" value={rangeForm.admin_payout_charge}
               onChange={(e) => setRangeForm((p) => ({ ...p, admin_payout_charge: e.target.value }))} />
             <FormControl size="small">

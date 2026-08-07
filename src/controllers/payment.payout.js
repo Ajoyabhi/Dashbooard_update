@@ -199,12 +199,16 @@ const initiatePayout = async (req, res) => {
       });
     }
 
-    // Find the appropriate charge bracket for the amount
-    const applicableBracket = chargeBrackets.find(bracket => {
-      const startAmount = parseFloat(bracket.start_amount);
-      const endAmount = parseFloat(bracket.end_amount);
-      return amount >= startAmount && amount <= endAmount;
-    });
+    // Find the appropriate charge bracket for the amount using the payout amount
+    // range (falls back to the legacy shared range for older rows).
+    const payoutStart = (b) => parseFloat(b.payout_start_amount ?? b.start_amount);
+    const payoutEnd = (b) => parseFloat(b.payout_end_amount ?? b.end_amount);
+    const applicableBracket = chargeBrackets
+      .slice()
+      .sort((a, b) => payoutStart(a) - payoutStart(b))
+      .find(bracket => {
+        return amount >= payoutStart(bracket) && amount <= payoutEnd(bracket);
+      });
 
     if (!applicableBracket) {
       return res.status(400).json({

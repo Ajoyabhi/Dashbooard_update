@@ -396,11 +396,31 @@ const updateUserMerchantCharges = async (req, res) => {
         const {
             start_amount,
             end_amount,
+            payin_start_amount,
+            payin_end_amount,
+            payout_start_amount,
+            payout_end_amount,
             admin_payin_charge,
             admin_payout_charge,
             admin_payin_charge_type,
             admin_payout_charge_type,
         } = req.body;
+
+        // Resolve the payin/payout ranges. Newer clients send per-side ranges;
+        // older ones send only the shared start_amount/end_amount, which we then
+        // apply to both sides. The legacy start_amount/end_amount columns stay
+        // populated (mirroring the payin range) so existing readers keep working.
+        const payinStart = payin_start_amount ?? start_amount;
+        const payinEnd = payin_end_amount ?? end_amount;
+        const payoutStart = payout_start_amount ?? start_amount;
+        const payoutEnd = payout_end_amount ?? end_amount;
+
+        if (payinStart == null || payinEnd == null || payoutStart == null || payoutEnd == null) {
+            return res.status(400).json({
+                success: false,
+                message: 'Payin and payout start/end amounts are required'
+            });
+        }
 
         // Check if user exists
         const user = await User.findByPk(user_id);
@@ -413,12 +433,14 @@ const updateUserMerchantCharges = async (req, res) => {
 
         // Start a transaction
         const result = await sequelize.transaction(async (t) => {
-            // Check if amount bracket already exists
+            // Check if an identical bracket (same payin + payout ranges) already exists
             const existingCharge = await MerchantCharges.findOne({
                 where: {
                     user_id,
-                    start_amount,
-                    end_amount
+                    payin_start_amount: payinStart,
+                    payin_end_amount: payinEnd,
+                    payout_start_amount: payoutStart,
+                    payout_end_amount: payoutEnd
                 },
                 transaction: t
             });
@@ -426,6 +448,8 @@ const updateUserMerchantCharges = async (req, res) => {
             if (existingCharge) {
                 // Update existing charge
                 await existingCharge.update({
+                    start_amount: payinStart,
+                    end_amount: payinEnd,
                     admin_payin_charge,
                     admin_payout_charge,
                     admin_payin_charge_type,
@@ -438,8 +462,13 @@ const updateUserMerchantCharges = async (req, res) => {
             // Create new charge if no existing bracket found
             const newCharge = await MerchantCharges.create({
                 user_id,
-                start_amount,
-                end_amount,
+                // Legacy shared range mirrors the payin range for backward compatibility
+                start_amount: payinStart,
+                end_amount: payinEnd,
+                payin_start_amount: payinStart,
+                payin_end_amount: payinEnd,
+                payout_start_amount: payoutStart,
+                payout_end_amount: payoutEnd,
                 admin_payin_charge,
                 admin_payout_charge,
                 admin_payin_charge_type,

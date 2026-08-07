@@ -10,8 +10,10 @@ import 'react-toastify/dist/ReactToastify.css';
 
 interface ChargeRange {
   id: string;
-  startAmount: number;
-  endAmount: number;
+  payinStartAmount: number;
+  payinEndAmount: number;
+  payoutStartAmount: number;
+  payoutEndAmount: number;
   payinCharge: number;
   payoutCharge: number;
   payinChargeType: 'percentage' | 'fixed';
@@ -72,8 +74,10 @@ export default function UserCharges() {
       if (response.data.success) {
         const charges = response.data.data.map((charge: any) => ({
           id: charge.id.toString(),
-          startAmount: parseFloat(charge.start_amount),
-          endAmount: parseFloat(charge.end_amount),
+          payinStartAmount: parseFloat(charge.payin_start_amount ?? charge.start_amount),
+          payinEndAmount: parseFloat(charge.payin_end_amount ?? charge.end_amount),
+          payoutStartAmount: parseFloat(charge.payout_start_amount ?? charge.start_amount),
+          payoutEndAmount: parseFloat(charge.payout_end_amount ?? charge.end_amount),
           payinCharge: parseFloat(charge.admin_payin_charge),
           payoutCharge: parseFloat(charge.admin_payout_charge),
           payinChargeType: charge.admin_payin_charge_type as 'percentage' | 'fixed',
@@ -195,8 +199,10 @@ export default function UserCharges() {
       setLoading(true);
       const response = await api.put(`/admin/users/${userId}/merchant-charges`, {
         charges: chargeRanges.map(charge => ({
-          start_amount: charge.startAmount,
-          end_amount: charge.endAmount,
+          payin_start_amount: charge.payinStartAmount,
+          payin_end_amount: charge.payinEndAmount,
+          payout_start_amount: charge.payoutStartAmount,
+          payout_end_amount: charge.payoutEndAmount,
           admin_payin_charge: charge.payinCharge,
           admin_payout_charge: charge.payoutCharge,
           admin_payin_charge_type: charge.payinChargeType,
@@ -220,18 +226,27 @@ export default function UserCharges() {
   };
 
   const handleAddChargeRange = async () => {
-    if (newChargeRange.startAmount && newChargeRange.endAmount) {
-      // Validate that start amount is less than end amount
-      if (newChargeRange.startAmount >= newChargeRange.endAmount) {
-        setError('Start amount must be less than end amount');
+    if (
+      newChargeRange.payinStartAmount && newChargeRange.payinEndAmount &&
+      newChargeRange.payoutStartAmount && newChargeRange.payoutEndAmount
+    ) {
+      // Validate that each side's start amount is less than its end amount
+      if (newChargeRange.payinStartAmount >= newChargeRange.payinEndAmount) {
+        setError('Payin start amount must be less than payin end amount');
+        return;
+      }
+      if (newChargeRange.payoutStartAmount >= newChargeRange.payoutEndAmount) {
+        setError('Payout start amount must be less than payout end amount');
         return;
       }
 
       try {
         setLoading(true);
         const response = await api.post(`/admin/users/${userId}/merchant-charges`, {
-          start_amount: newChargeRange.startAmount,
-          end_amount: newChargeRange.endAmount,
+          payin_start_amount: newChargeRange.payinStartAmount,
+          payin_end_amount: newChargeRange.payinEndAmount,
+          payout_start_amount: newChargeRange.payoutStartAmount,
+          payout_end_amount: newChargeRange.payoutEndAmount,
           admin_payin_charge: newChargeRange.payinCharge || 0,
           admin_payout_charge: newChargeRange.payoutCharge || 0,
           admin_payin_charge_type: newChargeRange.payinChargeType || 'percentage',
@@ -242,8 +257,10 @@ export default function UserCharges() {
           // Add the new charge to the local state
           setChargeRanges([...chargeRanges, {
             id: response.data.data.id.toString(),
-            startAmount: newChargeRange.startAmount,
-            endAmount: newChargeRange.endAmount,
+            payinStartAmount: newChargeRange.payinStartAmount,
+            payinEndAmount: newChargeRange.payinEndAmount,
+            payoutStartAmount: newChargeRange.payoutStartAmount,
+            payoutEndAmount: newChargeRange.payoutEndAmount,
             payinCharge: newChargeRange.payinCharge || 0,
             payoutCharge: newChargeRange.payoutCharge || 0,
             payinChargeType: newChargeRange.payinChargeType || 'percentage',
@@ -422,25 +439,25 @@ export default function UserCharges() {
             <div className="mb-6 grid grid-cols-1 gap-6 bg-gray-50 p-4 rounded-lg">
               <div className="grid grid-cols-6 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Start Amount</label>
+                  <label className="block text-sm font-medium text-gray-700">Payin Start Amount</label>
                   <input
                     type="number"
-                    value={newChargeRange.startAmount || ''}
+                    value={newChargeRange.payinStartAmount || ''}
                     onChange={(e) => setNewChargeRange({
                       ...newChargeRange,
-                      startAmount: parseFloat(e.target.value)
+                      payinStartAmount: parseFloat(e.target.value)
                     })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">End Amount</label>
+                  <label className="block text-sm font-medium text-gray-700">Payin End Amount</label>
                   <input
                     type="number"
-                    value={newChargeRange.endAmount || ''}
+                    value={newChargeRange.payinEndAmount || ''}
                     onChange={(e) => setNewChargeRange({
                       ...newChargeRange,
-                      endAmount: parseFloat(e.target.value)
+                      payinEndAmount: parseFloat(e.target.value)
                     })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                   />
@@ -453,6 +470,30 @@ export default function UserCharges() {
                     onChange={(e) => setNewChargeRange({
                       ...newChargeRange,
                       payinCharge: parseFloat(e.target.value)
+                    })}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Payout Start Amount</label>
+                  <input
+                    type="number"
+                    value={newChargeRange.payoutStartAmount || ''}
+                    onChange={(e) => setNewChargeRange({
+                      ...newChargeRange,
+                      payoutStartAmount: parseFloat(e.target.value)
+                    })}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Payout End Amount</label>
+                  <input
+                    type="number"
+                    value={newChargeRange.payoutEndAmount || ''}
+                    onChange={(e) => setNewChargeRange({
+                      ...newChargeRange,
+                      payoutEndAmount: parseFloat(e.target.value)
                     })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                   />
@@ -515,10 +556,13 @@ export default function UserCharges() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Amount Range
+                    Payin Range
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Payin Charge
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Payout Range
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Payout Charge
@@ -538,10 +582,13 @@ export default function UserCharges() {
                 {chargeRanges.map((range) => (
                   <tr key={range.id}>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {range.startAmount} - {range.endAmount}
+                      {range.payinStartAmount} - {range.payinEndAmount}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {range.payinCharge}{range.payinChargeType === 'percentage' ? '%' : ''}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {range.payoutStartAmount} - {range.payoutEndAmount}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {range.payoutCharge}{range.payoutChargeType === 'percentage' ? '%' : ''}

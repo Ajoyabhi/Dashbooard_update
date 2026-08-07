@@ -23,6 +23,24 @@ module.exports = (sequelize) => {
             type: DataTypes.DECIMAL(15, 2),
             allowNull: false
         },
+        // Separate payin/payout amount ranges. NULL falls back to the legacy
+        // shared start_amount/end_amount (see 20260807000000 migration).
+        payin_start_amount: {
+            type: DataTypes.DECIMAL(15, 2),
+            allowNull: true
+        },
+        payin_end_amount: {
+            type: DataTypes.DECIMAL(15, 2),
+            allowNull: true
+        },
+        payout_start_amount: {
+            type: DataTypes.DECIMAL(15, 2),
+            allowNull: true
+        },
+        payout_end_amount: {
+            type: DataTypes.DECIMAL(15, 2),
+            allowNull: true
+        },
         admin_payin_charge: {
             type: DataTypes.DECIMAL(10, 2),
             allowNull: false

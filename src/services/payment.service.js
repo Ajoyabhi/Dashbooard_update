@@ -57,12 +57,15 @@ const processPayin = async (data) => {
     if (userStatus.bank_deactive) throw new Error('Bank is deactivated your ip due to security reasons');
     if (userStatus.tecnical_issue) throw new Error('Technical issue please try again later');
 
-    // Use already-fetched MerchantCharges from user includes — no extra DB call
-    const chargeBrackets = (user.MerchantCharges || []).slice().sort((a, b) => a.start_amount - b.start_amount);
+    // Use already-fetched MerchantCharges from user includes — no extra DB call.
+    // Match on the payin amount range (falls back to the legacy shared range).
+    const payinStart = (b) => parseFloat(b.payin_start_amount ?? b.start_amount);
+    const payinEnd = (b) => parseFloat(b.payin_end_amount ?? b.end_amount);
+    const chargeBrackets = (user.MerchantCharges || []).slice().sort((a, b) => payinStart(a) - payinStart(b));
     if (!chargeBrackets.length) throw new Error('No charge brackets found for the user');
 
     const applicableBracket = chargeBrackets.find(b =>
-      order_amount >= parseFloat(b.start_amount) && order_amount <= parseFloat(b.end_amount)
+      order_amount >= payinStart(b) && order_amount <= payinEnd(b)
     );
     if (!applicableBracket) throw new Error('No charge bracket found for the given amount');
 
