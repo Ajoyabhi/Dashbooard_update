@@ -32,6 +32,14 @@ interface CallbackSettings {
 
 const PAYOUT_GATEWAYS = ['BluSwap', 'MizorPay', 'DummyGateway'];
 
+interface GatewayStat {
+  gateway: string;
+  total_amount: number;
+  total_count: number;
+  completed_amount: number;
+  completed_count: number;
+}
+
 export default function UserCallbacks() {
   const { userId } = useParams();
   const navigate = useNavigate();
@@ -58,6 +66,8 @@ export default function UserCallbacks() {
     currentPayoutGatewayAbove: '',
     currentPayoutGatewayBelow: ''
   });
+
+  const [gatewayStats, setGatewayStats] = useState<GatewayStat[]>([]);
 
   const [testStatus, setTestStatus] = useState<{
     payin: 'idle' | 'loading' | 'success' | 'error';
@@ -104,8 +114,23 @@ export default function UserCallbacks() {
       }
     };
 
+    const fetchGatewayStats = async () => {
+      try {
+        const response = await api.get(`/admin/users/${userId}/payout-gateway-stats`);
+        if (response.data.success) {
+          setGatewayStats(response.data.data.gateways || []);
+        }
+      } catch (error) {
+        console.error('Error fetching payout gateway stats:', error);
+      }
+    };
+
     fetchCallbackDetails();
+    fetchGatewayStats();
   }, [userId]);
+
+  const money = (n: number) =>
+    '₹' + (Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -376,6 +401,49 @@ export default function UserCallbacks() {
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Per-gateway payout tally (amount routed through each gateway) */}
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-semibold mb-1">Payout Amount by Gateway</h2>
+          <p className="text-sm text-gray-500 mb-4">Total value of this user's payouts processed through each gateway.</p>
+          {gatewayStats.length === 0 ? (
+            <p className="text-gray-500">No payouts recorded yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead>
+                  <tr className="text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="py-2 pr-4">Gateway</th>
+                    <th className="py-2 px-4 text-right">Completed Amount</th>
+                    <th className="py-2 px-4 text-right">Completed #</th>
+                    <th className="py-2 px-4 text-right">Total Amount</th>
+                    <th className="py-2 pl-4 text-right">Total #</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {gatewayStats.map((g) => (
+                    <tr key={g.gateway} className="text-sm text-gray-800">
+                      <td className="py-2 pr-4 font-medium">{g.gateway === 'DummyGateway' ? 'Dummy (Test) Gateway' : g.gateway}</td>
+                      <td className="py-2 px-4 text-right">{money(g.completed_amount)}</td>
+                      <td className="py-2 px-4 text-right">{g.completed_count}</td>
+                      <td className="py-2 px-4 text-right text-gray-500">{money(g.total_amount)}</td>
+                      <td className="py-2 pl-4 text-right text-gray-500">{g.total_count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="text-sm font-semibold border-t border-gray-200">
+                    <td className="py-2 pr-4">Total</td>
+                    <td className="py-2 px-4 text-right">{money(gatewayStats.reduce((s, g) => s + g.completed_amount, 0))}</td>
+                    <td className="py-2 px-4 text-right">{gatewayStats.reduce((s, g) => s + g.completed_count, 0)}</td>
+                    <td className="py-2 px-4 text-right text-gray-500">{money(gatewayStats.reduce((s, g) => s + g.total_amount, 0))}</td>
+                    <td className="py-2 pl-4 text-right text-gray-500">{gatewayStats.reduce((s, g) => s + g.total_count, 0)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </DashboardLayout>

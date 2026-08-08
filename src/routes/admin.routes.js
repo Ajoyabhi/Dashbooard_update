@@ -17,6 +17,7 @@ const {
   updateUserDetails,
   toggleTestRandomBeneficiary,
   getUserCallbacks,
+  getUserPayoutGatewayStats,
   updateUserWallet,
   getUserWallet,
   getUserRollingReserve,
@@ -95,6 +96,7 @@ router.delete('/users/:user_id/merchant-charges/:charge_id', deleteMerchantCharg
 
 // User Callbacks Management
 router.get('/users/:userId/callback', getUserCallbacks);
+router.get('/users/:userId/payout-gateway-stats', getUserPayoutGatewayStats);
 router.post('/users/:userId/callback/payin', updateUserPayinCallback);
 router.post('/users/:userId/callback/payout', updateUserPayoutCallback);
 

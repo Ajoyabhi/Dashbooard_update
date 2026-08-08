@@ -737,6 +737,68 @@ const getUserCallbacks = async (req, res) => {
     }
 };
 
+/**
+ * Per-gateway payout tally for a single user.
+ *
+ * Aggregates the user's payout transactions grouped by the gateway that actually
+ * processed each one (metadata.gateway_name, persisted at creation). For each
+ * gateway it returns the total & count overall and for completed payouts only —
+ * so the Callback Settings page can show how much has flowed through Gateway A
+ * vs Gateway B under amount-based routing.
+ */
+const getUserPayoutGatewayStats = async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        const user = await User.findByPk(userId);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+
+        const rows = await PayoutTransaction.aggregate([
+            { $match: { 'user.user_id': String(userId) } },
+            {
+                $group: {
+                    _id: {
+                        // Fall back to a stable label for legacy records created before
+                        // gateway_name was persisted.
+                        gateway: { $ifNull: ['$metadata.gateway_name', 'Unspecified'] }
+                    },
+                    total_amount: { $sum: '$amount' },
+                    total_count: { $sum: 1 },
+                    completed_amount: {
+                        $sum: { $cond: [{ $eq: ['$status', 'completed'] }, '$amount', 0] }
+                    },
+                    completed_count: {
+                        $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] }
+                    }
+                }
+            },
+            { $sort: { completed_amount: -1 } }
+        ]);
+
+        const gateways = rows.map(r => ({
+            gateway: r._id.gateway,
+            total_amount: r.total_amount || 0,
+            total_count: r.total_count || 0,
+            completed_amount: r.completed_amount || 0,
+            completed_count: r.completed_count || 0
+        }));
+
+        return res.json({
+            success: true,
+            data: {
+                gateways,
+                grand_total_completed_amount: gateways.reduce((s, g) => s + g.completed_amount, 0),
+                grand_total_completed_count: gateways.reduce((s, g) => s + g.completed_count, 0)
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching payout gateway stats:', error);
+        return res.status(500).json({ success: false, message: 'Error fetching payout gateway stats' });
+    }
+};
+
 // Get user wallet balance
 const getUserWallet = async (req, res) => {
     try {
@@ -4048,6 +4110,7 @@ module.exports = {
     updateUserDetails,
     toggleTestRandomBeneficiary,
     getUserCallbacks,
+    getUserPayoutGatewayStats,
     updateUserWallet,
     getUserWallet,
     getUserRollingReserve,
