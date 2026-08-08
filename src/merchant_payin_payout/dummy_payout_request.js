@@ -32,6 +32,11 @@ const DUMMY_PAYOUT_DELAY_MS = parseInt(process.env.DUMMY_PAYOUT_DELAY_MS, 10) ||
 // Overridable via env; defaults to 12.
 const DUMMY_PAYOUT_UTR_LENGTH = parseInt(process.env.DUMMY_PAYOUT_UTR_LENGTH, 10) || 12;
 
+// Acceptance message returned on the immediate response. MUST match the real
+// gateway's message verbatim so a test payout is indistinguishable from a real
+// one. Overridable via env if the real gateway's wording ever changes.
+const DUMMY_PAYOUT_ACCEPT_MESSAGE = process.env.DUMMY_PAYOUT_ACCEPT_MESSAGE || 'Payout Initiated Successfully';
+
 /**
  * Build a synthetic UTR of exactly DUMMY_PAYOUT_UTR_LENGTH digits.
  *
@@ -95,7 +100,7 @@ async function dummyPayout(payoutData) {
                     gateway_response: {
                         merchant_response: transactionId,
                         status: 'processing',
-                        message: 'Payout accepted, processing',
+                        message: DUMMY_PAYOUT_ACCEPT_MESSAGE,
                         utr: null
                     }
                 }
@@ -136,7 +141,7 @@ async function dummyPayout(payoutData) {
         return {
             data: {
                 status: 'processing',
-                message: 'Payout accepted, processing',
+                message: DUMMY_PAYOUT_ACCEPT_MESSAGE,
                 utr: null,
                 apitxnid: payoutData.reference_id,
                 transaction_id: transactionId
