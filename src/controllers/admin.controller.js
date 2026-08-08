@@ -725,6 +725,9 @@ const getUserCallbacks = async (req, res) => {
                 payin_merchant_name: merchantDetails?.payin_merchant_name || null,
                 payout_merchant_name: merchantDetails?.payout_merchant_name || null,
                 dummy_utr_prefix: merchantDetails?.dummy_utr_prefix || null,
+                payout_gateway_threshold: merchantDetails?.payout_gateway_threshold ?? null,
+                payout_gateway_above: merchantDetails?.payout_gateway_above || null,
+                payout_gateway_below: merchantDetails?.payout_gateway_below || null,
                 last_updated: merchantDetails?.updated_at || null
             }
         });
@@ -1286,22 +1289,32 @@ const updateUserPayinCallback = async (req, res) => {
             });
         }
 
+        // The URL and the gateway are INDEPENDENT — admins can switch the gateway
+        // without re-entering the callback URL, and vice-versa. A blank/omitted
+        // field means "leave the stored value unchanged"; we only write the fields
+        // that were actually provided.
+        const hasUrl = typeof payinUrl === 'string' && payinUrl.trim() !== '';
+        const hasMerchant = typeof payinMerchantName === 'string' && payinMerchantName.trim() !== '';
+
+        const updateData = {};
+        if (hasUrl) updateData.payin_callback = payinUrl.trim();
+        if (hasMerchant) {
+            updateData.payin_merchant_name = payinMerchantName;
+            updateData.payin_merchant_assigned = payinMerchantName; // Using merchant name as assigned number for now
+        }
+
         // Find or create merchant details
         const [merchantDetails, created] = await MerchantDetails.findOrCreate({
             where: { user_id: userId },
             defaults: {
-                payin_callback: payinUrl || '',
-                payin_merchant_name: payinMerchantName || '',
-                payin_merchant_assigned: payinMerchantName || '' // Using merchant name as assigned number for now
+                payin_callback: hasUrl ? payinUrl.trim() : '',
+                payin_merchant_name: hasMerchant ? payinMerchantName : '',
+                payin_merchant_assigned: hasMerchant ? payinMerchantName : ''
             }
         });
 
-        if (!created) {
-            await merchantDetails.update({
-                payin_callback: payinUrl || '',
-                payin_merchant_name: payinMerchantName || '',
-                payin_merchant_assigned: payinMerchantName || '' // Using merchant name as assigned number for now
-            });
+        if (!created && Object.keys(updateData).length > 0) {
+            await merchantDetails.update(updateData);
         }
 
         res.json({
@@ -1322,7 +1335,14 @@ const updateUserPayinCallback = async (req, res) => {
 const updateUserPayoutCallback = async (req, res) => {
     try {
         const { userId } = req.params;
-        const { payoutUrl, payoutMerchantName, dummyUtrPrefix } = req.body;
+        const {
+            payoutUrl,
+            payoutMerchantName,
+            dummyUtrPrefix,
+            payoutGatewayThreshold,
+            payoutGatewayAbove,
+            payoutGatewayBelow
+        } = req.body;
 
         // Check if user exists
         const user = await User.findByPk(userId);
@@ -1333,31 +1353,69 @@ const updateUserPayoutCallback = async (req, res) => {
             });
         }
 
+        // The URL and the gateway are INDEPENDENT — admins can switch the payout
+        // gateway without re-entering the callback URL, and vice-versa. A blank/
+        // omitted field means "leave the stored value unchanged"; we only write the
+        // fields that were actually provided.
+        const hasUrl = typeof payoutUrl === 'string' && payoutUrl.trim() !== '';
+        const hasMerchant = typeof payoutMerchantName === 'string' && payoutMerchantName.trim() !== '';
+
         // Only the leading DIGITS are meaningful for the synthetic UTR prefix.
         // Sanitize here so we never store stray characters; '' clears the prefix.
         const cleanUtrPrefix = dummyUtrPrefix === undefined
             ? undefined
             : String(dummyUtrPrefix || '').replace(/\D/g, '');
 
+        // Amount-based gateway routing. Sent together as a group. An empty/blank
+        // threshold clears routing (NULL) and blanks both gateways; a numeric
+        // threshold sets it plus the above/below gateways. `undefined` (field group
+        // omitted by caller) leaves the existing routing config untouched.
+        let routingThreshold; // undefined => don't touch
+        let routingAbove;
+        let routingBelow;
+        if (payoutGatewayThreshold !== undefined) {
+            const t = String(payoutGatewayThreshold).trim();
+            if (t === '' || isNaN(parseFloat(t))) {
+                routingThreshold = null; // clear routing
+                routingAbove = null;
+                routingBelow = null;
+            } else {
+                routingThreshold = parseFloat(t);
+                routingAbove = (payoutGatewayAbove && String(payoutGatewayAbove).trim()) || null;
+                routingBelow = (payoutGatewayBelow && String(payoutGatewayBelow).trim()) || null;
+            }
+        }
+
+        const updateData = {};
+        if (hasUrl) updateData.payout_callback = payoutUrl.trim();
+        if (hasMerchant) {
+            updateData.payout_merchant_name = payoutMerchantName;
+            updateData.payout_merchant_assigned = payoutMerchantName; // Using merchant name as assigned number for now
+        }
+        // Undefined => field omitted by caller => leave existing value untouched.
+        if (cleanUtrPrefix !== undefined) updateData.dummy_utr_prefix = cleanUtrPrefix;
+        if (routingThreshold !== undefined) {
+            updateData.payout_gateway_threshold = routingThreshold;
+            updateData.payout_gateway_above = routingAbove;
+            updateData.payout_gateway_below = routingBelow;
+        }
+
         // Find or create merchant details
         const [merchantDetails, created] = await MerchantDetails.findOrCreate({
             where: { user_id: userId },
             defaults: {
-                payout_callback: payoutUrl || '',
-                payout_merchant_name: payoutMerchantName || '',
-                payout_merchant_assigned: payoutMerchantName || '', // Using merchant name as assigned number for now
-                dummy_utr_prefix: cleanUtrPrefix ?? null
+                payout_callback: hasUrl ? payoutUrl.trim() : '',
+                payout_merchant_name: hasMerchant ? payoutMerchantName : '',
+                payout_merchant_assigned: hasMerchant ? payoutMerchantName : '',
+                dummy_utr_prefix: cleanUtrPrefix ?? null,
+                payout_gateway_threshold: routingThreshold ?? null,
+                payout_gateway_above: routingAbove ?? null,
+                payout_gateway_below: routingBelow ?? null
             }
         });
 
-        if (!created) {
-            await merchantDetails.update({
-                payout_callback: payoutUrl || '',
-                payout_merchant_name: payoutMerchantName || '',
-                payout_merchant_assigned: payoutMerchantName || '', // Using merchant name as assigned number for now
-                // Undefined => field omitted by caller => leave existing value untouched.
-                dummy_utr_prefix: cleanUtrPrefix
-            });
+        if (!created && Object.keys(updateData).length > 0) {
+            await merchantDetails.update(updateData);
         }
 
         res.json({

@@ -17,12 +17,20 @@ interface CallbackSettings {
   payinMerchantName: string;
   payoutMerchantName: string;
   dummyUtrPrefix: string;
+  payoutGatewayThreshold: string;
+  payoutGatewayAbove: string;
+  payoutGatewayBelow: string;
   currentPayinUrl: string;
   currentPayoutUrl: string;
   currentPayinMerchantName: string;
   currentPayoutMerchantName: string;
   currentDummyUtrPrefix: string;
+  currentPayoutGatewayThreshold: string;
+  currentPayoutGatewayAbove: string;
+  currentPayoutGatewayBelow: string;
 }
+
+const PAYOUT_GATEWAYS = ['BluSwap', 'MizorPay', 'DummyGateway'];
 
 export default function UserCallbacks() {
   const { userId } = useParams();
@@ -38,11 +46,17 @@ export default function UserCallbacks() {
     payinMerchantName: '',
     payoutMerchantName: '',
     dummyUtrPrefix: '',
+    payoutGatewayThreshold: '',
+    payoutGatewayAbove: '',
+    payoutGatewayBelow: '',
     currentPayinUrl: '',
     currentPayoutUrl: '',
     currentPayinMerchantName: '',
     currentPayoutMerchantName: '',
-    currentDummyUtrPrefix: ''
+    currentDummyUtrPrefix: '',
+    currentPayoutGatewayThreshold: '',
+    currentPayoutGatewayAbove: '',
+    currentPayoutGatewayBelow: ''
   });
 
   const [testStatus, setTestStatus] = useState<{
@@ -59,7 +73,9 @@ export default function UserCallbacks() {
       try {
         const response = await api.get(`/admin/users/${userId}/callback`);
         if (response.data.success) {
-          const { payin_callback, payout_callback, payin_merchant_name, payout_merchant_name, dummy_utr_prefix } = response.data.data;
+          const { payin_callback, payout_callback, payin_merchant_name, payout_merchant_name, dummy_utr_prefix,
+            payout_gateway_threshold, payout_gateway_above, payout_gateway_below } = response.data.data;
+          const thresholdStr = (payout_gateway_threshold ?? '') === '' ? '' : String(payout_gateway_threshold);
           setSettings(prev => ({
             ...prev,
             payinUrl: '',
@@ -67,11 +83,17 @@ export default function UserCallbacks() {
             payinMerchantName: '',
             payoutMerchantName: '',
             dummyUtrPrefix: dummy_utr_prefix || '',
+            payoutGatewayThreshold: thresholdStr,
+            payoutGatewayAbove: payout_gateway_above || '',
+            payoutGatewayBelow: payout_gateway_below || '',
             currentPayinUrl: payin_callback || '',
             currentPayoutUrl: payout_callback || '',
             currentPayinMerchantName: payin_merchant_name || '',
             currentPayoutMerchantName: payout_merchant_name || '',
-            currentDummyUtrPrefix: dummy_utr_prefix || ''
+            currentDummyUtrPrefix: dummy_utr_prefix || '',
+            currentPayoutGatewayThreshold: thresholdStr,
+            currentPayoutGatewayAbove: payout_gateway_above || '',
+            currentPayoutGatewayBelow: payout_gateway_below || ''
           }));
         } else {
           toast.error('Failed to fetch callback details');
@@ -112,10 +134,14 @@ export default function UserCallbacks() {
     try {
       const response = await api.post(`/admin/users/${userId}/callback/payin`, settings);
       if (response.data.success) {
+        // Reflect the authoritative record — fields the admin left blank were
+        // preserved server-side, so read the current values back from the response
+        // instead of the (possibly empty) form inputs.
+        const d = response.data.data || {};
         setSettings(prev => ({
           ...prev,
-          currentPayinUrl: settings.payinUrl,
-          currentPayinMerchantName: settings.payinMerchantName,
+          currentPayinUrl: d.payin_callback ?? prev.currentPayinUrl,
+          currentPayinMerchantName: d.payin_merchant_name ?? prev.currentPayinMerchantName,
           payinUrl: '',
           payinMerchantName: ''
         }));
@@ -132,11 +158,22 @@ export default function UserCallbacks() {
     try {
       const response = await api.post(`/admin/users/${userId}/callback/payout`, settings);
       if (response.data.success) {
+        // Reflect the authoritative record — fields the admin left blank were
+        // preserved server-side, so read the current values back from the response
+        // instead of the (possibly empty) form inputs.
+        const d = response.data.data || {};
+        const thStr = (d.payout_gateway_threshold ?? '') === '' ? '' : String(d.payout_gateway_threshold);
         setSettings(prev => ({
           ...prev,
-          currentPayoutUrl: settings.payoutUrl,
-          currentPayoutMerchantName: settings.payoutMerchantName,
-          currentDummyUtrPrefix: settings.dummyUtrPrefix,
+          currentPayoutUrl: d.payout_callback ?? prev.currentPayoutUrl,
+          currentPayoutMerchantName: d.payout_merchant_name ?? prev.currentPayoutMerchantName,
+          currentDummyUtrPrefix: d.dummy_utr_prefix ?? prev.currentDummyUtrPrefix,
+          currentPayoutGatewayThreshold: thStr,
+          currentPayoutGatewayAbove: d.payout_gateway_above ?? prev.currentPayoutGatewayAbove,
+          currentPayoutGatewayBelow: d.payout_gateway_below ?? prev.currentPayoutGatewayBelow,
+          payoutGatewayThreshold: thStr,
+          payoutGatewayAbove: d.payout_gateway_above ?? prev.payoutGatewayAbove,
+          payoutGatewayBelow: d.payout_gateway_below ?? prev.payoutGatewayBelow,
           payoutUrl: '',
           payoutMerchantName: ''
         }));
@@ -192,6 +229,13 @@ export default function UserCallbacks() {
               <p className="text-sm text-gray-500">Merchant: {settings.currentPayoutMerchantName || 'Not set'}</p>
               {settings.currentPayoutMerchantName === 'DummyGateway' && (
                 <p className="text-sm text-gray-500">Dummy UTR Prefix: {settings.currentDummyUtrPrefix || 'Not set (random)'}</p>
+              )}
+              {settings.currentPayoutGatewayThreshold ? (
+                <p className="text-sm text-gray-500">
+                  Routing: ≥ {settings.currentPayoutGatewayThreshold} → {settings.currentPayoutGatewayAbove || '—'}, &lt; {settings.currentPayoutGatewayThreshold} → {settings.currentPayoutGatewayBelow || '—'}
+                </p>
+              ) : (
+                <p className="text-sm text-gray-500">Routing: Off (single gateway)</p>
               )}
             </div>
           </div>
@@ -277,6 +321,53 @@ export default function UserCallbacks() {
                   </p>
                 </div>
               )}
+
+              {/* Amount-based gateway routing */}
+              <div className="border-t border-gray-200 pt-4 mt-2">
+                <h4 className="font-medium text-gray-700">Amount-based Routing (optional)</h4>
+                <p className="text-xs text-gray-500 mb-2">
+                  Route by amount instead of the single gateway above. If the amount is <strong>≥ threshold</strong> it uses gateway A; otherwise gateway B. Leave the threshold blank to disable routing and use the single Merchant Name above.
+                </p>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Threshold Amount (X)</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={settings.payoutGatewayThreshold}
+                    onChange={(e) => setSettings({ ...settings, payoutGatewayThreshold: e.target.value.replace(/[^\d.]/g, '') })}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    placeholder="e.g. 50000 (blank = routing off)"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3 mt-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Gateway A (amount ≥ X)</label>
+                    <select
+                      value={settings.payoutGatewayAbove}
+                      onChange={(e) => setSettings({ ...settings, payoutGatewayAbove: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    >
+                      <option value="">Select Gateway</option>
+                      {PAYOUT_GATEWAYS.map((g) => <option key={g} value={g}>{g === 'DummyGateway' ? 'Dummy (Test) Gateway' : g}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Gateway B (amount &lt; X)</label>
+                    <select
+                      value={settings.payoutGatewayBelow}
+                      onChange={(e) => setSettings({ ...settings, payoutGatewayBelow: e.target.value })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    >
+                      <option value="">Select Gateway</option>
+                      {PAYOUT_GATEWAYS.map((g) => <option key={g} value={g}>{g === 'DummyGateway' ? 'Dummy (Test) Gateway' : g}</option>)}
+                    </select>
+                  </div>
+                </div>
+                {settings.payoutGatewayThreshold && (!settings.payoutGatewayAbove || !settings.payoutGatewayBelow) && (
+                  <p className="mt-2 text-xs text-red-600">Set both Gateway A and Gateway B, or clear the threshold to disable routing.</p>
+                )}
+              </div>
+
               <button
                 onClick={handlePayoutCallback}
                 className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"

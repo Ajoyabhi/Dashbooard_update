@@ -316,6 +316,27 @@ const initiatePayout = async (req, res) => {
       throw e;
     }
 
+    // Resolve which payout gateway to use. When amount-based routing is configured
+    // for this merchant (threshold + BOTH above/below gateways set), pick by amount:
+    //   amount >= threshold -> "above" gateway, else -> "below" gateway.
+    // Otherwise fall back to the single configured payout_merchant_name (unchanged
+    // behaviour). The resolved gateway is persisted on the payout record so the
+    // status-check / reconcile paths hit the SAME gateway that processed it.
+    const md = user.MerchantDetail;
+    const routingThreshold =
+      md.payout_gateway_threshold !== null && md.payout_gateway_threshold !== undefined && md.payout_gateway_threshold !== ''
+        ? parseFloat(md.payout_gateway_threshold)
+        : null;
+    let effectiveGateway = md.payout_merchant_name;
+    if (routingThreshold !== null && !isNaN(routingThreshold) && md.payout_gateway_above && md.payout_gateway_below) {
+      effectiveGateway = parseFloat(amount) >= routingThreshold ? md.payout_gateway_above : md.payout_gateway_below;
+      recordTraceEvent({
+        reference_id, trace_type: 'payout', stage: STAGES.VALIDATED, status: 'info', source: 'api',
+        gateway_name: effectiveGateway,
+        detail: `Amount-based routing: ${amount} ${parseFloat(amount) >= routingThreshold ? '>=' : '<'} ${routingThreshold} -> ${effectiveGateway}`
+      });
+    }
+
     let payoutTransaction = await PayoutTransaction.create({
       transaction_id: uuidv4(),
       user: {
@@ -349,7 +370,10 @@ const initiatePayout = async (req, res) => {
         raw_response: null
       },
       metadata: {
-        requested_ip: clientIp
+        requested_ip: clientIp,
+        // Persist the gateway actually used (may differ from payout_merchant_name
+        // under amount-based routing) so status/reconcile query the right gateway.
+        gateway_name: effectiveGateway
       },
       remark: 'Payout request initiated',
       created_by: new mongoose.Types.ObjectId(user_id),
@@ -377,13 +401,13 @@ const initiatePayout = async (req, res) => {
 
     recordTraceEvent({
       reference_id, trace_type: 'payout', stage: STAGES.VALIDATED, status: 'ok', source: 'api',
-      gateway_name: user.MerchantDetail.payout_merchant_name || null,
+      gateway_name: effectiveGateway || null,
       detail: 'Validation passed, settlement deducted, payout record created',
       payload: { amount_to_deduct: amountToDeduct }
     });
 
     let result;
-    if (user.MerchantDetail.payout_merchant_name === 'BluSwap') {
+    if (effectiveGateway === 'BluSwap') {
       const payoutData = {
         reference_id,
         user_id,
@@ -416,7 +440,7 @@ const initiatePayout = async (req, res) => {
           reference_id: result?.data?.apitxnid || reference_id
         });
       }
-    } else if (user.MerchantDetail.payout_merchant_name === 'MizorPay') {
+    } else if (effectiveGateway === 'MizorPay') {
       // MizorPay requires beneficiary email + mobile (contract §1), which our
       // upstream payout request does not carry. We inject a random pair from the
       // synthetic pool — used ONLY on the MizorPay path (see utils/mizorpayContact.js).
@@ -453,7 +477,7 @@ const initiatePayout = async (req, res) => {
           reference_id: result?.data?.apitxnid || reference_id
         });
       }
-    } else if (user.MerchantDetail.payout_merchant_name === 'DummyGateway') {
+    } else if (effectiveGateway === 'DummyGateway') {
       // Dummy/test gateway. Runs the full real pipeline above (settlement already
       // debited, records created) and returns the SAME immediate `processing`
       // response as a real gateway. dummyPayout schedules a delayed job that
@@ -502,7 +526,7 @@ const initiatePayout = async (req, res) => {
       // settlement we already deducted and reject.
       recordTraceEvent({
         reference_id, trace_type: 'payout', stage: STAGES.REJECTED, status: 'failed', source: 'api',
-        gateway_name: user.MerchantDetail.payout_merchant_name || null,
+        gateway_name: effectiveGateway || null,
         detail: 'Unsupported payout gateway — settlement reversed'
       });
       await failPayoutWithRefund(reference_id, 'Payout gateway not supported');
@@ -555,13 +579,38 @@ const getPayoutTransactionStatus = async (req, res) => {
         message: 'Transaction not found'
       });
     }
+    // Use the gateway that ACTUALLY processed this payout (persisted at creation),
+    // which under amount-based routing may differ from payout_merchant_name. Fall
+    // back to the merchant's configured gateway for older records without it.
+    const processedGateway = transaction.metadata?.gateway_name || user.MerchantDetail.payout_merchant_name;
     let result;
-    if (user.MerchantDetail.payout_merchant_name === 'BluSwap') {
+    if (processedGateway === 'BluSwap') {
       result = await bluswapTransactionStatus(transaction_id);
       console.log("this is result of bluswap payout", result)
-    } else if (user.MerchantDetail.payout_merchant_name === 'MizorPay') {
+    } else if (processedGateway === 'MizorPay') {
       result = await mizorpayTransactionStatus(transaction_id);
       console.log("this is result of mizorpay payout", result)
+    } else if (processedGateway === 'DummyGateway') {
+      // Dummy payouts have no external gateway to query — serve the authoritative
+      // status straight from our own record (mirrors the gateway-404 fallback below).
+      const localStatus = transaction.status === 'processing' ? 'pending' : (transaction.status || 'pending');
+      const message = localStatus === 'success' || localStatus === 'completed'
+        ? 'Transaction processed'
+        : localStatus === 'failed'
+          ? 'Transaction failed'
+          : 'Transaction is pending';
+      return res.status(200).json({
+        success: true,
+        transaction: {
+          reference_id: transaction.reference_id,
+          type: 'payout',
+          status: localStatus === 'completed' ? 'success' : localStatus,
+          amount: transaction.amount,
+          utr: transaction.gateway_response?.utr || null,
+          message,
+          timestamp: transaction.updatedAt || new Date().toISOString()
+        }
+      });
     } else {
       return res.status(400).json({
         success: false,

@@ -204,7 +204,10 @@ async function reconcilePayoutTransaction(payoutTransaction) {
   const userId = payoutTransaction.user?.user_id;
 
   const merchantDetails = await MerchantDetails.findOne({ where: { user_id: parseInt(userId, 10) } });
-  const merchantName = merchantDetails?.payout_merchant_name;
+  // Prefer the gateway that ACTUALLY processed this payout (persisted at creation)
+  // — under amount-based routing it may differ from payout_merchant_name. Fall back
+  // to the merchant's configured gateway for older records without it.
+  const merchantName = payoutTransaction.metadata?.gateway_name || merchantDetails?.payout_merchant_name;
 
   let derived, utr = null, gatewayTransactionId = null, message = null;
 

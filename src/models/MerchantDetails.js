@@ -50,6 +50,24 @@ module.exports = (sequelize) => {
             allowNull: true,
             defaultValue: null,
             comment: 'Leading digits for the synthetic UTR on DummyGateway payouts; rest is random up to the total UTR length'
+        },
+        payout_gateway_threshold: {
+            type: DataTypes.DECIMAL(15, 2),
+            allowNull: true,
+            defaultValue: null,
+            comment: 'Amount cutoff for gateway routing; NULL disables routing (uses payout_merchant_name)'
+        },
+        payout_gateway_above: {
+            type: DataTypes.STRING(100),
+            allowNull: true,
+            defaultValue: null,
+            comment: 'Gateway used when amount >= payout_gateway_threshold'
+        },
+        payout_gateway_below: {
+            type: DataTypes.STRING(100),
+            allowNull: true,
+            defaultValue: null,
+            comment: 'Gateway used when amount < payout_gateway_threshold'
         }
     }, {
         tableName: 'merchant_details',
