@@ -243,6 +243,49 @@ mizorpayPayoutQueue.on('failed', (job, error) => {
   });
 });
 
+// Dummy/test payout queue — used ONLY by merchants configured with
+// payout_merchant_name === 'DummyGateway'. Jobs are enqueued with a delay to
+// simulate a real gateway's async settlement callback; the worker finalizes them
+// through the exact same finalizePayout() path as BluSwap/MizorPay. No real money
+// moves — the gateway leg is faked, everything else (ledger, merchant webhook,
+// dashboard, status API) is real.
+const dummyPayoutQueue = new Bull('dummyPayout', queueOptions);
+logger.info("Dummy payout queue created with proper Redis configuration");
+
+dummyPayoutQueue.on('error', (error) => {
+  logger.error('Dummy payout queue error:', error);
+  if (error.message.includes('Connection is closed')) {
+    logger.info('Attempting to recover from connection error...');
+    dummyPayoutQueue.resume();
+  }
+});
+
+dummyPayoutQueue.on('ready', () => {
+  logger.info('Dummy payout queue is ready and connected to Redis');
+});
+
+dummyPayoutQueue.on('active', (job) => {
+  logger.info('Dummy payout job started processing', {
+    jobId: job.id,
+    timestamp: new Date().toISOString()
+  });
+});
+
+dummyPayoutQueue.on('completed', (job) => {
+  logger.info('Dummy payout job completed', {
+    jobId: job.id,
+    timestamp: new Date().toISOString()
+  });
+});
+
+dummyPayoutQueue.on('failed', (job, error) => {
+  logger.error('Dummy payout job failed', {
+    jobId: job.id,
+    error: error.message,
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Apply event handlers to all clients
 handleRedisEvents(createRedisClient('client'), 'client');
 handleRedisEvents(createRedisClient('subscriber'), 'subscriber');
@@ -254,6 +297,7 @@ process.on('SIGTERM', async () => {
   await callbackQueue.close();
   await bluswapPayoutQueue.close();
   await mizorpayPayoutQueue.close();
+  await dummyPayoutQueue.close();
   process.exit(0);
 });
 
@@ -261,5 +305,6 @@ module.exports = {
   callbackQueue,
   bluswapPayoutQueue,
   mizorpayPayoutQueue,
+  dummyPayoutQueue,
   createRedisClient
 };

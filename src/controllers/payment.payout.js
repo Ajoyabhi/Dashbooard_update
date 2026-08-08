@@ -9,6 +9,7 @@ const PayoutTransaction = require('../models/payoutTransaction.model');
 const { Op } = require('sequelize');
 const { bluswapPayout } = require('../merchant_payin_payout/merchant_payout_request');
 const { mizorpayPayout } = require('../merchant_payin_payout/mizorpay_payout_request');
+const { dummyPayout } = require('../merchant_payin_payout/dummy_payout_request');
 const { getRandomMizorpayContact } = require('../utils/mizorpayContact');
 const getClientIp = require('../utils/getClientIp');
 const mongoose = require('mongoose');
@@ -437,6 +438,45 @@ const initiatePayout = async (req, res) => {
       };
       result = await mizorpayPayout(payoutData);
       console.log("this is result of mizorpay payout", result)
+      if (result?.status == 200 && result.data.status === 'processing') {
+        return res.status(200).json({
+          success: true,
+          message: result.data.message || 'Payout initiated, awaiting confirmation',
+          reference_id: result.data.apitxnid,
+          transaction_id: result.data.transaction_id
+        });
+      } else {
+        await failPayoutWithRefund(reference_id, result?.data?.message || 'Payout processing failed');
+        return res.status(400).json({
+          success: false,
+          message: result?.data?.message || 'Payout processing failed',
+          reference_id: result?.data?.apitxnid || reference_id
+        });
+      }
+    } else if (user.MerchantDetail.payout_merchant_name === 'DummyGateway') {
+      // Dummy/test gateway. Runs the full real pipeline above (settlement already
+      // debited, records created) and returns the SAME immediate `processing`
+      // response as a real gateway. dummyPayout schedules a delayed job that
+      // finalizes the payout via finalizePayout() — the exact same path a real
+      // gateway webhook uses — so the merchant callback + ledger update are
+      // identical to production. No real money moves.
+      const payoutData = {
+        reference_id,
+        user_id,
+        amount,
+        amountToDeduct,
+        request_type,
+        beneficiary_details: {
+          account_number,
+          account_ifsc,
+          bank_name,
+          beneficiary_name,
+          mobile: user.mobile,
+          email: user.email
+        }
+      };
+      result = await dummyPayout(payoutData);
+      console.log("this is result of dummy payout", result)
       if (result?.status == 200 && result.data.status === 'processing') {
         return res.status(200).json({
           success: true,

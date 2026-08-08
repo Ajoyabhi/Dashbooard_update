@@ -1,4 +1,4 @@
-const { callbackQueue, bluswapPayoutQueue, mizorpayPayoutQueue } = require('../config/queue.config');
+const { callbackQueue, bluswapPayoutQueue, mizorpayPayoutQueue, dummyPayoutQueue } = require('../config/queue.config');
 const { finalizePayout } = require('../services/payoutReconciliation.service');
 const { recordTraceEvent, STAGES } = require('../services/transactionTrace.service');
 const { logger } = require('../utils/logger');
@@ -388,6 +388,62 @@ mizorpayPayoutQueue.on('stalled', (job) => {
 });
 
 
+// Dummy/test payout — the simulated async settlement "callback".
+// Enqueued (with a delay) by dummy_payout_request.js instead of arriving from a
+// real gateway. Finalizes through the SAME idempotent finalizePayout() path as
+// BluSwap/MizorPay, so the ledger update + standard merchant callback are
+// identical to production. Always success (synthetic UTR) per configuration.
+dummyPayoutQueue.process(async function (job) {
+  try {
+    logger.info('Processing dummy payout job', {
+      jobId: job.id,
+      data: job.data,
+      attempts: job.attemptsMade
+    });
+
+    const { referenceId, isSuccess, utr, gatewayTransactionId } = job.data;
+
+    const result = await finalizePayout({
+      referenceId,
+      isSuccess: isSuccess !== false,
+      utr: utr || null,
+      gatewayTransactionId: gatewayTransactionId || null
+    });
+
+    logger.info('Dummy payout finalized via simulated callback', { jobId: job.id, referenceId, result });
+    return { success: true, jobId: job.id, ...result };
+  } catch (error) {
+    logger.error('Error processing dummy payout job', {
+      jobId: job.id,
+      error: error.message,
+      stack: error.stack,
+      attempts: job.attemptsMade
+    });
+    return { success: false, error: `Error is ${error}`, jobId: job.id };
+  }
+});
+
+dummyPayoutQueue.on('completed', (job, result) => {
+  logger.info('Dummy payout job completed successfully', { jobId: job.id, result });
+});
+
+dummyPayoutQueue.on('failed', (job, error) => {
+  logger.error('Dummy payout job failed', {
+    jobId: job.id,
+    error: error.message,
+    stack: error.stack,
+    attempts: job.attemptsMade
+  });
+});
+
+dummyPayoutQueue.on('stalled', (job) => {
+  logger.warn('Dummy payout job stalled', {
+    jobId: job.id,
+    attempts: job.attemptsMade
+  });
+});
+
+
 // Handle process events
 process.on('SIGTERM', async () => {
   logger.info('Shutting down callback worker...');
@@ -395,6 +451,7 @@ process.on('SIGTERM', async () => {
   await callbackQueue.close();
   await bluswapPayoutQueue.close();
   await mizorpayPayoutQueue.close();
+  await dummyPayoutQueue.close();
   process.exit(0);
 });
 

@@ -248,6 +248,7 @@ export default function UserCallbacks() {
                   <option value="">Select Merchant</option>
                   <option value="BluSwap">BluSwap</option>
                   <option value="MizorPay">MizorPay</option>
+                  <option value="DummyGateway">Dummy (Test) Gateway</option>
                 </select>
               </div>
               <button

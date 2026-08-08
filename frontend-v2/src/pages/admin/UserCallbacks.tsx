@@ -6,7 +6,7 @@ import api from '@/utils/axios'
 import toast from 'react-hot-toast'
 
 const PAYIN_MERCHANTS = ['HDFC', 'AirPay', 'Razorpay']
-const PAYOUT_MERCHANTS = ['BluSwap']
+const PAYOUT_MERCHANTS = ['BluSwap', 'MizorPay', 'DummyGateway']
 
 export default function UserCallbacks() {
   const { userId } = useParams()
