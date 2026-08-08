@@ -28,9 +28,22 @@ if (process.env.NODE_ENV !== 'production') {
 // settlement callback. Overridable via env; defaults to 8s.
 const DUMMY_PAYOUT_DELAY_MS = parseInt(process.env.DUMMY_PAYOUT_DELAY_MS, 10) || 8000;
 
-// Synthetic 12-digit numeric UTR, shaped like a real bank UTR/RRN.
-function fakeUtr() {
-    return String(Math.floor(100000000000 + Math.random() * 900000000000));
+// Total length of the synthetic UTR. Overridable via env; defaults to 10.
+const DUMMY_PAYOUT_UTR_LENGTH = parseInt(process.env.DUMMY_PAYOUT_UTR_LENGTH, 10) || 10;
+
+/**
+ * Build a synthetic UTR of exactly DUMMY_PAYOUT_UTR_LENGTH digits.
+ *
+ * The admin-configured `prefix` (digits only) supplies the leading digits and the
+ * remainder is filled with random digits — e.g. prefix '6220133' at length 10
+ * yields '6220133' + 3 random digits. A prefix longer than the total length is
+ * clipped to it; an empty/blank prefix produces a fully random UTR.
+ */
+function fakeUtr(prefix) {
+    const len = DUMMY_PAYOUT_UTR_LENGTH;
+    let utr = String(prefix ?? '').replace(/\D/g, '').slice(0, len);
+    while (utr.length < len) utr += Math.floor(Math.random() * 10);
+    return utr;
 }
 
 /**
@@ -57,8 +70,12 @@ async function dummyPayout(payoutData) {
     const startTime = Date.now();
     logger.info('Starting dummyPayout process', { reference: payoutData.reference_id });
     try {
-        const transactionId = `DUMMY-${uuidv4()}`;
-        const utr = fakeUtr();
+        // Use the payout record's REAL internal transaction_id (the uuid assigned to
+        // every payout at creation) so the dummy is indistinguishable from a real
+        // payout — same id shape the merchant/dashboard gets for BluSwap/MizorPay.
+        // Fall back to a fresh uuid only if the caller didn't pass it.
+        const transactionId = payoutData.transaction_id || uuidv4();
+        const utr = fakeUtr(payoutData.dummy_utr_prefix);
 
         recordTraceEvent({
             reference_id: payoutData.reference_id, trace_type: 'payout', stage: STAGES.GATEWAY_REQUEST,

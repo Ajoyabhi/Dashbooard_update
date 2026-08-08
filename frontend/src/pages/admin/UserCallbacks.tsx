@@ -16,10 +16,12 @@ interface CallbackSettings {
   payoutHeaders: string;
   payinMerchantName: string;
   payoutMerchantName: string;
+  dummyUtrPrefix: string;
   currentPayinUrl: string;
   currentPayoutUrl: string;
   currentPayinMerchantName: string;
   currentPayoutMerchantName: string;
+  currentDummyUtrPrefix: string;
 }
 
 export default function UserCallbacks() {
@@ -35,10 +37,12 @@ export default function UserCallbacks() {
     payoutHeaders: '',
     payinMerchantName: '',
     payoutMerchantName: '',
+    dummyUtrPrefix: '',
     currentPayinUrl: '',
     currentPayoutUrl: '',
     currentPayinMerchantName: '',
-    currentPayoutMerchantName: ''
+    currentPayoutMerchantName: '',
+    currentDummyUtrPrefix: ''
   });
 
   const [testStatus, setTestStatus] = useState<{
@@ -55,17 +59,19 @@ export default function UserCallbacks() {
       try {
         const response = await api.get(`/admin/users/${userId}/callback`);
         if (response.data.success) {
-          const { payin_callback, payout_callback, payin_merchant_name, payout_merchant_name } = response.data.data;
+          const { payin_callback, payout_callback, payin_merchant_name, payout_merchant_name, dummy_utr_prefix } = response.data.data;
           setSettings(prev => ({
             ...prev,
             payinUrl: '',
             payoutUrl: '',
             payinMerchantName: '',
             payoutMerchantName: '',
+            dummyUtrPrefix: dummy_utr_prefix || '',
             currentPayinUrl: payin_callback || '',
             currentPayoutUrl: payout_callback || '',
             currentPayinMerchantName: payin_merchant_name || '',
-            currentPayoutMerchantName: payout_merchant_name || ''
+            currentPayoutMerchantName: payout_merchant_name || '',
+            currentDummyUtrPrefix: dummy_utr_prefix || ''
           }));
         } else {
           toast.error('Failed to fetch callback details');
@@ -130,6 +136,7 @@ export default function UserCallbacks() {
           ...prev,
           currentPayoutUrl: settings.payoutUrl,
           currentPayoutMerchantName: settings.payoutMerchantName,
+          currentDummyUtrPrefix: settings.dummyUtrPrefix,
           payoutUrl: '',
           payoutMerchantName: ''
         }));
@@ -183,6 +190,9 @@ export default function UserCallbacks() {
               <h3 className="font-medium text-gray-700">Payout Callback</h3>
               <p className="text-gray-600">{settings.currentPayoutUrl || 'Not set'}</p>
               <p className="text-sm text-gray-500">Merchant: {settings.currentPayoutMerchantName || 'Not set'}</p>
+              {settings.currentPayoutMerchantName === 'DummyGateway' && (
+                <p className="text-sm text-gray-500">Dummy UTR Prefix: {settings.currentDummyUtrPrefix || 'Not set (random)'}</p>
+              )}
             </div>
           </div>
         </div>
@@ -251,6 +261,22 @@ export default function UserCallbacks() {
                   <option value="DummyGateway">Dummy (Test) Gateway</option>
                 </select>
               </div>
+              {settings.payoutMerchantName === 'DummyGateway' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Dummy UTR Prefix</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={settings.dummyUtrPrefix}
+                    onChange={(e) => setSettings({ ...settings, dummyUtrPrefix: e.target.value.replace(/\D/g, '') })}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    placeholder="e.g. 6220133 (rest filled randomly to 10 digits)"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Leading digits of the test UTR. Total UTR is 10 digits; the remaining {Math.max(0, 10 - settings.dummyUtrPrefix.length)} will be random. Leave blank for a fully random UTR.
+                  </p>
+                </div>
+              )}
               <button
                 onClick={handlePayoutCallback}
                 className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"

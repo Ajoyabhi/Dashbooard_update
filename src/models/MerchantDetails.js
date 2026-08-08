@@ -44,6 +44,12 @@ module.exports = (sequelize) => {
             allowNull: true,
             defaultValue: null,
             comment: 'Per-user GST percentage; NULL falls back to global PlatformCharges.gst'
+        },
+        dummy_utr_prefix: {
+            type: DataTypes.STRING(20),
+            allowNull: true,
+            defaultValue: null,
+            comment: 'Leading digits for the synthetic UTR on DummyGateway payouts; rest is random up to the total UTR length'
         }
     }, {
         tableName: 'merchant_details',

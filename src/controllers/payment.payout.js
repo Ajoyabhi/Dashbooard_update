@@ -466,6 +466,11 @@ const initiatePayout = async (req, res) => {
         amount,
         amountToDeduct,
         request_type,
+        // Surface the record's real internal transaction_id so the dummy returns
+        // the same id shape as a real payout (BluSwap/MizorPay).
+        transaction_id: payoutTransaction.transaction_id,
+        // Admin-configured leading digits for the synthetic UTR (rest is random).
+        dummy_utr_prefix: user.MerchantDetail.dummy_utr_prefix,
         beneficiary_details: {
           account_number,
           account_ifsc,

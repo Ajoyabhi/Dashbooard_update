@@ -724,6 +724,7 @@ const getUserCallbacks = async (req, res) => {
                 payout_callback: merchantDetails?.payout_callback || null,
                 payin_merchant_name: merchantDetails?.payin_merchant_name || null,
                 payout_merchant_name: merchantDetails?.payout_merchant_name || null,
+                dummy_utr_prefix: merchantDetails?.dummy_utr_prefix || null,
                 last_updated: merchantDetails?.updated_at || null
             }
         });
@@ -1321,7 +1322,7 @@ const updateUserPayinCallback = async (req, res) => {
 const updateUserPayoutCallback = async (req, res) => {
     try {
         const { userId } = req.params;
-        const { payoutUrl, payoutMerchantName } = req.body;
+        const { payoutUrl, payoutMerchantName, dummyUtrPrefix } = req.body;
 
         // Check if user exists
         const user = await User.findByPk(userId);
@@ -1332,13 +1333,20 @@ const updateUserPayoutCallback = async (req, res) => {
             });
         }
 
+        // Only the leading DIGITS are meaningful for the synthetic UTR prefix.
+        // Sanitize here so we never store stray characters; '' clears the prefix.
+        const cleanUtrPrefix = dummyUtrPrefix === undefined
+            ? undefined
+            : String(dummyUtrPrefix || '').replace(/\D/g, '');
+
         // Find or create merchant details
         const [merchantDetails, created] = await MerchantDetails.findOrCreate({
             where: { user_id: userId },
             defaults: {
                 payout_callback: payoutUrl || '',
                 payout_merchant_name: payoutMerchantName || '',
-                payout_merchant_assigned: payoutMerchantName || '' // Using merchant name as assigned number for now
+                payout_merchant_assigned: payoutMerchantName || '', // Using merchant name as assigned number for now
+                dummy_utr_prefix: cleanUtrPrefix ?? null
             }
         });
 
@@ -1346,7 +1354,9 @@ const updateUserPayoutCallback = async (req, res) => {
             await merchantDetails.update({
                 payout_callback: payoutUrl || '',
                 payout_merchant_name: payoutMerchantName || '',
-                payout_merchant_assigned: payoutMerchantName || '' // Using merchant name as assigned number for now
+                payout_merchant_assigned: payoutMerchantName || '', // Using merchant name as assigned number for now
+                // Undefined => field omitted by caller => leave existing value untouched.
+                dummy_utr_prefix: cleanUtrPrefix
             });
         }
 
