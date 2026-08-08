@@ -270,10 +270,10 @@ export default function UserCallbacks() {
                     value={settings.dummyUtrPrefix}
                     onChange={(e) => setSettings({ ...settings, dummyUtrPrefix: e.target.value.replace(/\D/g, '') })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                    placeholder="e.g. 6220133 (rest filled randomly to 10 digits)"
+                    placeholder="e.g. 6220133 (rest filled randomly to 12 digits)"
                   />
                   <p className="mt-1 text-xs text-gray-500">
-                    Leading digits of the test UTR. Total UTR is 10 digits; the remaining {Math.max(0, 10 - settings.dummyUtrPrefix.length)} will be random. Leave blank for a fully random UTR.
+                    Leading digits of the test UTR. Total UTR is 12 digits; the remaining {Math.max(0, 12 - settings.dummyUtrPrefix.length)} will be random. Leave blank for a fully random UTR.
                   </p>
                 </div>
               )}

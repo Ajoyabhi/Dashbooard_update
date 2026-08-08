@@ -28,15 +28,16 @@ if (process.env.NODE_ENV !== 'production') {
 // settlement callback. Overridable via env; defaults to 8s.
 const DUMMY_PAYOUT_DELAY_MS = parseInt(process.env.DUMMY_PAYOUT_DELAY_MS, 10) || 8000;
 
-// Total length of the synthetic UTR. Overridable via env; defaults to 10.
-const DUMMY_PAYOUT_UTR_LENGTH = parseInt(process.env.DUMMY_PAYOUT_UTR_LENGTH, 10) || 10;
+// Total length of the synthetic UTR. Real bank UTRs/RRNs are 12 digits.
+// Overridable via env; defaults to 12.
+const DUMMY_PAYOUT_UTR_LENGTH = parseInt(process.env.DUMMY_PAYOUT_UTR_LENGTH, 10) || 12;
 
 /**
  * Build a synthetic UTR of exactly DUMMY_PAYOUT_UTR_LENGTH digits.
  *
  * The admin-configured `prefix` (digits only) supplies the leading digits and the
- * remainder is filled with random digits — e.g. prefix '6220133' at length 10
- * yields '6220133' + 3 random digits. A prefix longer than the total length is
+ * remainder is filled with random digits — e.g. prefix '6220133' at length 12
+ * yields '6220133' + 5 random digits. A prefix longer than the total length is
  * clipped to it; an empty/blank prefix produces a fully random UTR.
  */
 function fakeUtr(prefix) {
