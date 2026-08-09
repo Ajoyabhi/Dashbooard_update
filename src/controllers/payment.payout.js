@@ -17,6 +17,7 @@ const axios = require('axios');
 const { bluswapTransactionStatus, mizorpayTransactionStatus } = require('../transactionStatusCheck/TransactionCheck');
 const { reconcilePayoutTransaction, finalizePayout } = require('../services/payoutReconciliation.service');
 const { recordTraceEvent, STAGES } = require('../services/transactionTrace.service');
+const { resolvePayoutGateway } = require('../utils/payoutGatewayRouting');
 
 /**
  * Reverse a payout that failed synchronously at creation time (e.g. the gateway
@@ -316,24 +317,20 @@ const initiatePayout = async (req, res) => {
       throw e;
     }
 
-    // Resolve which payout gateway to use. When amount-based routing is configured
-    // for this merchant (threshold + BOTH above/below gateways set), pick by amount:
-    //   amount >= threshold -> "above" gateway, else -> "below" gateway.
-    // Otherwise fall back to the single configured payout_merchant_name (unchanged
-    // behaviour). The resolved gateway is persisted on the payout record so the
-    // status-check / reconcile paths hit the SAME gateway that processed it.
+    // Resolve which payout gateway to use. Amount-based routing supports N ranges
+    // via payout_gateway_bands (preferred), falling back to the legacy single
+    // threshold and finally the single payout_merchant_name. See
+    // src/utils/payoutGatewayRouting.js for the full precedence + band convention.
+    // The resolved gateway is persisted on the payout record so the status-check /
+    // reconcile paths hit the SAME gateway that processed it.
     const md = user.MerchantDetail;
-    const routingThreshold =
-      md.payout_gateway_threshold !== null && md.payout_gateway_threshold !== undefined && md.payout_gateway_threshold !== ''
-        ? parseFloat(md.payout_gateway_threshold)
-        : null;
-    let effectiveGateway = md.payout_merchant_name;
-    if (routingThreshold !== null && !isNaN(routingThreshold) && md.payout_gateway_above && md.payout_gateway_below) {
-      effectiveGateway = parseFloat(amount) >= routingThreshold ? md.payout_gateway_above : md.payout_gateway_below;
+    const routing = resolvePayoutGateway(md, amount);
+    const effectiveGateway = routing.gateway;
+    if (routing.routed) {
       recordTraceEvent({
         reference_id, trace_type: 'payout', stage: STAGES.VALIDATED, status: 'info', source: 'api',
         gateway_name: effectiveGateway,
-        detail: `Amount-based routing: ${amount} ${parseFloat(amount) >= routingThreshold ? '>=' : '<'} ${routingThreshold} -> ${effectiveGateway}`
+        detail: routing.detail
       });
     }
 

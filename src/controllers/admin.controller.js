@@ -12,6 +12,7 @@ const {
 } = require('../transactionStatusCheck/TransactionCheck');
 const { logger } = require('../utils/logger');
 const { istDayRange, istDaySkeleton } = require('../utils/istTime');
+const { validateBands } = require('../utils/payoutGatewayRouting');
 // const Wallet = require('../models/wallet.model');
 const Transaction = require('../models/transaction.model');
 const UserTransaction = require('../models/userTransaction.model');
@@ -728,6 +729,7 @@ const getUserCallbacks = async (req, res) => {
                 payout_gateway_threshold: merchantDetails?.payout_gateway_threshold ?? null,
                 payout_gateway_above: merchantDetails?.payout_gateway_above || null,
                 payout_gateway_below: merchantDetails?.payout_gateway_below || null,
+                payout_gateway_bands: merchantDetails?.payout_gateway_bands ?? null,
                 last_updated: merchantDetails?.updated_at || null
             }
         });
@@ -1403,7 +1405,8 @@ const updateUserPayoutCallback = async (req, res) => {
             dummyUtrPrefix,
             payoutGatewayThreshold,
             payoutGatewayAbove,
-            payoutGatewayBelow
+            payoutGatewayBelow,
+            payoutGatewayBands
         } = req.body;
 
         // Check if user exists
@@ -1448,6 +1451,22 @@ const updateUserPayoutCallback = async (req, res) => {
             }
         }
 
+        // N-tier amount-range routing (payout_gateway_bands). Preferred over the
+        // legacy threshold group above. `undefined` => field omitted => leave the
+        // stored bands untouched. An empty array / null => clear band routing. A
+        // non-empty array => validate & store, and clear the legacy threshold cols
+        // so the two routing mechanisms can't silently disagree.
+        let bandsUpdate; // undefined => don't touch
+        let clearLegacyForBands = false;
+        if (payoutGatewayBands !== undefined) {
+            const { valid, bands, error } = validateBands(payoutGatewayBands);
+            if (!valid) {
+                return res.status(400).json({ success: false, message: error });
+            }
+            bandsUpdate = bands; // array to store, or null to clear
+            if (bands && bands.length) clearLegacyForBands = true;
+        }
+
         const updateData = {};
         if (hasUrl) updateData.payout_callback = payoutUrl.trim();
         if (hasMerchant) {
@@ -1461,6 +1480,15 @@ const updateUserPayoutCallback = async (req, res) => {
             updateData.payout_gateway_above = routingAbove;
             updateData.payout_gateway_below = routingBelow;
         }
+        if (bandsUpdate !== undefined) {
+            updateData.payout_gateway_bands = bandsUpdate;
+        }
+        if (clearLegacyForBands) {
+            // Bands supersede the legacy threshold routing; wipe it so it can't linger.
+            updateData.payout_gateway_threshold = null;
+            updateData.payout_gateway_above = null;
+            updateData.payout_gateway_below = null;
+        }
 
         // Find or create merchant details
         const [merchantDetails, created] = await MerchantDetails.findOrCreate({
@@ -1470,9 +1498,10 @@ const updateUserPayoutCallback = async (req, res) => {
                 payout_merchant_name: hasMerchant ? payoutMerchantName : '',
                 payout_merchant_assigned: hasMerchant ? payoutMerchantName : '',
                 dummy_utr_prefix: cleanUtrPrefix ?? null,
-                payout_gateway_threshold: routingThreshold ?? null,
-                payout_gateway_above: routingAbove ?? null,
-                payout_gateway_below: routingBelow ?? null
+                payout_gateway_threshold: clearLegacyForBands ? null : (routingThreshold ?? null),
+                payout_gateway_above: clearLegacyForBands ? null : (routingAbove ?? null),
+                payout_gateway_below: clearLegacyForBands ? null : (routingBelow ?? null),
+                payout_gateway_bands: bandsUpdate ?? null
             }
         });
 

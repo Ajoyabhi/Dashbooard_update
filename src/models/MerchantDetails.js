@@ -68,6 +68,16 @@ module.exports = (sequelize) => {
             allowNull: true,
             defaultValue: null,
             comment: 'Gateway used when amount < payout_gateway_threshold'
+        },
+        // N-tier amount-range routing. When set to a valid non-empty array it
+        // supersedes the legacy single-threshold columns above. Each band is
+        // { min, max, gateway } and matches when amount >= min && (max === null
+        // || amount < max). See src/utils/payoutGatewayRouting.js.
+        payout_gateway_bands: {
+            type: DataTypes.JSON,
+            allowNull: true,
+            defaultValue: null,
+            comment: 'Ordered JSON array of {min,max,gateway} amount bands; NULL/empty falls back to legacy threshold then payout_merchant_name'
         }
     }, {
         tableName: 'merchant_details',

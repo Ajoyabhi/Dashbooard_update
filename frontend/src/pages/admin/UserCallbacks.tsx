@@ -7,6 +7,14 @@ import api from '../../utils/axios';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
+// One amount-range routing band. min/max are kept as strings for the inputs
+// (blank min => 0, blank max => no upper bound / ∞).
+interface GatewayBand {
+  min: string;
+  max: string;
+  gateway: string;
+}
+
 interface CallbackSettings {
   payinUrl: string;
   payinMethod: string;
@@ -17,20 +25,45 @@ interface CallbackSettings {
   payinMerchantName: string;
   payoutMerchantName: string;
   dummyUtrPrefix: string;
-  payoutGatewayThreshold: string;
-  payoutGatewayAbove: string;
-  payoutGatewayBelow: string;
+  payoutGatewayBands: GatewayBand[];
   currentPayinUrl: string;
   currentPayoutUrl: string;
   currentPayinMerchantName: string;
   currentPayoutMerchantName: string;
   currentDummyUtrPrefix: string;
-  currentPayoutGatewayThreshold: string;
-  currentPayoutGatewayAbove: string;
-  currentPayoutGatewayBelow: string;
+  currentPayoutGatewayBands: GatewayBand[];
 }
 
 const PAYOUT_GATEWAYS = ['BluSwap', 'MizorPay', 'DummyGateway'];
+
+// Convert the API's stored bands (or legacy single-threshold columns) into the
+// editable GatewayBand[] the UI works with. Falls back to seeding a 2-band setup
+// from the legacy payout_gateway_threshold/above/below so pre-existing routing
+// still shows up (and re-saves as bands).
+const toBands = (d: any): GatewayBand[] => {
+  const raw = d?.payout_gateway_bands;
+  let arr: any[] | null = null;
+  if (Array.isArray(raw)) arr = raw;
+  else if (typeof raw === 'string' && raw.trim()) {
+    try { const p = JSON.parse(raw); if (Array.isArray(p)) arr = p; } catch { /* ignore */ }
+  }
+  if (arr && arr.length) {
+    return arr.map((b) => ({
+      min: b?.min === null || b?.min === undefined ? '' : String(b.min),
+      max: b?.max === null || b?.max === undefined ? '' : String(b.max),
+      gateway: b?.gateway || ''
+    }));
+  }
+  // Legacy single-threshold fallback -> two bands.
+  const th = d?.payout_gateway_threshold;
+  if (th !== null && th !== undefined && String(th) !== '' && d?.payout_gateway_above && d?.payout_gateway_below) {
+    return [
+      { min: '', max: String(th), gateway: d.payout_gateway_below },
+      { min: String(th), max: '', gateway: d.payout_gateway_above }
+    ];
+  }
+  return [];
+};
 
 interface GatewayStat {
   gateway: string;
@@ -54,17 +87,13 @@ export default function UserCallbacks() {
     payinMerchantName: '',
     payoutMerchantName: '',
     dummyUtrPrefix: '',
-    payoutGatewayThreshold: '',
-    payoutGatewayAbove: '',
-    payoutGatewayBelow: '',
+    payoutGatewayBands: [],
     currentPayinUrl: '',
     currentPayoutUrl: '',
     currentPayinMerchantName: '',
     currentPayoutMerchantName: '',
     currentDummyUtrPrefix: '',
-    currentPayoutGatewayThreshold: '',
-    currentPayoutGatewayAbove: '',
-    currentPayoutGatewayBelow: ''
+    currentPayoutGatewayBands: []
   });
 
   const [gatewayStats, setGatewayStats] = useState<GatewayStat[]>([]);
@@ -83,9 +112,9 @@ export default function UserCallbacks() {
       try {
         const response = await api.get(`/admin/users/${userId}/callback`);
         if (response.data.success) {
-          const { payin_callback, payout_callback, payin_merchant_name, payout_merchant_name, dummy_utr_prefix,
-            payout_gateway_threshold, payout_gateway_above, payout_gateway_below } = response.data.data;
-          const thresholdStr = (payout_gateway_threshold ?? '') === '' ? '' : String(payout_gateway_threshold);
+          const d = response.data.data;
+          const { payin_callback, payout_callback, payin_merchant_name, payout_merchant_name, dummy_utr_prefix } = d;
+          const bands = toBands(d);
           setSettings(prev => ({
             ...prev,
             payinUrl: '',
@@ -93,17 +122,13 @@ export default function UserCallbacks() {
             payinMerchantName: '',
             payoutMerchantName: '',
             dummyUtrPrefix: dummy_utr_prefix || '',
-            payoutGatewayThreshold: thresholdStr,
-            payoutGatewayAbove: payout_gateway_above || '',
-            payoutGatewayBelow: payout_gateway_below || '',
+            payoutGatewayBands: bands,
             currentPayinUrl: payin_callback || '',
             currentPayoutUrl: payout_callback || '',
             currentPayinMerchantName: payin_merchant_name || '',
             currentPayoutMerchantName: payout_merchant_name || '',
             currentDummyUtrPrefix: dummy_utr_prefix || '',
-            currentPayoutGatewayThreshold: thresholdStr,
-            currentPayoutGatewayAbove: payout_gateway_above || '',
-            currentPayoutGatewayBelow: payout_gateway_below || ''
+            currentPayoutGatewayBands: bands
           }));
         } else {
           toast.error('Failed to fetch callback details');
@@ -179,26 +204,55 @@ export default function UserCallbacks() {
     }
   };
 
+  // Drop fully-empty rows, keep the admin's order. A row counts as "filled" once
+  // it has a gateway; min/max may be blank (0 / ∞).
+  const cleanBands = (bands: GatewayBand[]) =>
+    bands
+      .filter(b => b.gateway || b.min !== '' || b.max !== '')
+      .map(b => ({ min: b.min === '' ? 0 : Number(b.min), max: b.max === '' ? null : Number(b.max), gateway: b.gateway }));
+
+  // Client-side validation mirroring the server's validateBands, so the admin
+  // gets immediate feedback. Returns an error string, or null when OK.
+  const validateBandsClient = (bands: GatewayBand[]): string | null => {
+    const filled = bands.filter(b => b.gateway || b.min !== '' || b.max !== '');
+    for (const b of filled) {
+      if (!b.gateway) return 'Every band needs a gateway selected.';
+      const min = b.min === '' ? 0 : Number(b.min);
+      const max = b.max === '' ? null : Number(b.max);
+      if (isNaN(min) || (max !== null && isNaN(max))) return 'Band Min/Max must be numbers.';
+      if (max !== null && max <= min) return `Band Max (${max}) must be greater than Min (${min}).`;
+    }
+    const sorted = filled
+      .map(b => ({ min: b.min === '' ? 0 : Number(b.min), max: b.max === '' ? Infinity : Number(b.max) }))
+      .sort((a, z) => a.min - z.min);
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i].min < sorted[i - 1].max) return 'Bands must not overlap.';
+    }
+    return null;
+  };
+
   const handlePayoutCallback = async () => {
+    const bandError = validateBandsClient(settings.payoutGatewayBands);
+    if (bandError) {
+      toast.error(bandError);
+      return;
+    }
     try {
-      const response = await api.post(`/admin/users/${userId}/callback/payout`, settings);
+      const payload = { ...settings, payoutGatewayBands: cleanBands(settings.payoutGatewayBands) };
+      const response = await api.post(`/admin/users/${userId}/callback/payout`, payload);
       if (response.data.success) {
         // Reflect the authoritative record — fields the admin left blank were
         // preserved server-side, so read the current values back from the response
         // instead of the (possibly empty) form inputs.
         const d = response.data.data || {};
-        const thStr = (d.payout_gateway_threshold ?? '') === '' ? '' : String(d.payout_gateway_threshold);
+        const bands = toBands(d);
         setSettings(prev => ({
           ...prev,
           currentPayoutUrl: d.payout_callback ?? prev.currentPayoutUrl,
           currentPayoutMerchantName: d.payout_merchant_name ?? prev.currentPayoutMerchantName,
           currentDummyUtrPrefix: d.dummy_utr_prefix ?? prev.currentDummyUtrPrefix,
-          currentPayoutGatewayThreshold: thStr,
-          currentPayoutGatewayAbove: d.payout_gateway_above ?? prev.currentPayoutGatewayAbove,
-          currentPayoutGatewayBelow: d.payout_gateway_below ?? prev.currentPayoutGatewayBelow,
-          payoutGatewayThreshold: thStr,
-          payoutGatewayAbove: d.payout_gateway_above ?? prev.payoutGatewayAbove,
-          payoutGatewayBelow: d.payout_gateway_below ?? prev.payoutGatewayBelow,
+          currentPayoutGatewayBands: bands,
+          payoutGatewayBands: bands,
           payoutUrl: '',
           payoutMerchantName: ''
         }));
@@ -206,9 +260,29 @@ export default function UserCallbacks() {
       } else {
         toast.error(response.data.message);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating payout callback:', error);
+      toast.error(error?.response?.data?.message || 'Error updating payout callback');
     }
+  };
+
+  // Band row editing helpers.
+  const updateBand = (idx: number, patch: Partial<GatewayBand>) => {
+    setSettings(prev => ({
+      ...prev,
+      payoutGatewayBands: prev.payoutGatewayBands.map((b, i) => (i === idx ? { ...b, ...patch } : b))
+    }));
+  };
+  const addBand = () => {
+    setSettings(prev => {
+      const bands = prev.payoutGatewayBands;
+      // Prefill the new band's min with the previous band's max for contiguity.
+      const prevMax = bands.length ? bands[bands.length - 1].max : '';
+      return { ...prev, payoutGatewayBands: [...bands, { min: prevMax, max: '', gateway: '' }] };
+    });
+  };
+  const removeBand = (idx: number) => {
+    setSettings(prev => ({ ...prev, payoutGatewayBands: prev.payoutGatewayBands.filter((_, i) => i !== idx) }));
   };
 
   return (
@@ -255,10 +329,17 @@ export default function UserCallbacks() {
               {settings.currentPayoutMerchantName === 'DummyGateway' && (
                 <p className="text-sm text-gray-500">Dummy UTR Prefix: {settings.currentDummyUtrPrefix || 'Not set (random)'}</p>
               )}
-              {settings.currentPayoutGatewayThreshold ? (
-                <p className="text-sm text-gray-500">
-                  Routing: ≥ {settings.currentPayoutGatewayThreshold} → {settings.currentPayoutGatewayAbove || '—'}, &lt; {settings.currentPayoutGatewayThreshold} → {settings.currentPayoutGatewayBelow || '—'}
-                </p>
+              {settings.currentPayoutGatewayBands.length > 0 ? (
+                <div className="text-sm text-gray-500">
+                  <p className="font-medium">Routing (by amount):</p>
+                  <ul className="list-disc ml-5">
+                    {settings.currentPayoutGatewayBands.map((b, i) => (
+                      <li key={i}>
+                        {(b.min === '' ? '0' : b.min)} – {(b.max === '' ? '∞' : b.max)} → {b.gateway || '—'}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               ) : (
                 <p className="text-sm text-gray-500">Routing: Off (single gateway)</p>
               )}
@@ -347,49 +428,77 @@ export default function UserCallbacks() {
                 </div>
               )}
 
-              {/* Amount-based gateway routing */}
+              {/* Amount-range gateway routing (N tiers) */}
               <div className="border-t border-gray-200 pt-4 mt-2">
                 <h4 className="font-medium text-gray-700">Amount-based Routing (optional)</h4>
                 <p className="text-xs text-gray-500 mb-2">
-                  Route by amount instead of the single gateway above. If the amount is <strong>≥ threshold</strong> it uses gateway A; otherwise gateway B. Leave the threshold blank to disable routing and use the single Merchant Name above.
+                  Route by amount across as many ranges as you like. Each band uses <strong>Min ≤ amount &lt; Max</strong> (Min inclusive, Max exclusive). Leave a band's <strong>Min blank for 0</strong> and its <strong>Max blank for ∞</strong> (no upper limit). Add no bands to disable routing and use the single Merchant Name above.
                 </p>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Threshold Amount (X)</label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={settings.payoutGatewayThreshold}
-                    onChange={(e) => setSettings({ ...settings, payoutGatewayThreshold: e.target.value.replace(/[^\d.]/g, '') })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                    placeholder="e.g. 50000 (blank = routing off)"
-                  />
+
+                {settings.payoutGatewayBands.length === 0 && (
+                  <p className="text-xs text-gray-400 italic mb-2">No bands — routing is off (single gateway).</p>
+                )}
+
+                <div className="space-y-2">
+                  {settings.payoutGatewayBands.map((band, idx) => (
+                    <div key={idx} className="grid grid-cols-12 gap-2 items-end">
+                      <div className="col-span-3">
+                        <label className="block text-xs font-medium text-gray-600">Min</label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={band.min}
+                          onChange={(e) => updateBand(idx, { min: e.target.value.replace(/[^\d.]/g, '') })}
+                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div className="col-span-3">
+                        <label className="block text-xs font-medium text-gray-600">Max</label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={band.max}
+                          onChange={(e) => updateBand(idx, { max: e.target.value.replace(/[^\d.]/g, '') })}
+                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          placeholder="∞"
+                        />
+                      </div>
+                      <div className="col-span-5">
+                        <label className="block text-xs font-medium text-gray-600">Gateway</label>
+                        <select
+                          value={band.gateway}
+                          onChange={(e) => updateBand(idx, { gateway: e.target.value })}
+                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        >
+                          <option value="">Select Gateway</option>
+                          {PAYOUT_GATEWAYS.map((g) => <option key={g} value={g}>{g === 'DummyGateway' ? 'Dummy (Test) Gateway' : g}</option>)}
+                        </select>
+                      </div>
+                      <div className="col-span-1">
+                        <button
+                          type="button"
+                          onClick={() => removeBand(idx)}
+                          className="w-full py-2 text-red-600 hover:text-red-800 text-sm font-medium"
+                          title="Remove band"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="grid grid-cols-2 gap-3 mt-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Gateway A (amount ≥ X)</label>
-                    <select
-                      value={settings.payoutGatewayAbove}
-                      onChange={(e) => setSettings({ ...settings, payoutGatewayAbove: e.target.value })}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                    >
-                      <option value="">Select Gateway</option>
-                      {PAYOUT_GATEWAYS.map((g) => <option key={g} value={g}>{g === 'DummyGateway' ? 'Dummy (Test) Gateway' : g}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Gateway B (amount &lt; X)</label>
-                    <select
-                      value={settings.payoutGatewayBelow}
-                      onChange={(e) => setSettings({ ...settings, payoutGatewayBelow: e.target.value })}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                    >
-                      <option value="">Select Gateway</option>
-                      {PAYOUT_GATEWAYS.map((g) => <option key={g} value={g}>{g === 'DummyGateway' ? 'Dummy (Test) Gateway' : g}</option>)}
-                    </select>
-                  </div>
-                </div>
-                {settings.payoutGatewayThreshold && (!settings.payoutGatewayAbove || !settings.payoutGatewayBelow) && (
-                  <p className="mt-2 text-xs text-red-600">Set both Gateway A and Gateway B, or clear the threshold to disable routing.</p>
+
+                <button
+                  type="button"
+                  onClick={addBand}
+                  className="mt-3 inline-flex items-center py-1.5 px-3 border border-indigo-300 text-indigo-700 text-sm font-medium rounded-md hover:bg-indigo-50"
+                >
+                  + Add band
+                </button>
+
+                {validateBandsClient(settings.payoutGatewayBands) && (
+                  <p className="mt-2 text-xs text-red-600">{validateBandsClient(settings.payoutGatewayBands)}</p>
                 )}
               </div>
 
