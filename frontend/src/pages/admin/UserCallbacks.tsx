@@ -326,7 +326,8 @@ export default function UserCallbacks() {
               <h3 className="font-medium text-gray-700">Payout Callback</h3>
               <p className="text-gray-600">{settings.currentPayoutUrl || 'Not set'}</p>
               <p className="text-sm text-gray-500">Merchant: {settings.currentPayoutMerchantName || 'Not set'}</p>
-              {settings.currentPayoutMerchantName === 'DummyGateway' && (
+              {(settings.currentPayoutMerchantName === 'DummyGateway' ||
+                settings.currentPayoutGatewayBands.some((b) => b.gateway === 'DummyGateway')) && (
                 <p className="text-sm text-gray-500">Dummy UTR Prefix: {settings.currentDummyUtrPrefix || 'Not set (random)'}</p>
               )}
               {settings.currentPayoutGatewayBands.length > 0 ? (
@@ -411,7 +412,14 @@ export default function UserCallbacks() {
                   <option value="DummyGateway">Dummy (Test) Gateway</option>
                 </select>
               </div>
-              {settings.payoutMerchantName === 'DummyGateway' && (
+              {(
+                // Show the UTR prefix whenever DummyGateway is reachable: as the
+                // selected single gateway, the currently-stored single gateway (top
+                // dropdown left blank = unchanged), OR any amount-range band.
+                settings.payoutMerchantName === 'DummyGateway' ||
+                (!settings.payoutMerchantName && settings.currentPayoutMerchantName === 'DummyGateway') ||
+                settings.payoutGatewayBands.some((b) => b.gateway === 'DummyGateway')
+              ) && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Dummy UTR Prefix</label>
                   <input
