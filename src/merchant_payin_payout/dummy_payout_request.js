@@ -37,6 +37,46 @@ const DUMMY_PAYOUT_UTR_LENGTH = parseInt(process.env.DUMMY_PAYOUT_UTR_LENGTH, 10
 // one. Overridable via env if the real gateway's wording ever changes.
 const DUMMY_PAYOUT_ACCEPT_MESSAGE = process.env.DUMMY_PAYOUT_ACCEPT_MESSAGE || 'Payout Initiated Successfully';
 
+// How many leading digits to lift from a recent real UTR when auto-deriving the
+// dummy prefix. Real bank UTRs share a bank/scheme lead, so borrowing the first
+// 7 makes the synthetic UTR resemble this merchant's genuine ones.
+const DERIVED_UTR_PREFIX_LEN = parseInt(process.env.DUMMY_PAYOUT_DERIVED_PREFIX_LEN, 10) || 7;
+
+/**
+ * Derive a UTR prefix from this merchant's most recent REAL (non-dummy) successful
+ * payout: strip its UTR to digits and take the leading DERIVED_UTR_PREFIX_LEN.
+ *
+ * Only completed payouts processed by a gateway other than DummyGateway are
+ * considered, so we never compound a prefix off a previous synthetic UTR. Returns
+ * null when the merchant has no usable real payout yet (caller then falls back to
+ * a fully random UTR).
+ */
+async function recentRealUtrPrefix(userId) {
+    if (!userId && userId !== 0) return null;
+    try {
+        const candidates = await PayoutTransaction.find({
+            'user.user_id': String(userId),
+            status: 'completed',
+            'metadata.gateway_name': { $ne: 'DummyGateway' },
+            'gateway_response.utr': { $type: 'string' }
+        })
+            .sort({ createdAt: -1 })
+            .limit(5)
+            .select('gateway_response.utr')
+            .lean();
+
+        for (const c of candidates) {
+            const digits = String(c?.gateway_response?.utr || '').replace(/\D/g, '');
+            if (digits.length >= DERIVED_UTR_PREFIX_LEN) {
+                return digits.slice(0, DERIVED_UTR_PREFIX_LEN);
+            }
+        }
+    } catch (error) {
+        logger.error('Failed to derive UTR prefix from recent payout', { error: error.message, userId });
+    }
+    return null;
+}
+
 /**
  * Build a synthetic UTR of exactly DUMMY_PAYOUT_UTR_LENGTH digits.
  *
@@ -81,13 +121,27 @@ async function dummyPayout(payoutData) {
         // payout — same id shape the merchant/dashboard gets for BluSwap/MizorPay.
         // Fall back to a fresh uuid only if the caller didn't pass it.
         const transactionId = payoutData.transaction_id || uuidv4();
-        const utr = fakeUtr(payoutData.dummy_utr_prefix);
+
+        // Resolve the UTR prefix. Precedence:
+        //   1. admin-configured dummy_utr_prefix (explicit override), else
+        //   2. digits derived from this merchant's most recent real payout UTR, else
+        //   3. nothing -> fakeUtr() produces a fully random UTR.
+        let prefix = String(payoutData.dummy_utr_prefix ?? '').replace(/\D/g, '');
+        let prefixSource = prefix ? 'configured' : 'random';
+        if (!prefix) {
+            const derived = await recentRealUtrPrefix(payoutData.user_id);
+            if (derived) {
+                prefix = derived;
+                prefixSource = 'derived-from-recent-payout';
+            }
+        }
+        const utr = fakeUtr(prefix);
 
         recordTraceEvent({
             reference_id: payoutData.reference_id, trace_type: 'payout', stage: STAGES.GATEWAY_REQUEST,
             status: 'pending', source: 'api', gateway_name: 'DummyGateway',
             detail: 'Initiating payout with DummyGateway (simulated)',
-            payload: { amount: Number(payoutData.amount).toFixed(2), request_type: payoutData.request_type || 'IMPS' }
+            payload: { amount: Number(payoutData.amount).toFixed(2), request_type: payoutData.request_type || 'IMPS', utr_prefix_source: prefixSource }
         });
 
         // Mark processing with the synthetic gateway handle — mirrors the real
