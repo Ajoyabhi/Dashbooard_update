@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Edit, ShieldCheck, BarChart3 } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import { adminMenuItems } from '../../data/mockData';
 import api from '../../utils/axios';
@@ -137,6 +137,13 @@ export default function UserView() {
                         <h1 className="text-2xl font-bold text-gray-900">User Details</h1>
                     </div>
                     <div className="flex space-x-3">
+                        <button
+                            onClick={() => navigate(`/admin/manage-user/${userId}/analytics`)}
+                            className="inline-flex items-center px-4 py-2 border border-indigo-600 rounded-md shadow-sm text-sm font-medium text-indigo-600 bg-white hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        >
+                            <BarChart3 className="h-5 w-5 mr-2" />
+                            Analytics
+                        </button>
                         <button
                             onClick={() => navigate(`/admin/manage-user/${userId}/rolling-reserve`)}
                             className="inline-flex items-center px-4 py-2 border border-amber-600 rounded-md shadow-sm text-sm font-medium text-amber-600 bg-white hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500"

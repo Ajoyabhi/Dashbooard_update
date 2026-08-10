@@ -15,6 +15,7 @@ import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import AdminDashboard from './pages/admin/Dashboard'
 import AdminManageUser from './pages/admin/ManageUser'
 import AdminUserView from './pages/admin/UserView'
+import AdminUserAnalytics from './pages/admin/UserAnalytics'
 import AdminUserEdit from './pages/admin/UserEdit'
 import AdminAddFund from './pages/admin/AddFund'
 import AdminRollingReserve from './pages/admin/RollingReserve'
@@ -90,6 +91,7 @@ export default function App() {
                 <Route path="/admin/manage-user" element={<AdminManageUser />} />
                 <Route path="/admin/manage-user/add" element={<AdminAddUser />} />
                 <Route path="/admin/manage-user/:userId" element={<AdminUserView />} />
+                <Route path="/admin/manage-user/:userId/analytics" element={<AdminUserAnalytics />} />
                 <Route path="/admin/manage-user/:userId/edit" element={<AdminUserEdit />} />
                 <Route path="/admin/manage-user/:userId/add-fund" element={<AdminAddFund />} />
                 <Route path="/admin/manage-user/:userId/rolling-reserve" element={<AdminRollingReserve />} />

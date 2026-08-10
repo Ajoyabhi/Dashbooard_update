@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Button, Chip, Skeleton, Divider } from '@mui/material'
-import { ArrowLeft, Edit2, Wallet, FileText, Phone as PhoneIcon, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, Edit2, Wallet, FileText, Phone as PhoneIcon, ShieldCheck, BarChart3 } from 'lucide-react'
 import api from '@/utils/axios'
 import { formatDateTime } from '@/utils/formatUtils'
 import toast from 'react-hot-toast'
@@ -95,6 +95,9 @@ export default function UserView() {
           </div>
         </div>
         <div className="flex gap-2">
+          <Button size="small" variant="outlined" startIcon={<BarChart3 size={14} />}
+            onClick={() => navigate(`/admin/manage-user/${userId}/analytics`)}
+            sx={{ borderColor: '#6366F1', color: '#6366F1', borderRadius: 2 }}>Analytics</Button>
           <Button size="small" variant="outlined" startIcon={<PhoneIcon size={14} />}
             onClick={() => navigate(`/admin/manage-user/${userId}/charges`)}
             sx={{ borderColor: '#E2E8F0', color: '#64748B', borderRadius: 2 }}>Charges</Button>

@@ -12,6 +12,7 @@ import ProtectedRoute from './components/auth/ProtectedRoute';
 import ManageUser from './pages/admin/ManageUser';
 import AddUser from './pages/admin/AddUser';
 import UserView from './pages/admin/UserView';
+import UserAnalytics from './pages/admin/UserAnalytics';
 import UserEdit from './pages/admin/UserEdit';
 import UserCharges from './pages/admin/UserCharges';
 import UserCallbacks from './pages/admin/UserCallbacks';
@@ -70,6 +71,7 @@ function AppRoutes() {
         <Route path="/admin/manage-user" element={<ProtectedRoute role="admin"><ManageUser /></ProtectedRoute>} />
         <Route path="/admin/manage-user/add" element={<ProtectedRoute role="admin"><AddUser /></ProtectedRoute>} />
         <Route path="/admin/manage-user/:userId" element={<ProtectedRoute role="admin"><UserView /></ProtectedRoute>} />
+        <Route path="/admin/manage-user/:userId/analytics" element={<ProtectedRoute role="admin"><UserAnalytics /></ProtectedRoute>} />
         <Route path="/admin/manage-user/:userId/edit" element={<ProtectedRoute role="admin"><UserEdit /></ProtectedRoute>} />
         <Route path="/admin/manage-user/:userId/charges" element={<ProtectedRoute role="admin"><UserCharges /></ProtectedRoute>} />
         <Route path="/admin/manage-user/:userId/callbacks" element={<ProtectedRoute role="admin"><UserCallbacks /></ProtectedRoute>} />

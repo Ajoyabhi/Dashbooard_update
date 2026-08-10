@@ -11,7 +11,7 @@ const {
   mizorpayTransactionStatus
 } = require('../transactionStatusCheck/TransactionCheck');
 const { logger } = require('../utils/logger');
-const { istDayRange, istDaySkeleton } = require('../utils/istTime');
+const { istDayRange, istDaySkeleton, istCreatedAtRange } = require('../utils/istTime');
 const { validateBands } = require('../utils/payoutGatewayRouting');
 // const Wallet = require('../models/wallet.model');
 const Transaction = require('../models/transaction.model');
@@ -4123,6 +4123,218 @@ const adminGetTransactionTrace = async (req, res) => {
     }
 };
 
+/**
+ * Per-user amount-distribution analytics for payin and payout.
+ *
+ * Reads MongoDB (the dashboard source of truth) and answers "how are this
+ * user's transaction amounts distributed?" — most/least used amounts, spread
+ * (median/mode/std-dev/percentiles), banded histogram, and the behavioural
+ * niches (hour-of-day and weekday cadence, status mix). Amounts are the
+ * requested principal (`amount`), not amount+charges, since the question is
+ * about the user's ticket-size behaviour.
+ *
+ * Query params: startDate, endDate (IST calendar dates), status ('all' or a
+ * specific transaction status).
+ */
+
+// Fixed rupee bands tuned for Indian payment ticket sizes.
+const AMOUNT_BANDS = [
+    [0, 100], [100, 500], [500, 1000], [1000, 2000], [2000, 5000],
+    [5000, 10000], [10000, 25000], [25000, 50000], [50000, 100000], [100000, Infinity],
+];
+
+const bandLabel = (lo, hi) => {
+    const fmt = (n) => (n >= 100000 ? `${n / 100000}L` : n >= 1000 ? `${n / 1000}k` : `${n}`);
+    return hi === Infinity ? `₹${fmt(lo)}+` : `₹${fmt(lo)}–${fmt(hi)}`;
+};
+
+// Turn a `$group by amount` result into the full statistical picture. All the
+// heavy stats are derived here in JS from the compact per-amount frequency list
+// (one row per distinct amount), which keeps the Mongo pipeline cheap.
+function summarizeAmounts(byAmount) {
+    const rows = (byAmount || [])
+        .filter(r => r._id != null)
+        .map(r => ({
+            amount: r._id,
+            count: r.count,
+            completed: r.completed || 0,
+            volume: r.volume || 0,
+        }));
+
+    const totalCount = rows.reduce((s, r) => s + r.count, 0);
+    const uniqueCount = rows.length;
+    const totalVolume = rows.reduce((s, r) => s + r.volume, 0);
+
+    const empty = {
+        totalCount: 0, uniqueCount: 0, totalVolume: 0, mean: 0, median: 0, mode: 0,
+        stddev: 0, min: 0, max: 0, p25: 0, p75: 0, p90: 0, repeatRatio: 0, avgTicket: 0,
+        mostUsed: [], leastUsed: [], distribution: [], histogram: [],
+    };
+    if (totalCount === 0) return empty;
+
+    const asc = [...rows].sort((a, b) => a.amount - b.amount);
+    const mean = totalVolume / totalCount;
+    const variance = asc.reduce((s, r) => s + r.count * Math.pow(r.amount - mean, 2), 0) / totalCount;
+    const stddev = Math.sqrt(variance);
+    const min = asc[0].amount;
+    const max = asc[asc.length - 1].amount;
+
+    // Weighted percentile over the frequency table.
+    const pct = (p) => {
+        const target = (p / 100) * totalCount;
+        let cum = 0;
+        for (const r of asc) {
+            cum += r.count;
+            if (cum >= target) return r.amount;
+        }
+        return max;
+    };
+
+    const byCountDesc = [...rows].sort((a, b) => b.count - a.count || b.amount - a.amount);
+    const byCountAsc = [...rows].sort((a, b) => a.count - b.count || a.amount - b.amount);
+
+    const histogram = AMOUNT_BANDS.map(([lo, hi]) => {
+        const band = rows.filter(r => r.amount >= lo && r.amount < hi);
+        return {
+            label: bandLabel(lo, hi),
+            min: lo,
+            max: hi === Infinity ? null : hi,
+            count: band.reduce((s, r) => s + r.count, 0),
+            volume: band.reduce((s, r) => s + r.volume, 0),
+        };
+    }).filter(b => b.count > 0);
+
+    return {
+        totalCount,
+        uniqueCount,
+        totalVolume,
+        mean,
+        avgTicket: mean,
+        median: pct(50),
+        mode: byCountDesc[0].amount,
+        stddev,
+        min,
+        max,
+        p25: pct(25),
+        p75: pct(75),
+        p90: pct(90),
+        // Share of transactions that reuse an already-seen amount — a high value
+        // means the user transacts in a few repeated ticket sizes.
+        repeatRatio: (totalCount - uniqueCount) / totalCount,
+        mostUsed: byCountDesc.slice(0, 12),
+        leastUsed: byCountAsc.slice(0, 12),
+        // Top distinct amounts by frequency, for the frequency bar chart.
+        distribution: byCountDesc.slice(0, 25),
+        histogram,
+    };
+}
+
+const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+// Run the single faceted aggregation for one collection and shape the result.
+async function buildAmountAnalytics(Model, match) {
+    const [facet] = await Model.aggregate([
+        { $match: match },
+        {
+            $facet: {
+                byAmount: [
+                    {
+                        $group: {
+                            _id: '$amount',
+                            count: { $sum: 1 },
+                            volume: { $sum: '$amount' },
+                            completed: { $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] } },
+                        },
+                    },
+                ],
+                byStatus: [
+                    { $group: { _id: '$status', count: { $sum: 1 }, volume: { $sum: '$amount' } } },
+                ],
+                byHour: [
+                    {
+                        $group: {
+                            _id: { $hour: { date: '$createdAt', timezone: 'Asia/Kolkata' } },
+                            count: { $sum: 1 },
+                            volume: { $sum: '$amount' },
+                        },
+                    },
+                ],
+                byDow: [
+                    {
+                        $group: {
+                            _id: { $dayOfWeek: { date: '$createdAt', timezone: 'Asia/Kolkata' } },
+                            count: { $sum: 1 },
+                            volume: { $sum: '$amount' },
+                        },
+                    },
+                ],
+            },
+        },
+    ]);
+
+    const stats = summarizeAmounts(facet?.byAmount);
+
+    const statusBreakdown = (facet?.byStatus || []).map(s => ({
+        status: s._id || 'unknown',
+        count: s.count,
+        volume: s.volume || 0,
+    })).sort((a, b) => b.count - a.count);
+
+    // Fill every hour 0–23 so the cadence chart has no gaps.
+    const hourMap = new Map((facet?.byHour || []).map(h => [h._id, h]));
+    const hourly = Array.from({ length: 24 }, (_, h) => ({
+        hour: h,
+        label: `${String(h).padStart(2, '0')}:00`,
+        count: hourMap.get(h)?.count || 0,
+        volume: hourMap.get(h)?.volume || 0,
+    }));
+
+    // $dayOfWeek is 1 (Sunday) … 7 (Saturday).
+    const dowMap = new Map((facet?.byDow || []).map(d => [d._id, d]));
+    const weekday = WEEKDAY_LABELS.map((label, i) => ({
+        weekday: label,
+        count: dowMap.get(i + 1)?.count || 0,
+        volume: dowMap.get(i + 1)?.volume || 0,
+    }));
+
+    return { ...stats, statusBreakdown, hourly, weekday };
+}
+
+const getUserAmountAnalytics = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { startDate, endDate, status } = req.query;
+
+        const user = await User.findByPk(userId);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+
+        const match = { 'user.user_id': String(userId) };
+        const dateRange = istCreatedAtRange(startDate, endDate);
+        if (Object.keys(dateRange).length) match.createdAt = dateRange;
+        if (status && status !== 'all') match.status = status;
+
+        const [payin, payout] = await Promise.all([
+            buildAmountAnalytics(PayinTransaction, match),
+            buildAmountAnalytics(PayoutTransaction, match),
+        ]);
+
+        return res.json({
+            success: true,
+            data: {
+                user: { id: user.id, name: user.name, user_name: user.user_name },
+                filters: { startDate: startDate || null, endDate: endDate || null, status: status || 'all' },
+                payin,
+                payout,
+            },
+        });
+    } catch (error) {
+        logger.error('Error building user amount analytics', { error: error.message, userId: req.params.userId });
+        return res.status(500).json({ success: false, message: 'Error building user amount analytics', error: error.message });
+    }
+};
+
 module.exports = {
     getAllUsers,
     getAllAgents,
@@ -4183,5 +4395,6 @@ module.exports = {
     resendPayoutWebhook,
     adminCheckPayoutStatus,
     adminSyncPayoutStatus,
-    adminGetTransactionTrace
+    adminGetTransactionTrace,
+    getUserAmountAnalytics
 };

@@ -60,7 +60,8 @@ const {
   resendPayoutWebhook,
   adminCheckPayoutStatus,
   adminSyncPayoutStatus,
-  adminGetTransactionTrace
+  adminGetTransactionTrace,
+  getUserAmountAnalytics
 } = require('../controllers/admin.controller');
 const { registerUser } = require('../controllers/auth.controller');
 const { auth, authorize } = require('../middleware/auth.middleware');
@@ -97,6 +98,9 @@ router.delete('/users/:user_id/merchant-charges/:charge_id', deleteMerchantCharg
 // User Callbacks Management
 router.get('/users/:userId/callback', getUserCallbacks);
 router.get('/users/:userId/payout-gateway-stats', getUserPayoutGatewayStats);
+
+// Per-user amount-distribution / transaction-behaviour analytics
+router.get('/users/:userId/amount-analytics', getUserAmountAnalytics);
 router.post('/users/:userId/callback/payin', updateUserPayinCallback);
 router.post('/users/:userId/callback/payout', updateUserPayoutCallback);
 
