@@ -18,6 +18,7 @@ const { bluswapTransactionStatus, mizorpayTransactionStatus } = require('../tran
 const { reconcilePayoutTransaction, finalizePayout } = require('../services/payoutReconciliation.service');
 const { recordTraceEvent, STAGES } = require('../services/transactionTrace.service');
 const { resolvePayoutGateway } = require('../utils/payoutGatewayRouting');
+const { applyAmountRotation } = require('../services/payoutRotation.service');
 
 /**
  * Reverse a payout that failed synchronously at creation time (e.g. the gateway
@@ -324,7 +325,23 @@ const initiatePayout = async (req, res) => {
     // The resolved gateway is persisted on the payout record so the status-check /
     // reconcile paths hit the SAME gateway that processed it.
     const md = user.MerchantDetail;
-    const routing = resolvePayoutGateway(md, amount);
+    let routing = resolvePayoutGateway(md, amount);
+    // When the matched band defines a rotation pool, resolve the concrete gateway
+    // by advancing the per-(user, amount) rotation counter. Every dispatch
+    // consumes one slot; each gateway gets a run of `rotateEvery` before the next.
+    if (routing.pool) {
+      const rot = await applyAmountRotation({
+        userId: user_id,
+        amount,
+        pool: routing.pool,
+        rotateEvery: routing.rotateEvery,
+      });
+      routing = {
+        gateway: rot.gateway,
+        routed: true,
+        detail: `${routing.detail}; ${rot.detail}`,
+      };
+    }
     const effectiveGateway = routing.gateway;
     if (routing.routed) {
       recordTraceEvent({

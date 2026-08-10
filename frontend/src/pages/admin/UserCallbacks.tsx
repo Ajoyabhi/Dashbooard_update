@@ -9,11 +9,25 @@ import 'react-toastify/dist/ReactToastify.css';
 
 // One amount-range routing band. min/max are kept as strings for the inputs
 // (blank min => 0, blank max => no upper bound / ∞).
+//
+// A band is either a single gateway (`mode: 'single'`, uses `gateway`) or a
+// rotation pool (`mode: 'rotate'`, uses `gateways` in order + `rotateEvery`):
+// each gateway processes `rotateEvery` consecutive same-amount payouts before
+// handing off to the next, wrapping around.
+type BandMode = 'single' | 'rotate';
 interface GatewayBand {
   min: string;
   max: string;
-  gateway: string;
+  gateway: string;        // used when mode === 'single'
+  mode: BandMode;
+  gateways: string[];     // ordered pool, used when mode === 'rotate'
+  rotateEvery: string;    // run-length A, used when mode === 'rotate'
 }
+
+// A blank band in single mode.
+const emptyBand = (min = '', max = ''): GatewayBand => ({
+  min, max, gateway: '', mode: 'single', gateways: [], rotateEvery: '3',
+});
 
 interface CallbackSettings {
   payinUrl: string;
@@ -48,18 +62,22 @@ const toBands = (d: any): GatewayBand[] => {
     try { const p = JSON.parse(raw); if (Array.isArray(p)) arr = p; } catch { /* ignore */ }
   }
   if (arr && arr.length) {
-    return arr.map((b) => ({
-      min: b?.min === null || b?.min === undefined ? '' : String(b.min),
-      max: b?.max === null || b?.max === undefined ? '' : String(b.max),
-      gateway: b?.gateway || ''
-    }));
+    return arr.map((b) => {
+      const min = b?.min === null || b?.min === undefined ? '' : String(b.min);
+      const max = b?.max === null || b?.max === undefined ? '' : String(b.max);
+      const pool = Array.isArray(b?.gateways) ? b.gateways.filter(Boolean) : [];
+      if (pool.length >= 2) {
+        return { min, max, gateway: '', mode: 'rotate' as BandMode, gateways: pool, rotateEvery: String(b?.rotateEvery || 1) };
+      }
+      return { min, max, gateway: b?.gateway || pool[0] || '', mode: 'single' as BandMode, gateways: [], rotateEvery: '3' };
+    });
   }
   // Legacy single-threshold fallback -> two bands.
   const th = d?.payout_gateway_threshold;
   if (th !== null && th !== undefined && String(th) !== '' && d?.payout_gateway_above && d?.payout_gateway_below) {
     return [
-      { min: '', max: String(th), gateway: d.payout_gateway_below },
-      { min: String(th), max: '', gateway: d.payout_gateway_above }
+      { ...emptyBand('', String(th)), gateway: d.payout_gateway_below },
+      { ...emptyBand(String(th), ''), gateway: d.payout_gateway_above }
     ];
   }
   return [];
@@ -204,23 +222,43 @@ export default function UserCallbacks() {
     }
   };
 
-  // Drop fully-empty rows, keep the admin's order. A row counts as "filled" once
-  // it has a gateway; min/max may be blank (0 / ∞).
+  // A row is "filled" (worth keeping/validating) once it has any gateway
+  // configured or a min/max set; min/max may be blank (0 / ∞).
+  const bandFilled = (b: GatewayBand) =>
+    b.min !== '' || b.max !== '' ||
+    (b.mode === 'rotate' ? b.gateways.some(Boolean) : !!b.gateway);
+
+  // Drop fully-empty rows, keep the admin's order. Emit the same clean shapes the
+  // server's validateBands normalises to: single -> {min,max,gateway},
+  // rotation -> {min,max,gateways,rotateEvery}.
   const cleanBands = (bands: GatewayBand[]) =>
-    bands
-      .filter(b => b.gateway || b.min !== '' || b.max !== '')
-      .map(b => ({ min: b.min === '' ? 0 : Number(b.min), max: b.max === '' ? null : Number(b.max), gateway: b.gateway }));
+    bands.filter(bandFilled).map((b) => {
+      const min = b.min === '' ? 0 : Number(b.min);
+      const max = b.max === '' ? null : Number(b.max);
+      if (b.mode === 'rotate') {
+        return { min, max, gateways: b.gateways.filter(Boolean), rotateEvery: b.rotateEvery === '' ? 1 : Number(b.rotateEvery) };
+      }
+      return { min, max, gateway: b.gateway };
+    });
 
   // Client-side validation mirroring the server's validateBands, so the admin
   // gets immediate feedback. Returns an error string, or null when OK.
   const validateBandsClient = (bands: GatewayBand[]): string | null => {
-    const filled = bands.filter(b => b.gateway || b.min !== '' || b.max !== '');
+    const filled = bands.filter(bandFilled);
     for (const b of filled) {
-      if (!b.gateway) return 'Every band needs a gateway selected.';
       const min = b.min === '' ? 0 : Number(b.min);
       const max = b.max === '' ? null : Number(b.max);
       if (isNaN(min) || (max !== null && isNaN(max))) return 'Band Min/Max must be numbers.';
       if (max !== null && max <= min) return `Band Max (${max}) must be greater than Min (${min}).`;
+      if (b.mode === 'rotate') {
+        const pool = b.gateways.filter(Boolean);
+        if (pool.length < 2) return 'A rotation band needs at least two gateways.';
+        if (new Set(pool).size < 2) return 'A rotation pool must contain at least two distinct gateways.';
+        const re = b.rotateEvery === '' ? 1 : Number(b.rotateEvery);
+        if (!Number.isInteger(re) || re < 1) return `Rotate-every must be a whole number ≥ 1 (got ${b.rotateEvery}).`;
+      } else if (!b.gateway) {
+        return 'Every band needs a gateway selected.';
+      }
     }
     const sorted = filled
       .map(b => ({ min: b.min === '' ? 0 : Number(b.min), max: b.max === '' ? Infinity : Number(b.max) }))
@@ -278,12 +316,28 @@ export default function UserCallbacks() {
       const bands = prev.payoutGatewayBands;
       // Prefill the new band's min with the previous band's max for contiguity.
       const prevMax = bands.length ? bands[bands.length - 1].max : '';
-      return { ...prev, payoutGatewayBands: [...bands, { min: prevMax, max: '', gateway: '' }] };
+      return { ...prev, payoutGatewayBands: [...bands, emptyBand(prevMax, '')] };
     });
   };
   const removeBand = (idx: number) => {
     setSettings(prev => ({ ...prev, payoutGatewayBands: prev.payoutGatewayBands.filter((_, i) => i !== idx) }));
   };
+
+  // Switch a band between single-gateway and rotation-pool mode, carrying over
+  // the already-chosen gateway so nothing is lost on the toggle.
+  const setBandMode = (idx: number, mode: BandMode) => {
+    updateBand(idx, mode === 'rotate'
+      ? { mode, gateways: (settings.payoutGatewayBands[idx].gateway ? [settings.payoutGatewayBands[idx].gateway] : []) }
+      : { mode, gateway: settings.payoutGatewayBands[idx].gateways.filter(Boolean)[0] || '' });
+  };
+
+  // Rotation-pool slot helpers (order defines the rotation sequence).
+  const updatePoolSlot = (idx: number, slot: number, value: string) =>
+    updateBand(idx, { gateways: settings.payoutGatewayBands[idx].gateways.map((g, i) => (i === slot ? value : g)) });
+  const addPoolSlot = (idx: number) =>
+    updateBand(idx, { gateways: [...settings.payoutGatewayBands[idx].gateways, ''] });
+  const removePoolSlot = (idx: number, slot: number) =>
+    updateBand(idx, { gateways: settings.payoutGatewayBands[idx].gateways.filter((_, i) => i !== slot) });
 
   return (
     <DashboardLayout menuItems={adminMenuItems} title="Callback Settings">
@@ -327,7 +381,7 @@ export default function UserCallbacks() {
               <p className="text-gray-600">{settings.currentPayoutUrl || 'Not set'}</p>
               <p className="text-sm text-gray-500">Merchant: {settings.currentPayoutMerchantName || 'Not set'}</p>
               {(settings.currentPayoutMerchantName === 'DummyGateway' ||
-                settings.currentPayoutGatewayBands.some((b) => b.gateway === 'DummyGateway')) && (
+                settings.currentPayoutGatewayBands.some((b) => b.gateway === 'DummyGateway' || b.gateways.includes('DummyGateway'))) && (
                 <p className="text-sm text-gray-500">Dummy UTR Prefix: {settings.currentDummyUtrPrefix || 'Not set (random)'}</p>
               )}
               {settings.currentPayoutGatewayBands.length > 0 ? (
@@ -336,7 +390,10 @@ export default function UserCallbacks() {
                   <ul className="list-disc ml-5">
                     {settings.currentPayoutGatewayBands.map((b, i) => (
                       <li key={i}>
-                        {(b.min === '' ? '0' : b.min)} – {(b.max === '' ? '∞' : b.max)} → {b.gateway || '—'}
+                        {(b.min === '' ? '0' : b.min)} – {(b.max === '' ? '∞' : b.max)} →{' '}
+                        {b.mode === 'rotate'
+                          ? `${b.gateways.join(' → ')} (rotate every ${b.rotateEvery || 1})`
+                          : (b.gateway || '—')}
                       </li>
                     ))}
                   </ul>
@@ -418,7 +475,7 @@ export default function UserCallbacks() {
                 // dropdown left blank = unchanged), OR any amount-range band.
                 settings.payoutMerchantName === 'DummyGateway' ||
                 (!settings.payoutMerchantName && settings.currentPayoutMerchantName === 'DummyGateway') ||
-                settings.payoutGatewayBands.some((b) => b.gateway === 'DummyGateway')
+                settings.payoutGatewayBands.some((b) => b.gateway === 'DummyGateway' || b.gateways.includes('DummyGateway'))
               ) && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Dummy UTR Prefix</label>
@@ -442,57 +499,148 @@ export default function UserCallbacks() {
                 <p className="text-xs text-gray-500 mb-2">
                   Route by amount across as many ranges as you like. Each band uses <strong>Min ≤ amount &lt; Max</strong> (Min inclusive, Max exclusive). Leave a band's <strong>Min blank for 0</strong> and its <strong>Max blank for ∞</strong> (no upper limit). Add no bands to disable routing and use the single Merchant Name above.
                 </p>
+                <p className="text-xs text-gray-500 mb-2">
+                  Set a band to <strong>Rotate</strong> to spread its amounts across multiple gateways: each gateway handles <strong>Rotate&nbsp;every</strong> consecutive payouts of the <em>same amount</em> before handing off to the next in the pool (then it wraps around).
+                </p>
 
                 {settings.payoutGatewayBands.length === 0 && (
                   <p className="text-xs text-gray-400 italic mb-2">No bands — routing is off (single gateway).</p>
                 )}
 
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {settings.payoutGatewayBands.map((band, idx) => (
-                    <div key={idx} className="grid grid-cols-12 gap-2 items-end">
-                      <div className="col-span-3">
-                        <label className="block text-xs font-medium text-gray-600">Min</label>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={band.min}
-                          onChange={(e) => updateBand(idx, { min: e.target.value.replace(/[^\d.]/g, '') })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                          placeholder="0"
-                        />
+                    <div key={idx} className="border border-gray-200 rounded-md p-3 space-y-3">
+                      {/* Range + mode + remove */}
+                      <div className="grid grid-cols-12 gap-2 items-end">
+                        <div className="col-span-3">
+                          <label className="block text-xs font-medium text-gray-600">Min</label>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={band.min}
+                            onChange={(e) => updateBand(idx, { min: e.target.value.replace(/[^\d.]/g, '') })}
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div className="col-span-3">
+                          <label className="block text-xs font-medium text-gray-600">Max</label>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={band.max}
+                            onChange={(e) => updateBand(idx, { max: e.target.value.replace(/[^\d.]/g, '') })}
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            placeholder="∞"
+                          />
+                        </div>
+                        <div className="col-span-5">
+                          <label className="block text-xs font-medium text-gray-600">Routing</label>
+                          <div className="mt-1 inline-flex rounded-md border border-gray-300 overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() => setBandMode(idx, 'single')}
+                              className={`px-3 py-1.5 text-sm ${band.mode === 'single' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                            >
+                              Single
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setBandMode(idx, 'rotate')}
+                              className={`px-3 py-1.5 text-sm border-l border-gray-300 ${band.mode === 'rotate' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                            >
+                              Rotate
+                            </button>
+                          </div>
+                        </div>
+                        <div className="col-span-1">
+                          <button
+                            type="button"
+                            onClick={() => removeBand(idx)}
+                            className="w-full py-2 text-red-600 hover:text-red-800 text-sm font-medium"
+                            title="Remove band"
+                          >
+                            ✕
+                          </button>
+                        </div>
                       </div>
-                      <div className="col-span-3">
-                        <label className="block text-xs font-medium text-gray-600">Max</label>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={band.max}
-                          onChange={(e) => updateBand(idx, { max: e.target.value.replace(/[^\d.]/g, '') })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                          placeholder="∞"
-                        />
-                      </div>
-                      <div className="col-span-5">
-                        <label className="block text-xs font-medium text-gray-600">Gateway</label>
-                        <select
-                          value={band.gateway}
-                          onChange={(e) => updateBand(idx, { gateway: e.target.value })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                        >
-                          <option value="">Select Gateway</option>
-                          {PAYOUT_GATEWAYS.map((g) => <option key={g} value={g}>{g === 'DummyGateway' ? 'Dummy (Test) Gateway' : g}</option>)}
-                        </select>
-                      </div>
-                      <div className="col-span-1">
-                        <button
-                          type="button"
-                          onClick={() => removeBand(idx)}
-                          className="w-full py-2 text-red-600 hover:text-red-800 text-sm font-medium"
-                          title="Remove band"
-                        >
-                          ✕
-                        </button>
-                      </div>
+
+                      {/* Single-gateway mode */}
+                      {band.mode === 'single' ? (
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600">Gateway</label>
+                          <select
+                            value={band.gateway}
+                            onChange={(e) => updateBand(idx, { gateway: e.target.value })}
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          >
+                            <option value="">Select Gateway</option>
+                            {PAYOUT_GATEWAYS.map((g) => <option key={g} value={g}>{g === 'DummyGateway' ? 'Dummy (Test) Gateway' : g}</option>)}
+                          </select>
+                        </div>
+                      ) : (
+                        /* Rotation-pool mode */
+                        <div className="space-y-2 bg-gray-50 rounded-md p-3">
+                          <label className="block text-xs font-medium text-gray-600">Rotation pool (in order)</label>
+                          {band.gateways.length === 0 && (
+                            <p className="text-xs text-gray-400 italic">No gateways yet — add at least two.</p>
+                          )}
+                          {band.gateways.map((g, slot) => (
+                            <div key={slot} className="flex items-center gap-2">
+                              <span className="text-xs text-gray-400 w-4 text-right">{slot + 1}.</span>
+                              <select
+                                value={g}
+                                onChange={(e) => updatePoolSlot(idx, slot, e.target.value)}
+                                className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                              >
+                                <option value="">Select Gateway</option>
+                                {PAYOUT_GATEWAYS.map((gw) => <option key={gw} value={gw}>{gw === 'DummyGateway' ? 'Dummy (Test) Gateway' : gw}</option>)}
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => removePoolSlot(idx, slot)}
+                                className="text-red-600 hover:text-red-800 text-sm font-medium px-1"
+                                title="Remove gateway"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => addPoolSlot(idx)}
+                            className="inline-flex items-center py-1 px-2.5 border border-indigo-300 text-indigo-700 text-xs font-medium rounded-md hover:bg-indigo-50"
+                          >
+                            + Add gateway
+                          </button>
+
+                          <div className="flex items-center gap-2 pt-1">
+                            <label className="text-xs font-medium text-gray-600">Rotate every</label>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={band.rotateEvery}
+                              onChange={(e) => updateBand(idx, { rotateEvery: e.target.value.replace(/\D/g, '') })}
+                              className="w-16 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-center"
+                              placeholder="3"
+                            />
+                            <span className="text-xs text-gray-500">payout(s) of the same amount, then switch</span>
+                          </div>
+
+                          {band.gateways.filter(Boolean).length >= 2 && (
+                            <p className="text-xs text-gray-600">
+                              Sequence:&nbsp;
+                              {band.gateways.filter(Boolean).map((gw, i) => (
+                                <span key={i}>
+                                  {i > 0 && ' → '}
+                                  <span className="font-medium">{gw === 'DummyGateway' ? 'Dummy' : gw}</span> ×{band.rotateEvery || 1}
+                                </span>
+                              ))}
+                              &nbsp;↻
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
