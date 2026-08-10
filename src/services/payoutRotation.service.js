@@ -4,12 +4,26 @@ const PayoutRotationState = require('../models/payoutRotationState.model');
 const { logger } = require('../utils/logger');
 
 /**
- * Stable key for a rotation pool + run-length. Baking the config into the
- * counter key means a config change starts a fresh sequence rather than
- * reinterpreting an in-flight run. e.g. ['BluSwap','Mizorpay'], 3 -> "BluSwap>Mizorpay@3".
+ * Stable key for a rotation pattern. Baking the config into the counter key
+ * means a config change starts a fresh sequence rather than reinterpreting an
+ * in-flight run. e.g. [{A,3},{B,1}] -> "A:3>B:1".
  */
-function poolKeyFor(pool, rotateEvery) {
-  return `${pool.join('>')}@${rotateEvery}`;
+function patternKeyFor(rotation) {
+  return rotation.map((e) => `${e.gateway}:${e.times}`).join('>');
+}
+
+/**
+ * Expand a per-gateway rotation pattern into the flat cycle it repeats, e.g.
+ * [{A,3},{B,1}] -> ['A','A','A','B']. The concrete gateway for dispatch n is
+ * simply cycle[n % cycle.length].
+ */
+function buildCycle(rotation) {
+  const cycle = [];
+  for (const e of rotation) {
+    const times = Math.max(1, parseInt(e.times, 10) || 1);
+    for (let i = 0; i < times; i++) cycle.push(e.gateway);
+  }
+  return cycle;
 }
 
 /**
@@ -21,13 +35,14 @@ function poolKeyFor(pool, rotateEvery) {
  * non-overlapping gateway assignments — every dispatch consumes exactly one
  * slot regardless of whether it later succeeds or fails.
  *
- * @param {{ userId: string|number, amount: number|string, pool: string[], rotateEvery: number }} args
+ * @param {{ userId: string|number, amount: number|string,
+ *           rotation: Array<{gateway: string, times: number}> }} args
  * @returns {Promise<{ gateway: string, index: number, seq: number, poolKey: string, detail: string }>}
  */
-async function applyAmountRotation({ userId, amount, pool, rotateEvery }) {
-  const len = pool.length;
-  const runLength = Math.max(1, parseInt(rotateEvery, 10) || 1);
-  const poolKey = poolKeyFor(pool, runLength);
+async function applyAmountRotation({ userId, amount, rotation }) {
+  const cycle = buildCycle(rotation);
+  const cycleLen = cycle.length;
+  const poolKey = patternKeyFor(rotation);
   const filter = { user_id: String(userId), amount: Number(amount), poolKey };
 
   // Atomic bump. Rare first-insert races on the unique index surface as E11000;
@@ -47,18 +62,18 @@ async function applyAmountRotation({ userId, amount, pool, rotateEvery }) {
     }
   }
 
-  const n = doc.seq - 1;                               // 0-based dispatch index
-  const index = Math.floor(n / runLength) % len;       // which gateway in the pool
-  const gateway = pool[index];
+  const n = doc.seq - 1;                 // 0-based dispatch index
+  const posInCycle = n % cycleLen;       // where we are within one full pattern
+  const gateway = cycle[posInCycle];
 
   // Best-effort trace fields; not part of the atomic step, so ignore failures.
-  PayoutRotationState.updateOne(filter, { $set: { last_gateway: gateway, last_index: index } })
+  PayoutRotationState.updateOne(filter, { $set: { last_gateway: gateway, last_index: posInCycle } })
     .catch((e) => logger.warn('rotation trace update failed', { error: e.message }));
 
-  const slotInRun = (n % runLength) + 1;               // 1..runLength within this gateway's run
-  const detail = `Rotation pool [${pool.join(', ')}] every ${runLength}: seq #${doc.seq} -> ${gateway} (${slotInRun}/${runLength} of its run)`;
+  const pattern = rotation.map((e) => `${e.gateway}×${e.times}`).join(', ');
+  const detail = `Rotation [${pattern}] (cycle ${cycle.join('')}): seq #${doc.seq} -> ${gateway} (pos ${posInCycle + 1}/${cycleLen})`;
 
-  return { gateway, index, seq: doc.seq, poolKey, detail };
+  return { gateway, index: posInCycle, seq: doc.seq, poolKey, detail };
 }
 
-module.exports = { applyAmountRotation, poolKeyFor };
+module.exports = { applyAmountRotation, patternKeyFor, buildCycle };

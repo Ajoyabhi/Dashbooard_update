@@ -326,15 +326,15 @@ const initiatePayout = async (req, res) => {
     // reconcile paths hit the SAME gateway that processed it.
     const md = user.MerchantDetail;
     let routing = resolvePayoutGateway(md, amount);
-    // When the matched band defines a rotation pool, resolve the concrete gateway
-    // by advancing the per-(user, amount) rotation counter. Every dispatch
-    // consumes one slot; each gateway gets a run of `rotateEvery` before the next.
-    if (routing.pool) {
+    // When the matched band defines a rotation pattern, resolve the concrete
+    // gateway by advancing the per-(user, amount) rotation counter. Every
+    // dispatch consumes one slot; each gateway gets its own `times`-long run
+    // before handing off to the next entry in the pattern.
+    if (routing.rotation) {
       const rot = await applyAmountRotation({
         userId: user_id,
         amount,
-        pool: routing.pool,
-        rotateEvery: routing.rotateEvery,
+        rotation: routing.rotation,
       });
       routing = {
         gateway: rot.gateway,
