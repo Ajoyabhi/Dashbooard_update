@@ -59,6 +59,12 @@ start_callback_worker() {
     pm2 start src/workers/callback.worker.js --name "payment-gateway-callback-worker" --env production
 }
 
+# Function to start the payin reconciliation worker
+start_reconciliation_worker() {
+    echo "Starting payin reconciliation worker..."
+    pm2 start src/workers/payinReconciliation.worker.js --name "payment-gateway-payin-reconciliation" --env production
+}
+
 # Function to start the frontend (using built version)
 start_frontend() {
     echo "Starting frontend (production build)..."
@@ -75,6 +81,12 @@ start_new_server() {
 start_new_worker() {
     echo "Starting new worker instance..."
     pm2 start src/workers/callback.worker.js --name "${INSTANCE_NAME}-worker" --env production
+}
+
+# Function to start new instance payin reconciliation worker
+start_new_reconciliation_worker() {
+    echo "Starting new payin reconciliation worker instance..."
+    pm2 start src/workers/payinReconciliation.worker.js --name "${INSTANCE_NAME}-payin-reconciliation" --env production
 }
 
 # Function to start new instance frontend (using built version)
@@ -131,7 +143,7 @@ stop_all() {
 # Function to restart only this app's processes
 restart_all() {
     echo "Restarting app processes..."
-    for proc in payment-gateway-api payment-gateway-callback-worker payment-gateway-frontend; do
+    for proc in payment-gateway-api payment-gateway-callback-worker payment-gateway-payin-reconciliation payment-gateway-frontend; do
         if pm2 show "$proc" &>/dev/null; then
             pm2 restart "$proc"
         else
@@ -167,6 +179,7 @@ case $COMMAND in
         build_frontend
         start_server
         start_callback_worker
+        start_reconciliation_worker
         start_frontend
         save_pm2_list
         show_status
@@ -178,6 +191,7 @@ case $COMMAND in
         build_frontend
         start_new_server
         start_new_worker
+        start_new_reconciliation_worker
         start_new_frontend
         save_pm2_list
         show_status

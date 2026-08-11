@@ -286,6 +286,34 @@ dummyPayoutQueue.on('failed', (job, error) => {
   });
 });
 
+// Payin reconciliation queue — holds a single Bull REPEATABLE (cron) job that
+// periodically sweeps stale pending payins. The processor lives in
+// src/workers/payinReconciliation.worker.js and finalizes each txn by enqueueing
+// onto the existing callbackQueue (so wallet credit + merchant webhook reuse the
+// exact same path as a real gateway callback).
+const payinReconciliationQueue = new Bull('payinReconciliation', queueOptions);
+logger.info('Payin reconciliation queue created with proper Redis configuration');
+
+payinReconciliationQueue.on('error', (error) => {
+  logger.error('Payin reconciliation queue error:', error);
+  if (error.message.includes('Connection is closed')) {
+    logger.info('Attempting to recover from connection error...');
+    payinReconciliationQueue.resume();
+  }
+});
+
+payinReconciliationQueue.on('ready', () => {
+  logger.info('Payin reconciliation queue is ready and connected to Redis');
+});
+
+payinReconciliationQueue.on('failed', (job, error) => {
+  logger.error('Payin reconciliation job failed', {
+    jobId: job.id,
+    error: error.message,
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Apply event handlers to all clients
 handleRedisEvents(createRedisClient('client'), 'client');
 handleRedisEvents(createRedisClient('subscriber'), 'subscriber');
@@ -298,6 +326,7 @@ process.on('SIGTERM', async () => {
   await bluswapPayoutQueue.close();
   await mizorpayPayoutQueue.close();
   await dummyPayoutQueue.close();
+  await payinReconciliationQueue.close();
   process.exit(0);
 });
 
@@ -306,5 +335,6 @@ module.exports = {
   bluswapPayoutQueue,
   mizorpayPayoutQueue,
   dummyPayoutQueue,
+  payinReconciliationQueue,
   createRedisClient
 };
