@@ -25,14 +25,14 @@ const DELAY_MS = Number(process.env.PAYOUT_DELAY_MS || 2000);
 
 /** Edit account #2 and #3 before running with --execute. Amounts over MAX_PER_TXN are auto-chunked. */
 const ACCOUNTS = [
-  {
-    label: 'Account 1',
-    amount: 20000,
-    account_number: '003321715552978',
-    account_ifsc: 'JIOP0000001',
-    bank_name: 'JIO BANK',
-    beneficiary_name: 'Abhishek',
-  },
+  // {
+  //   label: 'Account 1',
+  //   amount: 20000,
+  //   account_number: '003321715552978',
+  //   account_ifsc: 'JIOP0000001',
+  //   bank_name: 'JIO BANK',
+  //   beneficiary_name: 'Abhishek',
+  // },
   {
     label: 'Account 2',
     amount: 250000,
