@@ -46,6 +46,9 @@ interface PayoutRecord {
     status: string;
     message: string;
   };
+  metadata?: {
+    gateway_name?: string;
+  };
   remark: string;
   createdAt: string;
   updatedAt: string;
@@ -59,9 +62,17 @@ const statusOptions: FilterOption[] = [
   { label: 'Failed', value: 'failed' },
 ];
 
+const gatewayOptions: FilterOption[] = [
+  { label: 'All Gateways', value: 'all' },
+  { label: 'BluSwap', value: 'BluSwap' },
+  { label: 'MizorPay', value: 'MizorPay' },
+  { label: 'Dummy (Test) Gateway', value: 'DummyGateway' },
+];
+
 export default function PayoutReport() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedGateway, setSelectedGateway] = useState('all');
   const [selectedUser, setSelectedUser] = useState('');
   const [dateRange, setDateRange] = useState<DateRange>({
     startDate: null,
@@ -164,6 +175,9 @@ export default function PayoutReport() {
         search: searchTerm,
       });
 
+      if (selectedGateway && selectedGateway !== 'all') {
+        params.append('gateway', selectedGateway);
+      }
       if (selectedUser) {
         params.append('user', selectedUser);
       }
@@ -197,7 +211,7 @@ export default function PayoutReport() {
   // Fetch transactions when filters or pagination changes
   useEffect(() => {
     fetchTransactions();
-  }, [currentPage, pageSize, selectedStatus, selectedUser, dateRange, searchTerm]);
+  }, [currentPage, pageSize, selectedStatus, selectedGateway, selectedUser, dateRange, searchTerm]);
 
   // Fetch users when component mounts
   useEffect(() => {
@@ -218,6 +232,7 @@ export default function PayoutReport() {
       if (filters.endDate) params.append('endDate', filters.endDate);
       if (filters.status && filters.status !== 'all') params.append('status', filters.status);
       if (filters.user) params.append('user', filters.user);
+      if (selectedGateway && selectedGateway !== 'all') params.append('gateway', selectedGateway);
 
       // Make API call to download report
       const response = await api.get(`/admin/payout-transactions/download?${params}`, {
@@ -247,6 +262,7 @@ export default function PayoutReport() {
 
   const resetFilters = () => {
     setSelectedStatus('all');
+    setSelectedGateway('all');
     setSelectedUser('');
     setDateRange({ startDate: null, endDate: null });
     setSearchTerm('');
@@ -327,6 +343,25 @@ export default function PayoutReport() {
       cell: (value: PayoutRecord['gateway_response']) => (
         <span className="font-mono text-sm">{value.utr || 'N/A'}</span>
       ),
+    },
+    {
+      header: 'Gateway',
+      accessor: 'metadata',
+      cell: (value: PayoutRecord['metadata']) => {
+        const gw = value?.gateway_name;
+        const colorMap: Record<string, string> = {
+          BluSwap:      'bg-blue-100 text-blue-700',
+          MizorPay:     'bg-emerald-100 text-emerald-700',
+          DummyGateway: 'bg-amber-100 text-amber-700',
+        };
+        const cls = gw ? (colorMap[gw] ?? 'bg-gray-100 text-gray-600') : 'bg-gray-100 text-gray-400';
+        const label = gw === 'DummyGateway' ? 'Dummy' : gw;
+        return (
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${cls}`}>
+            {label || '—'}
+          </span>
+        );
+      },
     },
     {
       header: 'Status',
@@ -470,6 +505,23 @@ export default function PayoutReport() {
                       className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                     >
                       {statusOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Gateway
+                    </label>
+                    <select
+                      value={selectedGateway}
+                      onChange={(e) => setSelectedGateway(e.target.value)}
+                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    >
+                      {gatewayOptions.map((option) => (
                         <option key={option.value} value={option.value}>
                           {option.label}
                         </option>

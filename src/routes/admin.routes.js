@@ -16,6 +16,7 @@ const {
   updateMerchantCharge,
   updateUserDetails,
   toggleTestRandomBeneficiary,
+  togglePayoutAlert,
   getUserCallbacks,
   getUserPayoutGatewayStats,
   updateUserWallet,
@@ -76,6 +77,7 @@ router.get('/users', getAllUsers);
 router.get('/users/:userId', getUserDetails);
 router.put('/users/:userId', updateUserDetails);
 router.patch('/users/:userId/test-beneficiary', toggleTestRandomBeneficiary);
+router.patch('/users/:userId/payout-alert', togglePayoutAlert);
 router.post('/users/register', registerUser);
 
 // Agent management routes

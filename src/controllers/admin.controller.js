@@ -41,6 +41,7 @@ const getAllUsers = async (req, res) => {
                 'company_name',
                 'business_type',
                 'test_random_beneficiary',
+                'payout_alert_enabled',
                 'created_at',
                 'updated_at'
             ]
@@ -64,6 +65,7 @@ const getAllUsers = async (req, res) => {
                 payin: user.UserStatus?.payin_status || false,
                 payout: user.UserStatus?.payout_status || false,
                 testRandomBeneficiary: user.test_random_beneficiary || false,
+                payoutAlertEnabled: user.payout_alert_enabled || false,
                 status: status
             };
             return transformed;
@@ -701,6 +703,34 @@ const toggleTestRandomBeneficiary = async (req, res) => {
     } catch (error) {
         console.error('Error toggling test random beneficiary:', error);
         res.status(500).json({ error: 'Error updating test beneficiary setting' });
+    }
+};
+
+// Toggle per-merchant Telegram payout alerts (wake-up + failure pings)
+const togglePayoutAlert = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { enabled } = req.body;
+
+        if (typeof enabled !== 'boolean') {
+            return res.status(400).json({ error: '"enabled" must be a boolean' });
+        }
+
+        const user = await User.findByPk(userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        await user.update({ payout_alert_enabled: enabled });
+
+        res.json({
+            success: true,
+            message: `Payout alerts ${enabled ? 'enabled' : 'disabled'} for user`,
+            payout_alert_enabled: user.payout_alert_enabled
+        });
+    } catch (error) {
+        console.error('Error toggling payout alert:', error);
+        res.status(500).json({ error: 'Error updating payout alert setting' });
     }
 };
 
@@ -1786,7 +1816,8 @@ const getPayoutTransactions = async (req, res) => {
             startDate,
             endDate,
             search,
-            user
+            user,
+            gateway
         } = req.query;
 
         // Convert page and pageSize to numbers
@@ -1814,6 +1845,11 @@ const getPayoutTransactions = async (req, res) => {
         // Add user filter (from dropdown selection)
         if (user && user !== '') {
             filter['user.user_id'] = user.toString();
+        }
+
+        // Add gateway filter (from dropdown selection)
+        if (gateway && gateway !== 'all') {
+            filter['metadata.gateway_name'] = gateway;
         }
 
         // Add search condition if search term is provided
@@ -2177,7 +2213,7 @@ const getPayinTransactionsDownload = async (req, res) => {
 
 const getPayoutTransactionsDownload = async (req, res) => {
     try {
-        const { startDate, endDate, status, user } = req.query;
+        const { startDate, endDate, status, user, gateway } = req.query;
 
         // Build filter object
         const filter = {};
@@ -2199,6 +2235,11 @@ const getPayoutTransactionsDownload = async (req, res) => {
         // Add user filter
         if (user) {
             filter['user.user_id'] = user.toString();
+        }
+
+        // Add gateway filter
+        if (gateway && gateway !== 'all') {
+            filter['metadata.gateway_name'] = gateway;
         }
 
         // Get all payout transactions based on filters
@@ -4350,6 +4391,7 @@ module.exports = {
     updateMerchantCharge,
     updateUserDetails,
     toggleTestRandomBeneficiary,
+    togglePayoutAlert,
     getUserCallbacks,
     getUserPayoutGatewayStats,
     updateUserWallet,

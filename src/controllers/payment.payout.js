@@ -17,6 +17,7 @@ const axios = require('axios');
 const { bluswapTransactionStatus, mizorpayTransactionStatus } = require('../transactionStatusCheck/TransactionCheck');
 const { reconcilePayoutTransaction, finalizePayout } = require('../services/payoutReconciliation.service');
 const { recordTraceEvent, STAGES } = require('../services/transactionTrace.service');
+const { notifyPayoutWakeup } = require('../services/payoutAlert.service');
 const { resolvePayoutGateway } = require('../utils/payoutGatewayRouting');
 const { applyAmountRotation } = require('../services/payoutRotation.service');
 
@@ -394,6 +395,11 @@ const initiatePayout = async (req, res) => {
       created_by_model: user.user_type || 'User'
     });
     await payoutTransaction.save();
+
+    // Fire-and-forget Telegram "wake-up" alert: pings once when this merchant
+    // resumes payouts after a pause. Non-blocking and self-contained (never
+    // throws), so it can't affect the payout response.
+    notifyPayoutWakeup({ user, payout: payoutTransaction });
 
     await TransactionCharges.create({
       transaction_type: 'payout',

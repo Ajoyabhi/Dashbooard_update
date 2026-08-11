@@ -4,6 +4,7 @@ const PayoutTransaction = require('../models/payoutTransaction.model');
 const { TransactionCharges, FinancialDetails, MerchantDetails } = require('../models');
 const { bluswapTransactionStatus, mizorpayTransactionStatus } = require('../transactionStatusCheck/TransactionCheck');
 const { recordTraceEvent, STAGES } = require('./transactionTrace.service');
+const { notifyPayoutFailure } = require('./payoutAlert.service');
 
 /**
  * Post a payout status update to the merchant's registered callback URL.
@@ -165,6 +166,12 @@ async function finalizePayout({ referenceId, isSuccess, utr = null, gatewayTrans
     detail: isSuccess ? 'Payout marked completed' : 'Payout marked failed, settlement refunded',
     payload: { new_status: dbStatus, utr }
   });
+
+  // Fire-and-forget Telegram alert on failure (only for merchants that opted in).
+  // Non-blocking and self-contained — never throws into the finalize path.
+  if (!isSuccess) {
+    notifyPayoutFailure({ payout, reason: finalMessage });
+  }
 
   // Notify the merchant of the resolved status. Skipped for synchronous
   // rejections at creation time, where the caller already returns the failure

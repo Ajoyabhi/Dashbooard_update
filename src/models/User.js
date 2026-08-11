@@ -89,6 +89,13 @@ module.exports = (sequelize) => {
             allowNull: false,
             defaultValue: false
         },
+        // When true, this merchant's payouts generate Telegram alerts:
+        // one "wake-up" ping when they resume after a pause, plus failure pings.
+        payout_alert_enabled: {
+            type: DataTypes.BOOLEAN,
+            allowNull: false,
+            defaultValue: false
+        },
         // reset_token: {
         //     type: DataTypes.STRING(255),
         //     allowNull: true

@@ -46,6 +46,7 @@ interface UserData {
     updated_by: number | null;
     remember_token: string | null;
     test_random_beneficiary?: boolean;
+    payout_alert_enabled?: boolean;
     UserStatus: UserStatus;
 }
 
@@ -84,6 +85,23 @@ export default function UserView() {
             toast.error(error.response?.data?.error || 'Error updating test beneficiary setting');
         } finally {
             setTogglingBeneficiary(false);
+        }
+    };
+
+    const [togglingPayoutAlert, setTogglingPayoutAlert] = useState(false);
+
+    const handleTogglePayoutAlert = async () => {
+        if (!user) return;
+        const nextValue = !user.payout_alert_enabled;
+        setTogglingPayoutAlert(true);
+        try {
+            await api.patch(`/admin/users/${user.id}/payout-alert`, { enabled: nextValue });
+            setUser({ ...user, payout_alert_enabled: nextValue });
+            toast.success(`Payout alerts ${nextValue ? 'enabled' : 'disabled'}`);
+        } catch (error: any) {
+            toast.error(error.response?.data?.error || 'Error updating payout alert setting');
+        } finally {
+            setTogglingPayoutAlert(false);
         }
     };
 
@@ -343,6 +361,39 @@ export default function UserView() {
                                 >
                                     <span
                                         className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${user.test_random_beneficiary ? 'translate-x-5' : 'translate-x-0'
+                                            }`}
+                                    />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Notifications */}
+                        <div className="border-t border-gray-200 pt-6">
+                            <h2 className="text-lg font-medium text-gray-900 mb-4">Notifications</h2>
+                            <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-4">
+                                <div className="pr-4">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm font-medium text-gray-900">Telegram Payout Alerts</span>
+                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${user.payout_alert_enabled ? 'bg-success-100 text-success-800' : 'bg-gray-200 text-gray-700'
+                                            }`}>
+                                            {user.payout_alert_enabled ? 'Enabled' : 'Disabled'}
+                                        </span>
+                                    </div>
+                                    <p className="mt-1 text-xs text-gray-500">
+                                        When enabled, a Telegram alert fires the first time this merchant makes a payout after a pause (longer than the configured window), plus an alert on any failed payout. It does not ping on every payout.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={handleTogglePayoutAlert}
+                                    disabled={togglingPayoutAlert}
+                                    role="switch"
+                                    aria-checked={!!user.payout_alert_enabled}
+                                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${user.payout_alert_enabled ? 'bg-primary-600' : 'bg-gray-300'
+                                        }`}
+                                >
+                                    <span
+                                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${user.payout_alert_enabled ? 'translate-x-5' : 'translate-x-0'
                                             }`}
                                     />
                                 </button>
