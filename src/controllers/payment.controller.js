@@ -362,8 +362,16 @@ const getTransactionStatus = async (req, res) => {
       const result = response.data;
       logger.info('AirPay ap-check response', { result, reference_id: searchTransactionId });
 
-      const statusMap = { TXN: 'success', FAILED: 'failed', PENDING: 'pending' };
-      const normalizedStatus = statusMap[result.status?.toUpperCase()] || result.status || 'unknown';
+      // Read the AUTHORITATIVE `airpay_status` (SUCCESS = paid), NOT the derived
+      // `status` ("TXN"), which can't be trusted for failures — same trap as HDFC.
+      const normalizeAirpayStatus = (apStatus) => {
+        if (!apStatus) return 'pending';
+        const s = String(apStatus).toUpperCase();
+        if (s === 'SUCCESS' || s === 'TXN' || s === 'CHARGED') return 'success';
+        if (['FAILED', 'FAILURE', 'CANCELLED', 'CANCEL', 'ABORTED', 'ERROR', 'EXPIRED', 'DECLINED'].includes(s)) return 'failed';
+        return 'pending';
+      };
+      const normalizedStatus = normalizeAirpayStatus(result.airpay_status);
 
       return res.status(200).json({
         success: true,
@@ -400,17 +408,21 @@ const getTransactionStatus = async (req, res) => {
       const result = response.data;
       logger.info('HDFC pg-check response', { result, reference_id: searchTransactionId });
 
-      // Normalize HDFC status to match callback payload format (completed / failed / pending)
+      // Normalize HDFC status to match callback payload format (completed / failed / pending).
+      // Read the AUTHORITATIVE `hdfc_status`, NOT the derived `status`: pg-check
+      // returns `status: "TXN"` for BOTH real successes (hdfc_status CHARGED) and
+      // non-successes (hdfc_status FORWARDED), so trusting `status` reports failed
+      // txns as "success". Only CHARGED (carries a real UTR) is a success.
       const normalizeHdfcStatus = (hdfcStatus) => {
         if (!hdfcStatus) return 'pending';
-        const s = hdfcStatus.toUpperCase();
-        if (s === 'TXN' || s === 'CHARGED') return 'success';
-        if (['FAILED', 'FAILURE', 'CANCELLED', 'CANCEL', 'ABORTED', 'ERROR',
-          'AUTHORIZATION_FAILED', 'JUSPAY_DECLINED', 'PAYMENT_FAILED'].includes(s)) return 'failed';
+        const s = String(hdfcStatus).toUpperCase();
+        if (s === 'CHARGED' || s === 'SUCCESS') return 'success';
+        if (['FORWARDED', 'FAILED', 'FAILURE', 'CANCELLED', 'CANCEL', 'ABORTED', 'ERROR',
+          'AUTHORIZATION_FAILED', 'JUSPAY_DECLINED', 'PAYMENT_FAILED', 'DECLINED'].includes(s)) return 'failed';
         return 'pending';
       };
 
-      const normalizedStatus = normalizeHdfcStatus(result.status);
+      const normalizedStatus = normalizeHdfcStatus(result.hdfc_status);
       return res.status(200).json({
         success: true,
         transaction: {
@@ -447,16 +459,18 @@ const getTransactionStatus = async (req, res) => {
       const result = response.data;
       logger.info('Razorpay rp-check response', { result, reference_id: searchTransactionId });
 
-      // Map Razorpay status (status / razorpay_status) to our normalized values
+      // Read the AUTHORITATIVE `razorpay_status` (CAPTURED = paid). ONLY CAPTURED/
+      // SUCCESS is a success — NOT the derived `status` ("TXN") and NOT `FORWARDED`,
+      // which is why a failed txn could previously read as success.
       const normalizeRazorpayStatus = (rpStatus) => {
         if (!rpStatus) return 'pending';
-        const s = rpStatus.toUpperCase();
-        if (s === 'TXN' || s === 'CAPTURED' || s === 'FORWARDED') return 'success';
-        if (['FAILED', 'FAILURE', 'CANCELLED', 'CANCEL', 'ERROR', 'EXPIRED'].includes(s)) return 'failed';
+        const s = String(rpStatus).toUpperCase();
+        if (s === 'CAPTURED' || s === 'SUCCESS') return 'success';
+        if (['FAILED', 'FAILURE', 'CANCELLED', 'CANCEL', 'ERROR', 'EXPIRED', 'DECLINED'].includes(s)) return 'failed';
         return 'pending';
       };
 
-      const normalizedStatus = normalizeRazorpayStatus(result.razorpay_status || result.status);
+      const normalizedStatus = normalizeRazorpayStatus(result.razorpay_status);
       return res.status(200).json({
         success: true,
         transaction: {

@@ -35,6 +35,10 @@ const { sendTelegramMessage, escapeHtml } = require('../services/telegram.servic
 
 const RECONCILE_CRON = process.env.PAYIN_RECON_CRON || '*/30 * * * *';
 const AGE_MINUTES = parseInt(process.env.PAYIN_RECON_AGE_MINUTES || '30', 10);
+// Upper age bound: never touch ancient stragglers. Only reconcile txns whose age
+// is between AGE_MINUTES and MAX_AGE_HOURS. Keeps each run cheap and, crucially,
+// stops us re-scanning the ~63k legacy null-gateway records from 2025.
+const MAX_AGE_HOURS = parseInt(process.env.PAYIN_RECON_MAX_AGE_HOURS || '48', 10);
 const BATCH_LIMIT = parseInt(process.env.PAYIN_RECON_BATCH_LIMIT || '500', 10);
 const NON_FINAL_STATUSES = ['pending', 'payin_qr_generated'];
 
@@ -74,25 +78,34 @@ function enqueueCallback(statuscode, txn, result, failureReason) {
 
 payinReconciliationQueue.process(async function (job) {
   const runStart = Date.now();
-  const cutoff = new Date(Date.now() - AGE_MINUTES * 60 * 1000);
+  const now = Date.now();
+  const minAge = new Date(now - AGE_MINUTES * 60 * 1000);        // must be at least this old
+  const maxAge = new Date(now - MAX_AGE_HOURS * 60 * 60 * 1000); // but not older than this
 
+  // Only pull ACTIONABLE candidates: a live gateway we can actually query, within
+  // the age window. This filters in the DB (indexed on status/gateway/createdAt)
+  // instead of scanning-then-skipping — so we never again get stuck on the huge
+  // backlog of legacy null-gateway records.
   const stale = await PayinTransaction.find({
     status: { $in: NON_FINAL_STATUSES },
-    createdAt: { $lte: cutoff },
+    'metadata.gateway_name': { $in: SUPPORTED_PAYIN_GATEWAYS },
+    createdAt: { $lte: minAge, $gte: maxAge },
   })
     .sort({ createdAt: 1 })
     .limit(BATCH_LIMIT)
     .lean();
 
   const stats = { scanned: stale.length, checked: 0, completed: 0, failed: 0, autoFailed: 0, skipped: 0, errored: 0 };
-  logger.info('Payin reconciliation run started', { jobId: job.id, cutoff, ageMinutes: AGE_MINUTES, candidates: stale.length });
+  logger.info('Payin reconciliation run started', {
+    jobId: job.id, window: { from: maxAge, to: minAge }, ageMinutes: AGE_MINUTES, maxAgeHours: MAX_AGE_HOURS, candidates: stale.length,
+  });
 
   // Alert the Telegram channel that a sweep has kicked off. Best-effort &
   // non-throwing — a failed alert must never break the reconciliation run.
   sendTelegramMessage(
     `🔄 <b>Payin reconciliation started</b>\n` +
-    `Candidates: <b>${escapeHtml(stale.length)}</b> (not-final &amp; older than ${escapeHtml(AGE_MINUTES)}m)\n` +
-    `Cutoff: <code>${escapeHtml(cutoff.toISOString())}</code>`
+    `Candidates: <b>${escapeHtml(stale.length)}</b> (AirPay/HDFC/Razorpay, not-final)\n` +
+    `Window: <code>${escapeHtml(maxAge.toISOString())}</code> → <code>${escapeHtml(minAge.toISOString())}</code>`
   );
 
   for (const txn of stale) {
