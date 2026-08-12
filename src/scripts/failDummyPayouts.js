@@ -43,7 +43,8 @@ const { logger } = require('../utils/logger');
 const PayoutTransaction = require('../models/payoutTransaction.model');
 const { FinancialDetails, TransactionCharges, MerchantDetails } = require('../models');
 const { sendMerchantPayoutCallback } = require('../services/payoutReconciliation.service');
-const { recordTraceEvent, STAGES } = require('../services/transactionTrace.service');
+const traceSvc = require('../services/transactionTrace.service');
+const { recordTraceEvent, STAGES } = traceSvc;
 
 const GATEWAY = 'DummyGateway'; // hardcoded safety rail
 
@@ -168,6 +169,11 @@ async function main() {
   if (o.callback && !callbackUrl) console.log('  NOTE: merchant has no payout_callback URL — no callbacks sent.');
   console.log('======================================================');
 
+  // Flush buffered journey events BEFORE closing the connection, otherwise the
+  // reversal's LEDGER_UPDATED / MERCHANT_CALLBACK_SENT events are lost (the trace
+  // buffer flushes on a 1s unref'd timer that won't fire before we exit).
+  try { await traceSvc._flush(); } catch (_) {}
+  await new Promise((r) => setTimeout(r, 500));
   await mongoose.disconnect();
   process.exit(0);
 }
