@@ -56,6 +56,7 @@ const {
   downloadPayoutFailedHistory,
   getLastNDaysTransactionDetails,
   adminCheckPayinStatus,
+  adminMarkPayinSuccess,
   getGatewayStats,
   resendPayinWebhook,
   resendPayoutWebhook,
@@ -162,6 +163,9 @@ router.get('/payout-transactions', getPayoutTransactions);
 router.get('/payin-transactions', getPayinTransactions);
 router.get('/payin-transactions/summary', getPayinCollectionSummary);
 router.get('/payin-transactions/:reference_id/check-status', adminCheckPayinStatus);
+// Force a FAILED payin to success — ONLY if the gateway status API confirms it
+// actually succeeded. Credits the wallet + sends the merchant a success callback.
+router.post('/payin-transactions/:reference_id/mark-success', adminMarkPayinSuccess);
 
 // payout , payin, wallet transaction report downlaod route
 router.get('/payin-transactions/download', getPayinTransactionsDownload);

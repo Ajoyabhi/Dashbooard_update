@@ -5,7 +5,9 @@ const PayoutTransaction = require('../models/payoutTransaction.model');
 const PayinTransaction = require('../models/payinTransaction.model');
 const axios = require('axios');
 const { sendMerchantPayoutCallback, finalizePayout } = require('../services/payoutReconciliation.service');
-const { getTransactionTrace } = require('../services/transactionTrace.service');
+const { getTransactionTrace, recordTraceEvent, STAGES } = require('../services/transactionTrace.service');
+const { checkPayinStatus, SUPPORTED_PAYIN_GATEWAYS } = require('../services/payinStatusCheck.service');
+const { callbackQueue } = require('../config/queue.config');
 const {
   bluswapTransactionStatus,
   mizorpayTransactionStatus
@@ -3818,6 +3820,128 @@ const adminCheckPayinStatus = async (req, res) => {
     }
 };
 
+/**
+ * Force a FAILED payin to success — but ONLY when the gateway's own status API
+ * confirms the payment actually succeeded (i.e. the live status differs from our
+ * stored "failed"). This recovers payins that failed on our side while the money
+ * was really captured by the acquirer.
+ *
+ * Flow:
+ *   1. Load the payin; require it to currently be `failed`.
+ *   2. Infer the gateway that processed it and hit its status-check API
+ *      (checkPayinStatus — the same source of truth the reconciler uses).
+ *   3. Only if the gateway reports `success` do we finalize. Finalization reuses
+ *      the SHARED callbackQueue -> callback worker path (statuscode 'TXN'), so the
+ *      wallet credit, ledger, merchant SUCCESS webhook, idempotency and trace are
+ *      identical to a genuine gateway success — never duplicated.
+ *
+ * We first clear `metadata.callback_received_at` so the worker actually re-sends
+ * the merchant webhook (a prior failure callback would otherwise make it skip).
+ */
+const adminMarkPayinSuccess = async (req, res) => {
+    try {
+        const { reference_id } = req.params;
+        if (!reference_id) {
+            return res.status(400).json({ success: false, message: 'Reference ID is required' });
+        }
+
+        const transaction = await PayinTransaction.findOne({ reference_id });
+        if (!transaction) {
+            return res.status(404).json({ success: false, message: 'Transaction not found' });
+        }
+
+        // This tool only recovers FAILED payins. A completed one is already done;
+        // a pending one belongs to the normal reconcile flow, not a manual override.
+        if (transaction.status === 'completed') {
+            return res.status(409).json({ success: false, message: 'Transaction is already completed' });
+        }
+        if (transaction.status !== 'failed') {
+            return res.status(409).json({ success: false, message: `Only failed payins can be forced to success (current status: ${transaction.status})` });
+        }
+
+        // Infer the processing gateway — same rule as adminCheckPayinStatus: trust the
+        // gateway stored on the txn; for legacy records fall back to HDFC.
+        let gateway = transaction.metadata?.gateway_name;
+        if (!gateway) {
+            const merchantDetails = await MerchantDetails.findOne({ where: { user_id: transaction.user.user_id } });
+            const currentGateway = merchantDetails?.payin_merchant_name;
+            gateway = currentGateway === 'AirPay' ? 'HDFC' : (currentGateway || 'HDFC');
+        }
+
+        // Without a live status API there is no source of truth — refuse rather than
+        // flip a failed payin to success on an admin's word alone.
+        if (!SUPPORTED_PAYIN_GATEWAYS.includes(gateway)) {
+            return res.status(422).json({
+                success: false,
+                message: `Gateway "${gateway}" has no status-check API — cannot verify this payin. Refusing to mark success.`
+            });
+        }
+
+        // Authoritative check against the gateway.
+        let result;
+        try {
+            result = await checkPayinStatus({ gateway, reference_id });
+        } catch (err) {
+            logger.error('adminMarkPayinSuccess: gateway status check failed', { reference_id, gateway, error: err.message });
+            return res.status(502).json({ success: false, message: 'Could not reach the gateway status API. Please try again.' });
+        }
+
+        // The whole point: only act when the gateway DIFFERS from our stored "failed".
+        if (result.normalizedStatus !== 'success') {
+            return res.status(200).json({
+                success: false,
+                changed: false,
+                reason: 'gateway_not_success',
+                gatewayStatus: result.normalizedStatus,
+                message: `Gateway does not report success (it says "${result.normalizedStatus}"). No change made.`
+            });
+        }
+
+        const amount = result.amount != null ? result.amount : transaction.amount;
+        const utr = result.utr || null;
+
+        // Clear the prior (failure) callback marker so the worker re-delivers — this
+        // time the SUCCESS webhook. Without this it would short-circuit as "already sent".
+        await PayinTransaction.updateOne(
+            { reference_id },
+            { $unset: { 'metadata.callback_received_at': '' } }
+        );
+
+        recordTraceEvent({
+            reference_id, trace_type: 'payin', stage: STAGES.RECONCILED,
+            status: 'ok', source: 'api', gateway_name: gateway,
+            detail: 'Admin manual recovery: gateway confirmed success, enqueued for completion + merchant callback',
+            payload: { previous_status: 'failed', gateway_status: 'success', utr }
+        });
+
+        // Finalize through the exact same path a real gateway success takes.
+        await callbackQueue.add(
+            {
+                statuscode: 'TXN',
+                amount,
+                apitxnid: reference_id,
+                txnid: transaction.transaction_id,
+                utr,
+                message: 'Transaction processed',
+                rawBody: result.raw || null
+            },
+            { attempts: 3, backoff: { type: 'exponential', delay: 5000 } }
+        );
+
+        logger.info('adminMarkPayinSuccess: gateway-confirmed success, enqueued for completion', { reference_id, gateway, amount, utr });
+
+        return res.status(200).json({
+            success: true,
+            changed: true,
+            gatewayStatus: 'success',
+            message: 'Gateway confirmed success. Crediting the wallet and sending a success callback to the merchant.'
+        });
+    } catch (error) {
+        logger.error('adminMarkPayinSuccess error', { error: error.message, stack: error.stack, reference_id: req.params.reference_id });
+        return res.status(500).json({ success: false, message: 'Error marking payin as successful' });
+    }
+};
+
 const resendPayinWebhook = async (req, res) => {
     try {
         const { reference_id } = req.params;
@@ -4432,6 +4556,7 @@ module.exports = {
     getLastNDaysTransactionDetails,
     invalidateLast5DaysCache,
     adminCheckPayinStatus,
+    adminMarkPayinSuccess,
     getGatewayStats,
     resendPayinWebhook,
     resendPayoutWebhook,

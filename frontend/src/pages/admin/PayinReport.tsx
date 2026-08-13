@@ -124,6 +124,7 @@ export default function PayinReport() {
   const [statusCheckError, setStatusCheckError] = useState<string | null>(null);
   const [checkedReferenceId, setCheckedReferenceId] = useState('');
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [markingId, setMarkingId] = useState<string | null>(null);
   const [traceRef, setTraceRef] = useState<string | null>(null);
 
   const fetchUsers = async () => {
@@ -227,6 +228,31 @@ export default function PayinReport() {
       toast.error(err?.response?.data?.message || 'Failed to resend webhook');
     } finally {
       setResendingId(null);
+    }
+  };
+
+  // Recover a FAILED payin: the backend hits the gateway's status API and only
+  // flips it to success (crediting the wallet + sending a success callback) if the
+  // gateway itself confirms the payment actually succeeded.
+  const handleMarkSuccess = async (referenceId: string) => {
+    if (!window.confirm(
+      `Verify ${referenceId} against the gateway and, if it actually succeeded, mark it SUCCESS?\n\nThis credits the merchant's wallet and sends a success callback. It only proceeds if the gateway confirms success.`
+    )) return;
+    setMarkingId(referenceId);
+    try {
+      const response = await api.post(`/admin/payin-transactions/${referenceId}/mark-success`);
+      if (response.data?.changed) {
+        toast.success(response.data?.message || 'Gateway confirmed success — crediting wallet and sending callback');
+        // The worker finalizes async; give it a moment then refresh the row.
+        setTimeout(() => fetchTransactions(), 1500);
+      } else {
+        // Gateway did NOT report success — nothing changed.
+        toast(response.data?.message || 'Gateway does not report success. No change made.', { icon: 'ℹ️' });
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to mark payin as successful');
+    } finally {
+      setMarkingId(null);
     }
   };
 
@@ -401,6 +427,8 @@ export default function PayinReport() {
       cell: (value: string, row: PayinRecord) => {
         const canCheck = value === 'pending' || value === 'failed' || value === 'payin_qr_generated';
         const canResend = value === 'completed';
+        // Only a FAILED payin can be recovered to success (gateway-verified).
+        const canMarkSuccess = value === 'failed';
         return (
           <div className="flex items-center gap-2">
             <button
@@ -417,6 +445,17 @@ export default function PayinReport() {
               >
                 <RefreshCw className="h-3 w-3" />
                 Check Status
+              </button>
+            )}
+            {canMarkSuccess && (
+              <button
+                onClick={() => handleMarkSuccess(row.reference_id)}
+                disabled={markingId === row.reference_id}
+                title="Verify against the gateway and, if it truly succeeded, mark success + credit + callback"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 whitespace-nowrap transition-colors disabled:opacity-50"
+              >
+                <CheckCircle className={`h-3 w-3 ${markingId === row.reference_id ? 'animate-spin' : ''}`} />
+                {markingId === row.reference_id ? 'Verifying…' : 'Mark Success'}
               </button>
             )}
             {canResend && (
