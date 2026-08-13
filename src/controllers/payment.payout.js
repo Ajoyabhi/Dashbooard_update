@@ -15,7 +15,7 @@ const getClientIp = require('../utils/getClientIp');
 const mongoose = require('mongoose');
 const axios = require('axios');
 const { bluswapTransactionStatus, mizorpayTransactionStatus } = require('../transactionStatusCheck/TransactionCheck');
-const { reconcilePayoutTransaction, finalizePayout } = require('../services/payoutReconciliation.service');
+const { reconcilePayoutTransaction, finalizePayout, failCompletedDummyPayout } = require('../services/payoutReconciliation.service');
 const { recordTraceEvent, STAGES } = require('../services/transactionTrace.service');
 const { notifyPayoutWakeup } = require('../services/payoutAlert.service');
 const { resolvePayoutGateway } = require('../utils/payoutGatewayRouting');
@@ -886,10 +886,112 @@ const reconcileProcessingPayouts = async (req, res) => {
   }
 };
 
+/**
+ * "Run" button per user: reconcile every non-terminal payout for a single user
+ * created in the last 48 hours. Queries each gateway's status API and finalizes
+ * any that have resolved — crediting/refunding the wallet and firing the merchant
+ * callback through the SAME idempotent finalizePayout() path as everything else.
+ *
+ * Auth: admin/agent may reconcile any user_id; other roles may only reconcile
+ * their own (mirrors reconcilePayoutByReference).
+ */
+const RECONCILE_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+const reconcileUserPayouts = async (req, res) => {
+  try {
+    const { user_id } = req.params;
+
+    // Non-admin/agent callers may only reconcile their own transactions
+    const role = req.user.user_type;
+    if (!['admin', 'agent'].includes(role) && user_id?.toString() !== req.user.id?.toString()) {
+      return res.status(403).json({ success: false, message: 'Not authorized for this user' });
+    }
+
+    const cutoff = new Date(Date.now() - RECONCILE_WINDOW_MS);
+    const pending = await PayoutTransaction.find({
+      'user.user_id': user_id?.toString(),
+      status: { $in: ['pending', 'processing'] },
+      createdAt: { $gte: cutoff }
+    }).lean();
+
+    const summary = {
+      user_id: user_id?.toString(),
+      window_hours: RECONCILE_WINDOW_MS / (60 * 60 * 1000),
+      total: pending.length,
+      changed: 0,
+      unchanged: 0,
+      errors: 0,
+      results: []
+    };
+
+    for (const txn of pending) {
+      try {
+        const result = await reconcilePayoutTransaction(txn);
+        if (result.changed) summary.changed++;
+        else summary.unchanged++;
+        summary.results.push(result);
+      } catch (err) {
+        summary.errors++;
+        summary.results.push({ referenceId: txn.reference_id, changed: false, reason: 'error', error: err.message });
+        logger.error('Error reconciling user payout', { reference_id: txn.reference_id, user_id, error: err.message });
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Reconciled ${summary.changed} of ${summary.total} payout(s) for user ${user_id} in the last ${summary.window_hours}h`,
+      data: summary
+    });
+  } catch (error) {
+    logger.error('Error reconciling user payouts', { error: error.message, stack: error.stack, user_id: req.params.user_id });
+    return res.status(500).json({ success: false, message: 'Error reconciling user payouts', error: error.message });
+  }
+};
+
+/**
+ * Per-row "Fail payout" button: reverse a single COMPLETED DummyGateway payout
+ * back to FAILED — refunds the merchant's settlement wallet and fires a failed
+ * callback. Only ever touches dummy-gateway, completed payouts (enforced in the
+ * service); real-gateway or non-completed payouts are refused, not mutated.
+ */
+const failDummyPayout = async (req, res) => {
+  try {
+    const { reference_id } = req.params;
+
+    const result = await failCompletedDummyPayout({ referenceId: reference_id });
+
+    if (!result.changed) {
+      const httpStatus = result.reason === 'not_found' ? 404
+        : ['not_dummy_gateway', 'not_completed'].includes(result.reason) ? 409
+        : 200;
+      return res.status(httpStatus).json({
+        success: false,
+        message: `Payout not reversed: ${result.reason}`,
+        data: result
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Payout ${reference_id} marked failed, ${result.refundAmount} refunded to settlement`,
+      data: result
+    });
+  } catch (error) {
+    logger.error('Error failing dummy payout', {
+      error: error.message,
+      stack: error.stack,
+      reference_id: req.params.reference_id
+    });
+    return res.status(500).json({ success: false, message: 'Error failing dummy payout', error: error.message });
+  }
+};
+
 module.exports = {
   initiatePayout,
   getPayoutTransactionStatus,
   handleBalanceCheck,
   reconcilePayoutByReference,
-  reconcileProcessingPayouts
+  reconcileProcessingPayouts,
+  reconcileUserPayouts,
+  failDummyPayout
 };

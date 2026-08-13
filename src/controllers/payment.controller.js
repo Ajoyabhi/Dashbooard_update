@@ -261,9 +261,9 @@ const initiatePayment = async (req, res) => {
     const transaction_id = uuidv4();
 
     // Check user consecutive amount request limits before processing
-    // This prevents users from making more than 10 consecutive requests for the same amount
+    // This prevents users from making more than 20 consecutive requests for the same amount
     // Pattern is broken when user makes a transaction with different amount
-    const amountCheckResult = await checkUserAmountRequests(user_id, order_amount, 7);
+    const amountCheckResult = await checkUserAmountRequests(user_id, order_amount, 20);
     if (!amountCheckResult.success) {
       return res.status(429).json({
         success: false,

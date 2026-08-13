@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Filter, Search, X, Send, RefreshCw, RotateCw, Activity } from 'lucide-react';
+import { Download, Filter, Search, X, Send, RefreshCw, RotateCw, Activity, Play, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../utils/axios';
 import DashboardLayout from '../../components/layout/DashboardLayout';
@@ -102,6 +102,8 @@ export default function PayoutReport() {
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [checkingId, setCheckingId] = useState<string | null>(null);
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [failingId, setFailingId] = useState<string | null>(null);
+  const [reconcilingUser, setReconcilingUser] = useState(false);
   const [traceRef, setTraceRef] = useState<string | null>(null);
   const [checkResults, setCheckResults] = useState<Record<string, { live_status: string; mapped_status: string; differs: boolean }>>({});
 
@@ -148,6 +150,46 @@ export default function PayoutReport() {
       toast.error(err?.response?.data?.message || 'Failed to update status');
     } finally {
       setSyncingId(null);
+    }
+  };
+
+  // "Run" button per user: reconcile all of a user's pending/processing payouts
+  // from the last 48h against the gateway status API. Backend finalizes any that
+  // resolved — refunds on failure + fires the merchant callback.
+  const handleReconcileUser = async () => {
+    if (!selectedUser) return;
+    if (!window.confirm(
+      'Check every pending/processing payout for this user from the last 48 hours and finalize any that have resolved at the gateway? This refunds failed payouts and notifies the merchant.'
+    )) return;
+    setReconcilingUser(true);
+    try {
+      const response = await api.post(`/payments/payout/reconcile/user/${selectedUser}`);
+      const d = response.data?.data;
+      toast.success(response.data?.message || `Reconciled ${d?.changed ?? 0} of ${d?.total ?? 0} payout(s)`);
+      fetchTransactions();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to reconcile user payouts');
+    } finally {
+      setReconcilingUser(false);
+    }
+  };
+
+  // Per-row "Fail payout": reverse a COMPLETED DummyGateway payout back to FAILED.
+  // Backend refuses anything that isn't a completed dummy payout, so this is safe
+  // even if the button is somehow shown on a wrong row.
+  const handleFailDummyPayout = async (referenceId: string) => {
+    if (!window.confirm(
+      `Mark ${referenceId} as FAILED?\n\nThis refunds the full amount to the merchant's wallet and sends a "failed" callback to the merchant. It cannot be undone.`
+    )) return;
+    setFailingId(referenceId);
+    try {
+      const response = await api.post(`/payments/payout/fail-dummy/${referenceId}`);
+      toast.success(response.data?.message || 'Payout marked failed and refunded');
+      fetchTransactions();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to mark payout as failed');
+    } finally {
+      setFailingId(null);
     }
   };
 
@@ -428,6 +470,10 @@ export default function PayoutReport() {
       accessor: 'status',
       cell: (value: string, row: PayoutRecord) => {
         const canResend = value === 'completed' || value === 'failed';
+        // Only a COMPLETED payout processed by the Dummy (test) gateway can be
+        // reversed to failed. Backend enforces the same rule — this just hides
+        // the button where it can't apply.
+        const canFail = value === 'completed' && row.metadata?.gateway_name === 'DummyGateway';
         return (
           <div className="flex items-center gap-2">
             <button
@@ -447,6 +493,16 @@ export default function PayoutReport() {
                 {resendingId === row.reference_id ? 'Resending…' : 'Resend Webhook'}
               </button>
             )}
+            {canFail && (
+              <button
+                onClick={() => handleFailDummyPayout(row.reference_id)}
+                disabled={failingId === row.reference_id}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 whitespace-nowrap transition-colors disabled:opacity-50"
+              >
+                <XCircle className={`h-3 w-3 ${failingId === row.reference_id ? 'animate-spin' : ''}`} />
+                {failingId === row.reference_id ? 'Failing…' : 'Fail Payout'}
+              </button>
+            )}
           </div>
         );
       },
@@ -462,6 +518,18 @@ export default function PayoutReport() {
               <h2 className="text-lg font-medium text-gray-900">Payout Transactions</h2>
 
               <div className="flex items-center space-x-2">
+                <button
+                  onClick={handleReconcileUser}
+                  disabled={!selectedUser || reconcilingUser}
+                  title={selectedUser
+                    ? 'Check this user\'s pending/processing payouts from the last 48h and finalize any that resolved'
+                    : 'Select a user in Filters to enable'}
+                  className="inline-flex items-center px-3 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Play className={`h-4 w-4 mr-1 ${reconcilingUser ? 'animate-pulse' : ''}`} />
+                  {reconcilingUser ? 'Running…' : 'Run 48h Reconcile'}
+                </button>
+
                 <button
                   onClick={() => setShowFilters(!showFilters)}
                   className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"

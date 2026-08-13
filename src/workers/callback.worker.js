@@ -4,6 +4,7 @@ const { recordTraceEvent, STAGES } = require('../services/transactionTrace.servi
 const { logger } = require('../utils/logger');
 const PayinTransaction = require('../models/payinTransaction.model');
 const PayoutTransaction = require('../models/payoutTransaction.model');
+const { checkPayinStatus, SUPPORTED_PAYIN_GATEWAYS } = require('../services/payinStatusCheck.service');
 const { TransactionCharges, FinancialDetails, MerchantDetails } = require('../models');
 const mongoose = require('mongoose');
 const config = require('../config/index');
@@ -38,15 +39,47 @@ callbackQueue.process(async function (job) {
       throw new Error('Job processing timeout');
     }, 300000);
 
-    const { statuscode, amount, apitxnid, txnid, utr, message, rawBody, failureReason } = job.data;
+    const { statuscode, amount, apitxnid, txnid, message, rawBody, failureReason } = job.data;
+    let utr = job.data.utr;
 
-    const mappedStatus = (statuscode === 'TXN' || statuscode === 'SUCCESS') ? 'completed' : 'failed';
+    let mappedStatus = (statuscode === 'TXN' || statuscode === 'SUCCESS') ? 'completed' : 'failed';
 
     const payinTransaction = await PayinTransaction.findOne({ reference_id: apitxnid });
 
     if (!payinTransaction) {
       logger.error('PayinTransaction not found', { jobId: job.id, apitxnid });
       throw new Error('Transaction record not found');
+    }
+
+    // Guard against FALSE 'FAILED' callbacks. HDFC (and potentially other gateways)
+    // have been observed pushing a FAILED callback for a payment they actually
+    // CHARGED — which would mark a real success as failed and never credit the
+    // merchant. Before failing, verify the AUTHORITATIVE gateway status; if it
+    // reports success, treat the payment as completed and use the gateway's UTR.
+    if (mappedStatus === 'failed') {
+      const gw = payinTransaction.metadata?.gateway_name;
+      if (gw && SUPPORTED_PAYIN_GATEWAYS.includes(gw)) {
+        try {
+          const check = await checkPayinStatus({ gateway: gw, reference_id: apitxnid });
+          if (check.normalizedStatus === 'success') {
+            logger.warn('Callback reported FAILED but gateway reports SUCCESS — overriding to completed', {
+              jobId: job.id, apitxnid, gateway: gw, gatewayUtr: check.utr,
+            });
+            mappedStatus = 'completed';
+            utr = check.utr || utr;
+            recordTraceEvent({
+              reference_id: apitxnid, trace_type: 'payin', stage: STAGES.RECONCILED,
+              status: 'ok', source: 'worker', gateway_name: gw,
+              detail: 'False FAILED callback overridden: gateway pg-check reports success',
+              payload: { gatewayUtr: check.utr },
+            });
+          }
+        } catch (e) {
+          logger.warn('pg-check verification on FAILED callback errored; proceeding with callback status', {
+            jobId: job.id, apitxnid, error: e.message,
+          });
+        }
+      }
     }
 
     const userId = payinTransaction.user.user_id;

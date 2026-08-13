@@ -4,7 +4,7 @@ const { auth } = require('../middleware/auth.middleware');
 const { checkRole } = require('../middleware/role.middleware');
 const { initiatePayment, getTransactionStatus,
   handleBluswapPayoutCallback, handleMizorpayPayoutCallback, hdfcCallback, airpayCallback, razorpayCallback } = require('../controllers/payment.controller');
-const { initiatePayout , getPayoutTransactionStatus, handleBalanceCheck, reconcilePayoutByReference, reconcileProcessingPayouts } = require('../controllers/payment.payout');
+const { initiatePayout , getPayoutTransactionStatus, handleBalanceCheck, reconcilePayoutByReference, reconcileProcessingPayouts, reconcileUserPayouts, failDummyPayout } = require('../controllers/payment.payout');
 
 
 // Initiate payout - Only admin and agent can initiate payouts
@@ -41,6 +41,24 @@ router.post('/payout/reconcile',
   auth,
   checkRole(['admin', 'agent']),
   reconcileProcessingPayouts
+);
+
+// "Run" button per user: reconcile all pending/processing payouts for one user
+// from the last 48h against the gateway status API (admin/agent any user; other
+// roles their own only — enforced in the controller)
+router.post('/payout/reconcile/user/:user_id',
+  auth,
+  checkRole(['admin', 'agent', 'payin_payout', 'payout_only', 'payin_only']),
+  reconcileUserPayouts
+);
+
+// Per-row "Fail payout" button: reverse a single COMPLETED DummyGateway payout
+// back to FAILED (refund settlement + failed callback). Admin/agent only —
+// destructive + financial. The service refuses any non-dummy or non-completed payout.
+router.post('/payout/fail-dummy/:reference_id',
+  auth,
+  checkRole(['admin', 'agent']),
+  failDummyPayout
 );
 
 // Reconcile a single payout by reference_id against the gateway status API

@@ -258,8 +258,116 @@ async function reconcilePayoutTransaction(payoutTransaction) {
   return { referenceId, gatewayStatus: derived, ...result };
 }
 
+/**
+ * Manually reverse a COMPLETED DummyGateway payout back to FAILED: refund the
+ * merchant's settlement wallet and fire a failed callback. This is the per-
+ * transaction, HTTP-triggerable equivalent of the failDummyPayouts.js script,
+ * powering the dashboard's per-row "Fail payout" button.
+ *
+ * Hard safety rails (cannot be bypassed by callers):
+ *   - only status === 'completed'
+ *   - only metadata.gateway_name === 'DummyGateway'  (real gateways never touched)
+ *
+ * Idempotent: the completed->failed transition is a conditional claim scoped to
+ * (status: completed, gateway: DummyGateway), so repeated clicks refund and
+ * callback at most once.
+ *
+ * @returns {{ changed: boolean, reason?: string, newStatus?: string, refundAmount?: number, callbackSent?: boolean }}
+ */
+async function failCompletedDummyPayout({ referenceId, notifyMerchant = true }) {
+  const payout = await PayoutTransaction.findOne({ reference_id: referenceId });
+  if (!payout) {
+    return { changed: false, reason: 'not_found' };
+  }
+  if (payout.metadata?.gateway_name !== 'DummyGateway') {
+    return { changed: false, reason: 'not_dummy_gateway', gateway: payout.metadata?.gateway_name || null };
+  }
+  if (payout.status !== 'completed') {
+    return { changed: false, reason: 'not_completed', currentStatus: payout.status };
+  }
+
+  const userId = payout.user.user_id;
+
+  // Idempotent claim — only flip a doc that is STILL completed AND dummy. This
+  // scoping is the safety rail: a concurrent click or a non-dummy record can
+  // never be reversed, and the winner performs the refund/callback exactly once.
+  const claim = await PayoutTransaction.updateOne(
+    { reference_id: referenceId, status: 'completed', 'metadata.gateway_name': 'DummyGateway' },
+    {
+      $set: {
+        status: 'failed',
+        gateway_response: {
+          merchant_response: payout.gateway_response?.merchant_response || payout.transaction_id,
+          status: 'failed',
+          message: 'Transaction failed',
+          utr: null
+        }
+      }
+    }
+  );
+  if (claim.modifiedCount === 0) {
+    return { changed: false, reason: 'already_reversed' };
+  }
+
+  await TransactionCharges.update(
+    { status: 'failed', transaction_utr: null },
+    { where: { reference_id: referenceId } }
+  );
+
+  // Refund the full deducted amount (amount + charges + gst + platform fee).
+  // Atomic increment — never read-then-write — so it composes with any concurrent
+  // debit/refund for this merchant. Mirrors finalizePayout's failure branch.
+  const refundAmount = parseFloat((
+    parseFloat(payout.amount || 0) +
+    parseFloat(payout.charges?.total_charges || 0) +
+    parseFloat(payout.gst_amount || 0) +
+    parseFloat(payout.platform_fee || 0)
+  ).toFixed(2));
+
+  await FinancialDetails.increment(
+    'settlement',
+    { by: refundAmount, where: { user_id: parseInt(userId, 10) } }
+  );
+
+  const financial = await FinancialDetails.findOne({ where: { user_id: parseInt(userId, 10) } });
+  logger.info('Settlement refunded for manual dummy payout reversal', {
+    reference_id: referenceId,
+    user_id: userId,
+    amount_refunded: refundAmount,
+    new_settlement_balance: financial ? parseFloat(financial.settlement) : null
+  });
+
+  recordTraceEvent({
+    reference_id: referenceId, trace_type: 'payout', stage: STAGES.LEDGER_UPDATED,
+    status: 'failed', source: 'api',
+    detail: 'Manual reversal: dummy payout marked failed, settlement refunded',
+    payload: { previous_status: 'completed', refund_amount: refundAmount }
+  });
+
+  let callbackSent = false;
+  const merchantDetails = notifyMerchant
+    ? await MerchantDetails.findOne({ where: { user_id: parseInt(userId, 10) } })
+    : null;
+  if (notifyMerchant && merchantDetails?.payout_callback) {
+    callbackSent = await sendMerchantPayoutCallback(merchantDetails.payout_callback, {
+      reference_id: referenceId,
+      type: 'payout',
+      status: 'failed',
+      amount: payout.amount,
+      utr: null,
+      message: 'Transaction failed',
+      timestamp: new Date().toISOString()
+    });
+  } else if (notifyMerchant) {
+    logger.warn('No payout callback URL configured for merchant', { reference_id: referenceId, user_id: userId });
+  }
+
+  return { changed: true, newStatus: 'failed', refundAmount, callbackSent };
+}
+
 module.exports = {
   finalizePayout,
   sendMerchantPayoutCallback,
-  reconcilePayoutTransaction
+  reconcilePayoutTransaction,
+  failCompletedDummyPayout
 };
