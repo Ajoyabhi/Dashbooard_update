@@ -35,7 +35,7 @@ const ACCOUNTS = [
   // },
   {
     label: 'Account 2',
-    amount: 250000,
+    amount: 30000,
     account_number: '4512279701',
     account_ifsc: 'KKBK0005024',
     bank_name: 'Kotak Mahindra Bank',
@@ -43,7 +43,7 @@ const ACCOUNTS = [
   },
   {
     label: 'Account 3',
-    amount: 80000,
+    amount: 75000,
     account_number: '497102010031582',
     account_ifsc: 'UBIN0549711',
     bank_name: 'Union Bank of India',
