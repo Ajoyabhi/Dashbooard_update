@@ -34,8 +34,16 @@ const ACCOUNTS = [
   //   beneficiary_name: 'Abhishek',
   // },
   {
+    label: 'Account 1',
+    amount: 20000,
+    account_number: '50100691061012',
+    account_ifsc: 'HDFC0004217',
+    bank_name: 'HDFC Bank',
+    beneficiary_name: 'Abhishek',
+  },
+  {
     label: 'Account 2',
-    amount: 30000,
+    amount: 50000,
     account_number: '4512279701',
     account_ifsc: 'KKBK0005024',
     bank_name: 'Kotak Mahindra Bank',
@@ -43,7 +51,7 @@ const ACCOUNTS = [
   },
   {
     label: 'Account 3',
-    amount: 75000,
+    amount: 100000,
     account_number: '497102010031582',
     account_ifsc: 'UBIN0549711',
     bank_name: 'Union Bank of India',
