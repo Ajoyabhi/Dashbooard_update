@@ -736,6 +736,40 @@ const togglePayoutAlert = async (req, res) => {
     }
 };
 
+// Toggle the per-user payout kill switch. When enabled, all payout requests for
+// this user are rejected immediately with a standard "temporarily suspended"
+// message, before any settlement is debited and without hitting any gateway.
+const togglePayoutSuspended = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { enabled } = req.body;
+
+        if (typeof enabled !== 'boolean') {
+            return res.status(400).json({ error: '"enabled" must be a boolean' });
+        }
+
+        const user = await User.findByPk(userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const [userStatus] = await UserStatus.findOrCreate({
+            where: { user_id: userId },
+            defaults: { payout_suspended: enabled }
+        });
+        await userStatus.update({ payout_suspended: enabled });
+
+        res.json({
+            success: true,
+            message: `Payout ${enabled ? 'suspended' : 'resumed'} for user`,
+            payout_suspended: userStatus.payout_suspended
+        });
+    } catch (error) {
+        console.error('Error toggling payout suspended:', error);
+        res.status(500).json({ error: 'Error updating payout suspended setting' });
+    }
+};
+
 // Get user callbacks
 const getUserCallbacks = async (req, res) => {
     try {
@@ -4516,6 +4550,7 @@ module.exports = {
     updateUserDetails,
     toggleTestRandomBeneficiary,
     togglePayoutAlert,
+    togglePayoutSuspended,
     getUserCallbacks,
     getUserPayoutGatewayStats,
     updateUserWallet,

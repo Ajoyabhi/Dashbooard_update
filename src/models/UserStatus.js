@@ -50,6 +50,14 @@ module.exports = (sequelize) => {
         bank_deactive: {
             type: DataTypes.BOOLEAN,
             defaultValue: false
+        },
+        // Per-user payout kill switch. When true, payout requests are rejected
+        // immediately with a standard "temporarily suspended" message BEFORE any
+        // settlement is debited and WITHOUT hitting any gateway (regardless of the
+        // gateway configured/routed for the merchant).
+        payout_suspended: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
         }
     }, {
         tableName: 'user_status',

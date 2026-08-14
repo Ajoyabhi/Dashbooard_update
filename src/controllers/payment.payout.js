@@ -167,6 +167,20 @@ const initiatePayout = async (req, res) => {
         message: 'Technical issue please try again later'
       });
     }
+    // Per-user payout kill switch. When enabled by admin, reject the payout right
+    // here with a standard message — BEFORE any settlement is debited and WITHOUT
+    // dispatching to any gateway (regardless of which gateway is configured/routed
+    // for this merchant). No payout record is created and no money moves.
+    if (user.UserStatus.payout_suspended) {
+      recordTraceEvent({
+        reference_id, trace_type: 'payout', stage: STAGES.REJECTED, status: 'failed', source: 'api',
+        detail: 'Payout suspended for user — rejected before gateway dispatch'
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'Transaction is temporarily suspended, please contact your bank'
+      });
+    }
 
     // Check for duplicate transaction with optimized query
     const existingTransaction = await PayoutTransaction.findOne(

@@ -17,6 +17,7 @@ const {
   updateUserDetails,
   toggleTestRandomBeneficiary,
   togglePayoutAlert,
+  togglePayoutSuspended,
   getUserCallbacks,
   getUserPayoutGatewayStats,
   updateUserWallet,
@@ -79,6 +80,7 @@ router.get('/users/:userId', getUserDetails);
 router.put('/users/:userId', updateUserDetails);
 router.patch('/users/:userId/test-beneficiary', toggleTestRandomBeneficiary);
 router.patch('/users/:userId/payout-alert', togglePayoutAlert);
+router.patch('/users/:userId/payout-suspended', togglePayoutSuspended);
 router.post('/users/register', registerUser);
 
 // Agent management routes

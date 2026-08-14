@@ -16,6 +16,7 @@ interface UserStatus {
     payin_status: boolean;
     payout_status: boolean;
     payouts_status: boolean;
+    payout_suspended: boolean;
     tecnical_issue: boolean;
     vouch: boolean;
     created_at: string;
@@ -102,6 +103,23 @@ export default function UserView() {
             toast.error(error.response?.data?.error || 'Error updating payout alert setting');
         } finally {
             setTogglingPayoutAlert(false);
+        }
+    };
+
+    const [togglingPayoutSuspended, setTogglingPayoutSuspended] = useState(false);
+
+    const handleTogglePayoutSuspended = async () => {
+        if (!user) return;
+        const nextValue = !user.UserStatus?.payout_suspended;
+        setTogglingPayoutSuspended(true);
+        try {
+            await api.patch(`/admin/users/${user.id}/payout-suspended`, { enabled: nextValue });
+            setUser({ ...user, UserStatus: { ...user.UserStatus, payout_suspended: nextValue } });
+            toast.success(`Payouts ${nextValue ? 'suspended' : 'resumed'} for user`);
+        } catch (error: any) {
+            toast.error(error.response?.data?.error || 'Error updating payout suspended setting');
+        } finally {
+            setTogglingPayoutSuspended(false);
         }
     };
 
@@ -394,6 +412,43 @@ export default function UserView() {
                                 >
                                     <span
                                         className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${user.payout_alert_enabled ? 'translate-x-5' : 'translate-x-0'
+                                            }`}
+                                    />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Payout Controls */}
+                        <div className="border-t border-gray-200 pt-6">
+                            <h2 className="text-lg font-medium text-gray-900 mb-4">Payout Controls</h2>
+                            <div className={`flex items-center justify-between rounded-lg border p-4 ${user.UserStatus?.payout_suspended ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-gray-50'
+                                }`}>
+                                <div className="pr-4">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm font-medium text-gray-900">Suspend Payouts</span>
+                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${user.UserStatus?.payout_suspended ? 'bg-red-100 text-red-800' : 'bg-gray-200 text-gray-700'
+                                            }`}>
+                                            {user.UserStatus?.payout_suspended ? 'Suspended' : 'Active'}
+                                        </span>
+                                    </div>
+                                    <p className="mt-1 text-xs text-gray-500">
+                                        When enabled, every payout request from this merchant is rejected immediately with
+                                        "Transaction is temporarily suspended, please contact your bank" — before any
+                                        settlement is debited and without hitting any payout gateway, regardless of which
+                                        gateway is configured.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={handleTogglePayoutSuspended}
+                                    disabled={togglingPayoutSuspended}
+                                    role="switch"
+                                    aria-checked={!!user.UserStatus?.payout_suspended}
+                                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${user.UserStatus?.payout_suspended ? 'bg-red-600' : 'bg-gray-300'
+                                        }`}
+                                >
+                                    <span
+                                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${user.UserStatus?.payout_suspended ? 'translate-x-5' : 'translate-x-0'
                                             }`}
                                     />
                                 </button>
