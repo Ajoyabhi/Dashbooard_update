@@ -58,6 +58,14 @@ module.exports = (sequelize) => {
         payout_suspended: {
             type: DataTypes.BOOLEAN,
             defaultValue: false
+        },
+        // Per-user payin kill switch. When true, payin requests are rejected
+        // immediately with a realistic "service unavailable" message BEFORE any
+        // transaction record is created and WITHOUT hitting any gateway
+        // (regardless of the payin gateway configured for the merchant).
+        payin_suspended: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
         }
     }, {
         tableName: 'user_status',

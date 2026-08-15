@@ -770,6 +770,40 @@ const togglePayoutSuspended = async (req, res) => {
     }
 };
 
+// Toggle the per-user payin kill switch. When enabled, all payin requests for
+// this user are rejected immediately with a realistic "service unavailable"
+// message, before any transaction record is created and without hitting any gateway.
+const togglePayinSuspended = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { enabled } = req.body;
+
+        if (typeof enabled !== 'boolean') {
+            return res.status(400).json({ error: '"enabled" must be a boolean' });
+        }
+
+        const user = await User.findByPk(userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const [userStatus] = await UserStatus.findOrCreate({
+            where: { user_id: userId },
+            defaults: { payin_suspended: enabled }
+        });
+        await userStatus.update({ payin_suspended: enabled });
+
+        res.json({
+            success: true,
+            message: `Payin ${enabled ? 'suspended' : 'resumed'} for user`,
+            payin_suspended: userStatus.payin_suspended
+        });
+    } catch (error) {
+        console.error('Error toggling payin suspended:', error);
+        res.status(500).json({ error: 'Error updating payin suspended setting' });
+    }
+};
+
 // Get user callbacks
 const getUserCallbacks = async (req, res) => {
     try {
@@ -4551,6 +4585,7 @@ module.exports = {
     toggleTestRandomBeneficiary,
     togglePayoutAlert,
     togglePayoutSuspended,
+    togglePayinSuspended,
     getUserCallbacks,
     getUserPayoutGatewayStats,
     updateUserWallet,

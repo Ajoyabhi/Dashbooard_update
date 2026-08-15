@@ -56,6 +56,11 @@ const processPayin = async (data) => {
     if (!userStatus.payin_status) throw new Error('User payin functionality is disabled');
     if (userStatus.bank_deactive) throw new Error('Bank is deactivated your ip due to security reasons');
     if (userStatus.tecnical_issue) throw new Error('Technical issue please try again later');
+    // Per-user payin kill switch. When enabled by admin, reject the payin here with
+    // a realistic payer-facing message — BEFORE any transaction record is created
+    // and WITHOUT dispatching to any gateway (regardless of which payin gateway is
+    // configured for this merchant). No record is created and no gateway is hit.
+    if (userStatus.payin_suspended) throw new Error('Payment service is temporarily unavailable. Please try again later.');
 
     // Use already-fetched MerchantCharges from user includes — no extra DB call.
     // Match on the payin amount range (falls back to the legacy shared range).
