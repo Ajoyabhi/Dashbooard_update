@@ -1,13 +1,13 @@
 const { DataTypes } = require('sequelize');
 
 /**
- * Agent commission settlement ledger.
+ * Agent-commission settlement ledger, keyed PER USER (merchant).
  *
- * Each row records a payout of commission MADE to an agent. It is the
- * "watermark" that keeps us from paying the same commission twice.
+ * Each row records a commission payout MADE against a user's transactions. It is
+ * the "watermark" that keeps us from paying the same commission twice.
  *
- *   payable(type) = SUM(agent_charge on completed txns)   [accrued, from Mongo]
- *                 - SUM(amount here for that agent+type)   [settled, this table]
+ *   payable(user,type) = SUM(agent_charge on that user's completed txns)  [accrued]
+ *                      - SUM(amount here for that user+type)              [settled]
  *
  * Because payable is always recomputed from source, a transaction that flips to
  * 'completed' after a settlement was recorded can never cause a double-payment
@@ -22,7 +22,8 @@ module.exports = (sequelize) => {
       primaryKey: true,
       autoIncrement: true
     },
-    agent_id: {
+    // The merchant/user whose commission this settlement pays down.
+    user_id: {
       type: DataTypes.INTEGER,
       allowNull: false,
       references: { model: 'users', key: 'id' }
@@ -52,7 +53,7 @@ module.exports = (sequelize) => {
     createdAt: 'created_at',
     updatedAt: 'updated_at',
     indexes: [
-      { fields: ['agent_id', 'type'] }
+      { fields: ['user_id', 'type'] }
     ]
   });
 

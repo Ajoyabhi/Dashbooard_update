@@ -9,7 +9,7 @@ module.exports = {
         autoIncrement: true,
         allowNull: false
       },
-      agent_id: {
+      user_id: {
         type: Sequelize.INTEGER,
         allowNull: false,
         references: { model: 'users', key: 'id' },
@@ -45,7 +45,7 @@ module.exports = {
       }
     });
 
-    await queryInterface.addIndex('agent_commission_settlements', ['agent_id', 'type']);
+    await queryInterface.addIndex('agent_commission_settlements', ['user_id', 'type']);
   },
 
   down: async (queryInterface) => {

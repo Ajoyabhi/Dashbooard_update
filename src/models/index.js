@@ -90,9 +90,9 @@ User.hasMany(PayoutFailedHistory, { foreignKey: 'user_id', onDelete: 'CASCADE' }
 PayoutFailedHistory.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 PayoutFailedHistory.belongsTo(User, { foreignKey: 'failed_by', as: 'failedByUser' });
 
-// Add AgentCommissionSettlement relationships
-User.hasMany(AgentCommissionSettlement, { foreignKey: 'agent_id', onDelete: 'CASCADE' });
-AgentCommissionSettlement.belongsTo(User, { foreignKey: 'agent_id', as: 'agent' });
+// Add AgentCommissionSettlement relationships (keyed per user/merchant)
+User.hasMany(AgentCommissionSettlement, { foreignKey: 'user_id', onDelete: 'CASCADE' });
+AgentCommissionSettlement.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 AgentCommissionSettlement.belongsTo(User, { foreignKey: 'settled_by', as: 'settledByUser' });
 
 // Export models

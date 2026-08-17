@@ -69,9 +69,9 @@ const {
 } = require('../controllers/admin.controller');
 const {
   getAgentCommissionSummary,
-  getAgentCommissionDetail,
-  settleAgentCommission,
-  getAgentSettlements,
+  setUserAgentCharge,
+  settleUserCommission,
+  getUserSettlements,
   createCommissionReport,
   getReportStatus,
   downloadReport
@@ -286,15 +286,13 @@ router.get('/queue/health', async (req, res) => {
   }
 });
 
-// Agent commission routes.
-// NOTE: the static /report/... paths are declared BEFORE the parameterised
-// /:agentId routes so Express does not treat "report" as an :agentId.
+// Agent commission routes, keyed PER USER (merchant).
 router.get('/agent-commission', getAgentCommissionSummary);
 router.get('/agent-commission/report/:jobId/status', getReportStatus);
 router.get('/agent-commission/report/:jobId/download', downloadReport);
-router.get('/agent-commission/:agentId', getAgentCommissionDetail);
-router.get('/agent-commission/:agentId/settlements', getAgentSettlements);
-router.post('/agent-commission/:agentId/settle', settleAgentCommission);
-router.post('/agent-commission/:agentId/report', createCommissionReport);
+router.put('/agent-commission/user/:userId/agent-charge', setUserAgentCharge);
+router.get('/agent-commission/user/:userId/settlements', getUserSettlements);
+router.post('/agent-commission/user/:userId/settle', settleUserCommission);
+router.post('/agent-commission/user/:userId/report', createCommissionReport);
 
 module.exports = router; 

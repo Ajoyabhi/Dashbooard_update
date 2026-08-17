@@ -96,37 +96,30 @@ function addTxnRow(sheet, type, txn, commission) {
 }
 
 commissionReportQueue.process(async (job) => {
-  const { agentId, agentUsername, startDate, endDate, overridePayinRate, overridePayoutRate } = job.data;
-  logger.info('Processing commission report job', { jobId: job.id, agentId, startDate, endDate, overridePayinRate, overridePayoutRate });
+  const { userId, userUsername, startDate, endDate, overridePayinRate, overridePayoutRate } = job.data;
+  logger.info('Processing commission report job', { jobId: job.id, userId, startDate, endDate, overridePayinRate, overridePayoutRate });
 
   // Optional override rates (%). null => fall back to configured agent charge.
   const ovPayin = num(overridePayinRate);
   const ovPayout = num(overridePayoutRate);
 
-  const agent = await User.findByPk(agentId, { attributes: ['id', 'name', 'user_name'], raw: true });
-  if (!agent) throw new Error(`Agent ${agentId} not found`);
+  const user = await User.findByPk(userId, { attributes: ['id', 'name', 'user_name'], raw: true });
+  if (!user) throw new Error(`User ${userId} not found`);
 
-  const merchants = await User.findAll({ where: { created_by: agentId }, attributes: ['id', 'name', 'user_name'], raw: true });
-  const merchantIds = merchants.map((m) => m.id.toString());
+  const userIds = [userId.toString()];
   const dateRange = buildDateRange(startDate, endDate);
 
-  // Configured agent-charge brackets per merchant (used when no override is given).
-  const bracketRows = merchants.length
-    ? await MerchantCharges.findAll({ where: { user_id: { [Op.in]: merchants.map((m) => m.id) } }, raw: true })
-    : [];
-  const bracketsByMerchant = {};
-  bracketRows.forEach((r) => {
-    (bracketsByMerchant[r.user_id.toString()] = bracketsByMerchant[r.user_id.toString()] || []).push(r);
-  });
+  // The user's own configured agent-charge slabs (used when no override is given).
+  const brackets = await MerchantCharges.findAll({ where: { user_id: userId }, raw: true });
 
   const [payins, payouts] = await Promise.all([
-    fetchCompleted(PayinTransaction, merchantIds, dateRange),
-    fetchCompleted(PayoutTransaction, merchantIds, dateRange)
+    fetchCompleted(PayinTransaction, userIds, dateRange),
+    fetchCompleted(PayoutTransaction, userIds, dateRange)
   ]);
 
-  // Precompute commission per transaction (override or configured fallback).
+  // Commission per transaction (override or the user's configured slab fallback).
   const commissionOf = (type, txn) =>
-    computeCommission(type, txn, type === 'payin' ? ovPayin : ovPayout, bracketsByMerchant[txn.user?.user_id] || []);
+    computeCommission(type, txn, type === 'payin' ? ovPayin : ovPayout, brackets);
 
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'PayVex';
@@ -141,7 +134,7 @@ commissionReportQueue.process(async (job) => {
     { header: 'Merchant', key: 'merchant_name', width: 22 },
     { header: 'Merchant ID', key: 'merchant_username', width: 12 },
     { header: 'Amount', key: 'amount', width: 14 },
-    { header: 'Merchant Charge', key: 'merchant_charge', width: 16 },
+    { header: 'Total Charge Taken', key: 'merchant_charge', width: 18 },
     { header: 'Agent Commission', key: 'agent_commission', width: 18 },
     { header: 'Platform Net', key: 'platform_net', width: 14 },
     { header: 'Status', key: 'status', width: 12 },
@@ -150,75 +143,41 @@ commissionReportQueue.process(async (job) => {
   detail.getRow(1).font = { bold: true };
   detail.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E0E0' } };
 
-  payins.forEach((t) => addTxnRow(detail, 'payin', t, commissionOf('payin', t)));
-  payouts.forEach((t) => addTxnRow(detail, 'payout', t, commissionOf('payout', t)));
+  let gPayinCount = 0, gPayinComm = 0, gPayinCharge = 0;
+  let gPayoutCount = 0, gPayoutComm = 0, gPayoutCharge = 0;
 
-  // ---- Sheet 2: per-merchant summary ----
-  const summary = workbook.addWorksheet('Summary');
-  summary.columns = [
-    { header: 'Merchant', key: 'merchant_name', width: 24 },
-    { header: 'Merchant ID', key: 'merchant_id', width: 12 },
-    { header: 'Payin Txns', key: 'payin_count', width: 12 },
-    { header: 'Payin Commission', key: 'payin_commission', width: 18 },
-    { header: 'Payout Txns', key: 'payout_count', width: 12 },
-    { header: 'Payout Commission', key: 'payout_commission', width: 18 }
-  ];
-  summary.getRow(1).font = { bold: true };
-  summary.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E0E0' } };
-
-  const acc = {}; // merchantIdStr -> { payinCount, payinComm, payoutCount, payoutComm }
-  const bump = (id, key, amount) => {
-    const a = acc[id] || { payinCount: 0, payinComm: 0, payoutCount: 0, payoutComm: 0 };
-    if (key === 'payin') { a.payinCount += 1; a.payinComm += (amount || 0); }
-    else { a.payoutCount += 1; a.payoutComm += (amount || 0); }
-    acc[id] = a;
-  };
-  payins.forEach((t) => bump(t.user?.user_id, 'payin', commissionOf('payin', t)));
-  payouts.forEach((t) => bump(t.user?.user_id, 'payout', commissionOf('payout', t)));
-
-  let gPayinCount = 0, gPayinComm = 0, gPayoutCount = 0, gPayoutComm = 0;
-  merchants.forEach((m) => {
-    const a = acc[m.id.toString()] || { payinCount: 0, payinComm: 0, payoutCount: 0, payoutComm: 0 };
-    gPayinCount += a.payinCount; gPayinComm += a.payinComm;
-    gPayoutCount += a.payoutCount; gPayoutComm += a.payoutComm;
-    summary.addRow({
-      merchant_name: m.name,
-      merchant_id: m.id,
-      payin_count: a.payinCount,
-      payin_commission: round2(a.payinComm),
-      payout_count: a.payoutCount,
-      payout_commission: round2(a.payoutComm)
-    });
+  payins.forEach((t) => {
+    const c = commissionOf('payin', t);
+    addTxnRow(detail, 'payin', t, c);
+    gPayinCount += 1; gPayinComm += c; gPayinCharge += (t.charges?.total_charges || 0);
+  });
+  payouts.forEach((t) => {
+    const c = commissionOf('payout', t);
+    addTxnRow(detail, 'payout', t, c);
+    gPayoutCount += 1; gPayoutComm += c; gPayoutCharge += (t.charges?.total_charges || 0);
   });
 
-  const totalRow = summary.addRow({
-    merchant_name: 'TOTAL',
-    merchant_id: '',
-    payin_count: gPayinCount,
-    payin_commission: round2(gPayinComm),
-    payout_count: gPayoutCount,
-    payout_commission: round2(gPayoutComm)
-  });
-  totalRow.font = { bold: true };
-
-  // ---- Sheet 3: report meta ----
+  // ---- Sheet 2: report meta / totals ----
   const meta = workbook.addWorksheet('Report Info');
-  meta.columns = [{ header: 'Field', key: 'field', width: 24 }, { header: 'Value', key: 'value', width: 40 }];
+  meta.columns = [{ header: 'Field', key: 'field', width: 28 }, { header: 'Value', key: 'value', width: 44 }];
   meta.getRow(1).font = { bold: true };
   [
-    { field: 'Agent', value: `${agent.name} (${agent.user_name})` },
-    { field: 'Merchants', value: merchants.length },
+    { field: 'Merchant', value: `${user.name} (${user.user_name})` },
     { field: 'Date From', value: startDate || 'All time' },
     { field: 'Date To', value: endDate || 'All time' },
-    { field: 'Payin Rate Basis', value: ovPayin != null ? `Override ${ovPayin}%` : "Merchant's configured agent charge" },
-    { field: 'Payout Rate Basis', value: ovPayout != null ? `Override ${ovPayout}%` : "Merchant's configured agent charge" },
-    { field: 'Payin Commission (range)', value: round2(gPayinComm) },
-    { field: 'Payout Commission (range)', value: round2(gPayoutComm) },
+    { field: 'Payin Rate Basis', value: ovPayin != null ? `Override ${ovPayin}%` : "User's configured agent charge" },
+    { field: 'Payout Rate Basis', value: ovPayout != null ? `Override ${ovPayout}%` : "User's configured agent charge" },
+    { field: 'Payin Txns', value: gPayinCount },
+    { field: 'Total Payin Charge Taken', value: round2(gPayinCharge) },
+    { field: 'Payin Agent Commission', value: round2(gPayinComm) },
+    { field: 'Payout Txns', value: gPayoutCount },
+    { field: 'Total Payout Charge Taken', value: round2(gPayoutCharge) },
+    { field: 'Payout Agent Commission', value: round2(gPayoutComm) },
     { field: 'Generated At', value: new Date().toLocaleString('en-IN') }
   ].forEach((r) => meta.addRow(r));
 
-  const safeAgent = String(agentUsername || agent.user_name || agentId).replace(/[^a-zA-Z0-9_-]/g, '');
-  const fileName = `agent-commission-${safeAgent}-${Date.now()}.xlsx`;
+  const safeUser = String(userUsername || user.user_name || userId).replace(/[^a-zA-Z0-9_-]/g, '');
+  const fileName = `agent-commission-${safeUser}-${Date.now()}.xlsx`;
   const filePath = path.join(REPORTS_DIR, fileName);
   await workbook.xlsx.writeFile(filePath);
 
