@@ -65,6 +65,12 @@ start_reconciliation_worker() {
     pm2 start src/workers/payinReconciliation.worker.js --name "payment-gateway-payin-reconciliation" --env production
 }
 
+# Function to start the commission report worker
+start_commission_report_worker() {
+    echo "Starting commission report worker..."
+    pm2 start src/workers/commissionReport.worker.js --name "payment-gateway-commission-report" --env production
+}
+
 # Function to start the frontend (using built version)
 start_frontend() {
     echo "Starting frontend (production build)..."
@@ -143,7 +149,7 @@ stop_all() {
 # Function to restart only this app's processes
 restart_all() {
     echo "Restarting app processes..."
-    for proc in payment-gateway-api payment-gateway-callback-worker payment-gateway-payin-reconciliation payment-gateway-frontend; do
+    for proc in payment-gateway-api payment-gateway-callback-worker payment-gateway-payin-reconciliation payment-gateway-commission-report payment-gateway-frontend; do
         if pm2 show "$proc" &>/dev/null; then
             pm2 restart "$proc"
         else
@@ -180,6 +186,7 @@ case $COMMAND in
         start_server
         start_callback_worker
         start_reconciliation_worker
+        start_commission_report_worker
         start_frontend
         save_pm2_list
         show_status
