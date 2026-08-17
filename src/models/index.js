@@ -28,6 +28,7 @@ const SettlementTransactionModel = require('./settlementTransaction.model');
 const ManageFundRequestModel = require('./manageFundRequest.model');
 const WalletTransactionModel = require('./WalletTransaction');
 const PayoutFailedHistoryModel = require('./PayoutFailedHistory');
+const AgentCommissionSettlementModel = require('./agentCommissionSettlement.model');
 
 // Initialize models
 const User = UserModel(sequelize);
@@ -43,6 +44,7 @@ const SettlementTransaction = SettlementTransactionModel(sequelize);
 const ManageFundRequest = ManageFundRequestModel(sequelize);
 const WalletTransaction = WalletTransactionModel(sequelize);
 const PayoutFailedHistory = PayoutFailedHistoryModel(sequelize);
+const AgentCommissionSettlement = AgentCommissionSettlementModel(sequelize);
 
 // Define relationships
 User.hasOne(UserStatus, { foreignKey: 'user_id', onDelete: 'CASCADE' });
@@ -88,6 +90,11 @@ User.hasMany(PayoutFailedHistory, { foreignKey: 'user_id', onDelete: 'CASCADE' }
 PayoutFailedHistory.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 PayoutFailedHistory.belongsTo(User, { foreignKey: 'failed_by', as: 'failedByUser' });
 
+// Add AgentCommissionSettlement relationships
+User.hasMany(AgentCommissionSettlement, { foreignKey: 'agent_id', onDelete: 'CASCADE' });
+AgentCommissionSettlement.belongsTo(User, { foreignKey: 'agent_id', as: 'agent' });
+AgentCommissionSettlement.belongsTo(User, { foreignKey: 'settled_by', as: 'settledByUser' });
+
 // Export models
 module.exports = {
     sequelize,
@@ -103,5 +110,6 @@ module.exports = {
     SettlementTransaction,
     ManageFundRequest,
     WalletTransaction,
-    PayoutFailedHistory
+    PayoutFailedHistory,
+    AgentCommissionSettlement
 }; 

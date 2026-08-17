@@ -409,7 +409,36 @@ const updateUserMerchantCharges = async (req, res) => {
             admin_payout_charge,
             admin_payin_charge_type,
             admin_payout_charge_type,
+            // Agent's cut, CARVED OUT of the admin (total) charge — never added on
+            // top of what the merchant pays. Optional; defaults to 0 (no agent).
+            agent_payin_charge,
+            agent_payout_charge,
+            agent_payin_charge_type,
+            agent_payout_charge_type,
         } = req.body;
+
+        // Normalise agent charges. Agent charge type follows the admin charge type
+        // by default so the two are always comparable.
+        const agentPayinCharge = agent_payin_charge != null ? parseFloat(agent_payin_charge) : 0;
+        const agentPayoutCharge = agent_payout_charge != null ? parseFloat(agent_payout_charge) : 0;
+        const agentPayinChargeType = agent_payin_charge_type || admin_payin_charge_type || 'percentage';
+        const agentPayoutChargeType = agent_payout_charge_type || admin_payout_charge_type || 'percentage';
+
+        // Invariant: the agent's cut can never exceed the total charge we collect
+        // from the merchant, otherwise the platform would pay out more than it earns
+        // on that transaction. Compare only when both sides use the same type.
+        if (agentPayinChargeType === admin_payin_charge_type && agentPayinCharge > parseFloat(admin_payin_charge)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Agent payin charge cannot exceed the admin (total) payin charge'
+            });
+        }
+        if (agentPayoutChargeType === admin_payout_charge_type && agentPayoutCharge > parseFloat(admin_payout_charge)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Agent payout charge cannot exceed the admin (total) payout charge'
+            });
+        }
 
         // Resolve the payin/payout ranges. Newer clients send per-side ranges;
         // older ones send only the shared start_amount/end_amount, which we then
@@ -459,6 +488,10 @@ const updateUserMerchantCharges = async (req, res) => {
                     admin_payout_charge,
                     admin_payin_charge_type,
                     admin_payout_charge_type,
+                    agent_payin_charge: agentPayinCharge,
+                    agent_payout_charge: agentPayoutCharge,
+                    agent_payin_charge_type: agentPayinChargeType,
+                    agent_payout_charge_type: agentPayoutChargeType,
                     updated_by: req.user.id
                 }, { transaction: t });
                 return existingCharge;
@@ -478,11 +511,11 @@ const updateUserMerchantCharges = async (req, res) => {
                 admin_payout_charge,
                 admin_payin_charge_type,
                 admin_payout_charge_type,
-                // Set default values for required agent fields
-                agent_payin_charge: 0,
-                agent_payout_charge: 0,
-                agent_payin_charge_type: 'percentage',
-                agent_payout_charge_type: 'percentage',
+                // Agent's cut carved out of the admin charge (0 = no agent commission)
+                agent_payin_charge: agentPayinCharge,
+                agent_payout_charge: agentPayoutCharge,
+                agent_payin_charge_type: agentPayinChargeType,
+                agent_payout_charge_type: agentPayoutChargeType,
                 created_by: req.user.id,
                 updated_by: req.user.id
             }, { transaction: t });

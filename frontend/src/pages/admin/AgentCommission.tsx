@@ -1,0 +1,606 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Download, History, Eye, X, Wallet } from 'lucide-react';
+import DashboardLayout from '../../components/layout/DashboardLayout';
+import Table from '../../components/dashboard/Table';
+import { adminMenuItems } from '../../data/mockData';
+import { formatCurrency } from '../../utils/formatUtils';
+import api from '../../utils/axios';
+
+/**
+ * Admin-facing Agent Commission dashboard.
+ *
+ * Shows, per agent (the person who onboarded the merchant), how much payin and
+ * payout commission has ACCRUED on completed transactions, how much has already
+ * been SETTLED (paid to the agent), and the remaining PAYABLE = accrued - settled.
+ *
+ * Payin and payout are tracked as independent ledgers. Settlement uses an
+ * amount-based watermark on the backend, so a late-completing transaction can
+ * never double-pay or lose money.
+ *
+ * Backend API contract (implemented separately under /admin/agent-commission):
+ *   GET  /admin/agent-commission                         -> summary list
+ *   GET  /admin/agent-commission/:agentId                -> per-merchant breakdown
+ *   POST /admin/agent-commission/:agentId/settle         -> record a settlement
+ *   GET  /admin/agent-commission/:agentId/settlements    -> settlement history
+ *   POST /admin/agent-commission/:agentId/report         -> enqueue Excel report (bg worker)
+ *   GET  /admin/agent-commission/report/:jobId/status    -> poll report job
+ *   GET  /admin/agent-commission/report/:jobId/download  -> download .xlsx (blob)
+ */
+
+type CommissionType = 'payin' | 'payout';
+
+interface AgentSummary {
+  agent_id: number;
+  agent_name: string;
+  agent_username: string;
+  merchant_count: number;
+  payin_accrued: number;
+  payin_settled: number;
+  payin_payable: number;
+  payout_accrued: number;
+  payout_settled: number;
+  payout_payable: number;
+}
+
+interface MerchantBreakdown {
+  user_id: number;
+  name: string;
+  user_name: string;
+  payin_txn_count: number;
+  payin_commission: number;
+  payout_txn_count: number;
+  payout_commission: number;
+}
+
+interface SettlementRecord {
+  id: number;
+  type: CommissionType;
+  amount: number;
+  note: string | null;
+  settled_by_name: string | null;
+  created_at: string;
+}
+
+export default function AgentCommission() {
+  const [agents, setAgents] = useState<AgentSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Breakdown modal
+  const [showBreakdown, setShowBreakdown] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState<AgentSummary | null>(null);
+  const [breakdown, setBreakdown] = useState<MerchantBreakdown[]>([]);
+  const [breakdownLoading, setBreakdownLoading] = useState(false);
+
+  // Settle modal
+  const [showSettle, setShowSettle] = useState(false);
+  const [settleType, setSettleType] = useState<CommissionType>('payin');
+  const [settleAmount, setSettleAmount] = useState('');
+  const [settleNote, setSettleNote] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // History modal
+  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState<SettlementRecord[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Report (async Excel via background worker)
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  // Optional override rates (%) applied when generating the Excel. Blank => the
+  // worker falls back to each merchant's configured agent charge. Recomputes
+  // commission from the rate, so historical transactions get real figures.
+  const [overridePayinRate, setOverridePayinRate] = useState('');
+  const [overridePayoutRate, setOverridePayoutRate] = useState('');
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    fetchAgents();
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
+  const fetchAgents = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await api.get('/admin/agent-commission');
+      if (res.data.success) {
+        setAgents(res.data.data || []);
+      } else {
+        setAgents([]);
+        setError(res.data.message || 'Failed to fetch agent commission data');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Error fetching agent commission data');
+      setAgents([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openBreakdown = async (agent: AgentSummary) => {
+    setSelectedAgent(agent);
+    setShowBreakdown(true);
+    setBreakdown([]);
+    try {
+      setBreakdownLoading(true);
+      const res = await api.get(`/admin/agent-commission/${agent.agent_id}`, {
+        params: { startDate: startDate || undefined, endDate: endDate || undefined },
+      });
+      if (res.data.success) {
+        setBreakdown(res.data.data?.merchants || []);
+      }
+    } catch (err: any) {
+      window.showToast('error', err.response?.data?.message || 'Failed to load breakdown');
+    } finally {
+      setBreakdownLoading(false);
+    }
+  };
+
+  const openSettle = (agent: AgentSummary, type: CommissionType) => {
+    setSelectedAgent(agent);
+    setSettleType(type);
+    setSettleAmount('');
+    setSettleNote('');
+    setShowSettle(true);
+  };
+
+  const payableFor = (agent: AgentSummary, type: CommissionType) =>
+    type === 'payin' ? agent.payin_payable : agent.payout_payable;
+
+  const processSettle = async () => {
+    if (!selectedAgent) return;
+    const amount = parseFloat(settleAmount);
+    const maxPayable = payableFor(selectedAgent, settleType);
+
+    if (!amount || amount <= 0) {
+      window.showToast('error', 'Please enter a valid amount');
+      return;
+    }
+    if (amount > maxPayable) {
+      window.showToast('error', `Amount cannot exceed payable ${formatCurrency(maxPayable)}`);
+      return;
+    }
+
+    try {
+      setIsProcessing(true);
+      const res = await api.post(`/admin/agent-commission/${selectedAgent.agent_id}/settle`, {
+        type: settleType,
+        amount,
+        note: settleNote,
+      });
+      if (res.data.success) {
+        window.showToast('success', res.data.message || 'Commission settled successfully');
+        setShowSettle(false);
+        setSelectedAgent(null);
+        setSettleAmount('');
+        setSettleNote('');
+        fetchAgents();
+      } else {
+        window.showToast('error', res.data.message || 'Failed to settle commission');
+      }
+    } catch (err: any) {
+      window.showToast('error', err.response?.data?.message || 'Failed to settle commission');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const openHistory = async (agent: AgentSummary) => {
+    setSelectedAgent(agent);
+    setShowHistory(true);
+    setHistory([]);
+    try {
+      setHistoryLoading(true);
+      const res = await api.get(`/admin/agent-commission/${agent.agent_id}/settlements`);
+      if (res.data.success) {
+        setHistory(res.data.data || []);
+      }
+    } catch (err: any) {
+      window.showToast('error', err.response?.data?.message || 'Failed to load history');
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  // Enqueue an Excel report job, poll until ready, then download the .xlsx blob.
+  const downloadReport = async (agent: AgentSummary) => {
+    try {
+      setDownloadingId(agent.agent_id);
+      const res = await api.post(`/admin/agent-commission/${agent.agent_id}/report`, {
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        overridePayinRate: overridePayinRate.trim() === '' ? undefined : overridePayinRate.trim(),
+        overridePayoutRate: overridePayoutRate.trim() === '' ? undefined : overridePayoutRate.trim(),
+      });
+      if (!res.data.success || !res.data.data?.jobId) {
+        window.showToast('error', res.data.message || 'Failed to start report');
+        setDownloadingId(null);
+        return;
+      }
+      const jobId = res.data.data.jobId;
+      window.showToast('success', 'Report is being generated in the background…');
+
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = setInterval(async () => {
+        try {
+          const s = await api.get(`/admin/agent-commission/report/${jobId}/status`);
+          const state = s.data?.data?.state;
+          if (state === 'completed') {
+            if (pollRef.current) clearInterval(pollRef.current);
+            await fetchReportFile(jobId, agent);
+            setDownloadingId(null);
+          } else if (state === 'failed') {
+            if (pollRef.current) clearInterval(pollRef.current);
+            window.showToast('error', 'Report generation failed');
+            setDownloadingId(null);
+          }
+        } catch {
+          if (pollRef.current) clearInterval(pollRef.current);
+          setDownloadingId(null);
+        }
+      }, 2000);
+    } catch (err: any) {
+      window.showToast('error', err.response?.data?.message || 'Failed to start report');
+      setDownloadingId(null);
+    }
+  };
+
+  const fetchReportFile = async (jobId: string, agent: AgentSummary) => {
+    const res = await api.get(`/admin/agent-commission/report/${jobId}/download`, {
+      responseType: 'blob',
+    });
+    const url = window.URL.createObjectURL(new Blob([res.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute(
+      'download',
+      `agent-commission-${agent.agent_username}-${new Date().toISOString().split('T')[0]}.xlsx`
+    );
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const columns = [
+    { header: 'Agent', accessor: 'agent_name' },
+    { header: 'Username', accessor: 'agent_username' },
+    {
+      header: 'Merchants',
+      accessor: 'merchant_count',
+      cell: (v: number) => <span className="font-medium">{v ?? 0}</span>,
+    },
+    {
+      header: 'Payin Payable',
+      accessor: 'payin_payable',
+      cell: (v: number, row: AgentSummary) => (
+        <div className="leading-tight">
+          <span className="font-semibold text-green-600">{formatCurrency(v || 0)}</span>
+          <div className="text-xs text-gray-400">
+            accrued {formatCurrency(row.payin_accrued || 0)}
+          </div>
+        </div>
+      ),
+    },
+    {
+      header: 'Payout Payable',
+      accessor: 'payout_payable',
+      cell: (v: number, row: AgentSummary) => (
+        <div className="leading-tight">
+          <span className="font-semibold text-green-600">{formatCurrency(v || 0)}</span>
+          <div className="text-xs text-gray-400">
+            accrued {formatCurrency(row.payout_accrued || 0)}
+          </div>
+        </div>
+      ),
+    },
+    {
+      header: 'Actions',
+      accessor: 'actions',
+      cell: (_: any, row: AgentSummary) => (
+        <div className="flex flex-wrap items-center gap-1">
+          <button
+            onClick={() => openSettle(row, 'payin')}
+            className="text-xs bg-primary-600 hover:bg-primary-700 text-white px-2 py-1 rounded"
+          >
+            Settle Payin
+          </button>
+          <button
+            onClick={() => openSettle(row, 'payout')}
+            className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 rounded"
+          >
+            Settle Payout
+          </button>
+          <button
+            onClick={() => openBreakdown(row)}
+            className="text-xs bg-gray-600 hover:bg-gray-700 text-white px-2 py-1 rounded flex items-center"
+          >
+            <Eye className="h-3 w-3 mr-1" /> View
+          </button>
+          <button
+            onClick={() => openHistory(row)}
+            className="text-xs bg-gray-600 hover:bg-gray-700 text-white px-2 py-1 rounded flex items-center"
+          >
+            <History className="h-3 w-3 mr-1" /> History
+          </button>
+          <button
+            onClick={() => downloadReport(row)}
+            disabled={downloadingId === row.agent_id}
+            className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-1 rounded flex items-center disabled:opacity-50"
+          >
+            <Download className="h-3 w-3 mr-1" />
+            {downloadingId === row.agent_id ? 'Generating…' : 'Excel'}
+          </button>
+        </div>
+      ),
+    },
+  ];
+
+  if (loading) {
+    return (
+      <DashboardLayout menuItems={adminMenuItems} title="Agent Commission">
+        <div className="flex justify-center items-center h-64">Loading...</div>
+      </DashboardLayout>
+    );
+  }
+
+  return (
+    <DashboardLayout menuItems={adminMenuItems} title="Agent Commission">
+      <div className="space-y-6">
+        {/* Date range filter (applies to breakdown + Excel report) */}
+        <div className="bg-white shadow-sm rounded-lg p-4">
+          <div className="flex flex-wrap items-end gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">From</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Override Payin Rate %</label>
+              <input
+                type="number"
+                value={overridePayinRate}
+                onChange={(e) => setOverridePayinRate(e.target.value)}
+                placeholder="configured"
+                min="0"
+                step="0.01"
+                className="w-28 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Override Payout Rate %</label>
+              <input
+                type="number"
+                value={overridePayoutRate}
+                onChange={(e) => setOverridePayoutRate(e.target.value)}
+                placeholder="configured"
+                min="0"
+                step="0.01"
+                className="w-28 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+              />
+            </div>
+            <p className="text-xs text-gray-500 max-w-md">
+              Date range filters the per-merchant breakdown and the Excel export. Payable
+              balances always reflect all-time accrued minus settled.
+              <br />
+              <span className="font-medium">Override rates</span> apply only to the Excel export — the
+              report recomputes each transaction's commission from the rate you enter (so older
+              transactions get real figures). Leave blank to use each merchant's configured agent charge.
+            </p>
+          </div>
+        </div>
+
+        {error && <div className="text-red-500 text-center">{error}</div>}
+
+        <div className="bg-white shadow-sm rounded-lg">
+          <div className="p-6">
+            <Table
+              searchable={true}
+              filterable={false}
+              columns={columns}
+              data={agents || []}
+              pagination={true}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Settle Modal */}
+      {showSettle && selectedAgent && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900">
+                Settle {settleType === 'payin' ? 'Payin' : 'Payout'} Commission
+              </h3>
+              <button onClick={() => setShowSettle(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-sm text-gray-500">
+              <div className="mb-2">
+                <p><span className="font-medium">Agent:</span> {selectedAgent.agent_name}</p>
+                <p><span className="font-medium">Username:</span> {selectedAgent.agent_username}</p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 bg-gray-50 rounded-md">
+                  <p className="font-medium text-gray-700">Accrued</p>
+                  <p className="text-primary-600">
+                    {formatCurrency(settleType === 'payin' ? selectedAgent.payin_accrued : selectedAgent.payout_accrued)}
+                  </p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-md">
+                  <p className="font-medium text-gray-700">Settled</p>
+                  <p className="text-primary-600">
+                    {formatCurrency(settleType === 'payin' ? selectedAgent.payin_settled : selectedAgent.payout_settled)}
+                  </p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-md">
+                  <p className="font-medium text-gray-700">Payable</p>
+                  <p className="text-green-600 font-semibold">
+                    {formatCurrency(payableFor(selectedAgent, settleType))}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                <input
+                  type="number"
+                  value={settleAmount}
+                  onChange={(e) => setSettleAmount(e.target.value)}
+                  placeholder="Enter amount to settle"
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                  min="0"
+                  max={payableFor(selectedAgent, settleType)}
+                  step="0.01"
+                />
+                <label className="block text-sm font-medium text-gray-700 mb-1 mt-3">Note</label>
+                <input
+                  type="text"
+                  value={settleNote}
+                  onChange={(e) => setSettleNote(e.target.value)}
+                  placeholder="Enter note (optional)"
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Maximum: {formatCurrency(payableFor(selectedAgent, settleType))}
+                </p>
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowSettle(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                  disabled={isProcessing}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={processSettle}
+                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? 'Processing...' : 'Settle Commission'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Breakdown Modal */}
+      {showBreakdown && selectedAgent && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-3xl w-full max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900">
+                Merchant Breakdown — {selectedAgent.agent_name}
+              </h3>
+              <button onClick={() => setShowBreakdown(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            {breakdownLoading ? (
+              <div className="flex justify-center items-center h-32">Loading...</div>
+            ) : breakdown.length === 0 ? (
+              <div className="text-center text-gray-500 py-8">No merchants found for this agent.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-gray-50 text-gray-600">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Merchant</th>
+                      <th className="px-3 py-2 text-left">Username</th>
+                      <th className="px-3 py-2 text-right">Payin Txns</th>
+                      <th className="px-3 py-2 text-right">Payin Commission</th>
+                      <th className="px-3 py-2 text-right">Payout Txns</th>
+                      <th className="px-3 py-2 text-right">Payout Commission</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {breakdown.map((m) => (
+                      <tr key={m.user_id}>
+                        <td className="px-3 py-2">{m.name}</td>
+                        <td className="px-3 py-2">{m.user_name}</td>
+                        <td className="px-3 py-2 text-right">{m.payin_txn_count || 0}</td>
+                        <td className="px-3 py-2 text-right font-medium">{formatCurrency(m.payin_commission || 0)}</td>
+                        <td className="px-3 py-2 text-right">{m.payout_txn_count || 0}</td>
+                        <td className="px-3 py-2 text-right font-medium">{formatCurrency(m.payout_commission || 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* History Modal */}
+      {showHistory && selectedAgent && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                <Wallet className="h-5 w-5 mr-2" /> Settlement History — {selectedAgent.agent_name}
+              </h3>
+              <button onClick={() => setShowHistory(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            {historyLoading ? (
+              <div className="flex justify-center items-center h-32">Loading...</div>
+            ) : history.length === 0 ? (
+              <div className="text-center text-gray-500 py-8">No settlements yet.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-gray-50 text-gray-600">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Date</th>
+                      <th className="px-3 py-2 text-left">Type</th>
+                      <th className="px-3 py-2 text-right">Amount</th>
+                      <th className="px-3 py-2 text-left">Note</th>
+                      <th className="px-3 py-2 text-left">By</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {history.map((h) => (
+                      <tr key={h.id}>
+                        <td className="px-3 py-2">{new Date(h.created_at).toLocaleString('en-IN')}</td>
+                        <td className="px-3 py-2 capitalize">{h.type}</td>
+                        <td className="px-3 py-2 text-right font-medium">{formatCurrency(h.amount || 0)}</td>
+                        <td className="px-3 py-2">{h.note || '-'}</td>
+                        <td className="px-3 py-2">{h.settled_by_name || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </DashboardLayout>
+  );
+}

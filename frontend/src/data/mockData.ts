@@ -362,6 +362,7 @@ export const adminMenuItems: MenuItem[] = [
   { title: 'ChargeBack Report', path: '/admin/chargeback-report', icon: 'FileText' },
   { title: 'Manage Fund Request', path: '/admin/manage-fund-request', icon: 'DollarSign' },
   { title: 'Settlement', path: '/admin/settlement', icon: 'Calendar' },
+  { title: 'Agent Commission', path: '/admin/agent-commission', icon: 'DollarSign' },
   { title: 'Manage Staff', path: '/admin/manage-staff', icon: 'UserCog' },
   { title: 'Manage Payout', path: '/admin/manage-payout', icon: 'ArrowUpRight' },
   { title: 'Bulk Payout', path: '/admin/bulk-payout', icon: 'Layers' },

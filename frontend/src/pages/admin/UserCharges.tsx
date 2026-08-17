@@ -16,6 +16,10 @@ interface ChargeRange {
   payoutEndAmount: number;
   payinCharge: number;
   payoutCharge: number;
+  // Agent's cut, carved OUT of the payin/payout (admin) charge above — not added
+  // on top of what the merchant pays. Must be <= the corresponding admin charge.
+  agentPayinCharge: number;
+  agentPayoutCharge: number;
   payinChargeType: 'percentage' | 'fixed';
   payoutChargeType: 'percentage' | 'fixed';
 }
@@ -80,6 +84,8 @@ export default function UserCharges() {
           payoutEndAmount: parseFloat(charge.payout_end_amount ?? charge.end_amount),
           payinCharge: parseFloat(charge.admin_payin_charge),
           payoutCharge: parseFloat(charge.admin_payout_charge),
+          agentPayinCharge: parseFloat(charge.agent_payin_charge ?? 0),
+          agentPayoutCharge: parseFloat(charge.agent_payout_charge ?? 0),
           payinChargeType: charge.admin_payin_charge_type as 'percentage' | 'fixed',
           payoutChargeType: charge.admin_payout_charge_type as 'percentage' | 'fixed'
         }));
@@ -206,7 +212,11 @@ export default function UserCharges() {
           admin_payin_charge: charge.payinCharge,
           admin_payout_charge: charge.payoutCharge,
           admin_payin_charge_type: charge.payinChargeType,
-          admin_payout_charge_type: charge.payoutChargeType
+          admin_payout_charge_type: charge.payoutChargeType,
+          agent_payin_charge: charge.agentPayinCharge || 0,
+          agent_payout_charge: charge.agentPayoutCharge || 0,
+          agent_payin_charge_type: charge.payinChargeType,
+          agent_payout_charge_type: charge.payoutChargeType
         }))
       });
 
@@ -240,6 +250,18 @@ export default function UserCharges() {
         return;
       }
 
+      // Invariant: agent's cut cannot exceed the total (admin) charge we collect.
+      const agentPayin = newChargeRange.agentPayinCharge || 0;
+      const agentPayout = newChargeRange.agentPayoutCharge || 0;
+      if (agentPayin > (newChargeRange.payinCharge || 0)) {
+        setError('Agent payin charge cannot exceed the payin charge');
+        return;
+      }
+      if (agentPayout > (newChargeRange.payoutCharge || 0)) {
+        setError('Agent payout charge cannot exceed the payout charge');
+        return;
+      }
+
       try {
         setLoading(true);
         const response = await api.post(`/admin/users/${userId}/merchant-charges`, {
@@ -251,6 +273,11 @@ export default function UserCharges() {
           admin_payout_charge: newChargeRange.payoutCharge || 0,
           admin_payin_charge_type: newChargeRange.payinChargeType || 'percentage',
           admin_payout_charge_type: newChargeRange.payoutChargeType || 'percentage',
+          // Agent's cut carved out of the admin charge; type follows the admin type.
+          agent_payin_charge: agentPayin,
+          agent_payout_charge: agentPayout,
+          agent_payin_charge_type: newChargeRange.payinChargeType || 'percentage',
+          agent_payout_charge_type: newChargeRange.payoutChargeType || 'percentage',
         });
 
         if (response.data.success) {
@@ -263,6 +290,8 @@ export default function UserCharges() {
             payoutEndAmount: newChargeRange.payoutEndAmount,
             payinCharge: newChargeRange.payinCharge || 0,
             payoutCharge: newChargeRange.payoutCharge || 0,
+            agentPayinCharge: newChargeRange.agentPayinCharge || 0,
+            agentPayoutCharge: newChargeRange.agentPayoutCharge || 0,
             payinChargeType: newChargeRange.payinChargeType || 'percentage',
             payoutChargeType: newChargeRange.payoutChargeType || 'percentage'
           } as ChargeRange]);
@@ -475,6 +504,19 @@ export default function UserCharges() {
                   />
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-gray-700">Agent Payin Charge</label>
+                  <input
+                    type="number"
+                    value={newChargeRange.agentPayinCharge ?? ''}
+                    onChange={(e) => setNewChargeRange({
+                      ...newChargeRange,
+                      agentPayinCharge: e.target.value === '' ? undefined : parseFloat(e.target.value)
+                    })}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    placeholder="Agent cut of payin"
+                  />
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700">Payout Start Amount</label>
                   <input
                     type="number"
@@ -508,6 +550,19 @@ export default function UserCharges() {
                       payoutCharge: parseFloat(e.target.value)
                     })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Agent Payout Charge</label>
+                  <input
+                    type="number"
+                    value={newChargeRange.agentPayoutCharge ?? ''}
+                    onChange={(e) => setNewChargeRange({
+                      ...newChargeRange,
+                      agentPayoutCharge: e.target.value === '' ? undefined : parseFloat(e.target.value)
+                    })}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    placeholder="Agent cut of payout"
                   />
                 </div>
                 <div>
@@ -562,10 +617,16 @@ export default function UserCharges() {
                     Payin Charge
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Agent Payin
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Payout Range
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Payout Charge
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Agent Payout
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Payin Type
@@ -588,10 +649,16 @@ export default function UserCharges() {
                       {range.payinCharge}{range.payinChargeType === 'percentage' ? '%' : ''}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
+                      {range.agentPayinCharge || 0}{range.payinChargeType === 'percentage' ? '%' : ''}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
                       {range.payoutStartAmount} - {range.payoutEndAmount}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {range.payoutCharge}{range.payoutChargeType === 'percentage' ? '%' : ''}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {range.agentPayoutCharge || 0}{range.payoutChargeType === 'percentage' ? '%' : ''}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="capitalize">{range.payinChargeType}</span>

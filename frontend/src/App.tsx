@@ -28,6 +28,7 @@ import ChargeBack from './pages/admin/ChargeBack';
 import ChargeBackReport from './pages/admin/ChargeBackReport';
 import ManageFundRequest from './pages/admin/ManageFundRequest';
 import Settlement from './pages/admin/Settlement';
+import AgentCommission from './pages/admin/AgentCommission';
 import UserFundRequest from './pages/user/FundRequest';
 import UserWalletReport from './pages/user/WalletReport';
 import UserPayoutReport from './pages/user/PayoutReport';
@@ -86,6 +87,7 @@ function AppRoutes() {
         <Route path="/admin/chargeback-report" element={<ProtectedRoute role="admin"><ChargeBackReport /></ProtectedRoute>} />
         <Route path="/admin/manage-fund-request" element={<ProtectedRoute role="admin"><ManageFundRequest /></ProtectedRoute>} />
         <Route path="/admin/settlement" element={<ProtectedRoute role="admin"><Settlement /></ProtectedRoute>} />
+        <Route path="/admin/agent-commission" element={<ProtectedRoute role="admin"><AgentCommission /></ProtectedRoute>} />
         <Route path="/admin/make-payout-failed" element={<ProtectedRoute role="admin"><MakePayoutFailed /></ProtectedRoute>} />
         <Route path="/admin/trash-payin-payout-report" element={<ProtectedRoute role="admin"><TrashPayinPayoutReport /></ProtectedRoute>} />
         <Route path="/admin/gateway-stats" element={<ProtectedRoute role="admin"><GatewayStats /></ProtectedRoute>} />

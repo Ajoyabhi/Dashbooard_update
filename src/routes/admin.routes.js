@@ -67,6 +67,15 @@ const {
   adminGetTransactionTrace,
   getUserAmountAnalytics
 } = require('../controllers/admin.controller');
+const {
+  getAgentCommissionSummary,
+  getAgentCommissionDetail,
+  settleAgentCommission,
+  getAgentSettlements,
+  createCommissionReport,
+  getReportStatus,
+  downloadReport
+} = require('../controllers/agentCommission.controller');
 const { registerUser } = require('../controllers/auth.controller');
 const { auth, authorize } = require('../middleware/auth.middleware');
 const { authenticateToken, isAdmin } = require('../middleware/auth');
@@ -276,5 +285,16 @@ router.get('/queue/health', async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
+// Agent commission routes.
+// NOTE: the static /report/... paths are declared BEFORE the parameterised
+// /:agentId routes so Express does not treat "report" as an :agentId.
+router.get('/agent-commission', getAgentCommissionSummary);
+router.get('/agent-commission/report/:jobId/status', getReportStatus);
+router.get('/agent-commission/report/:jobId/download', downloadReport);
+router.get('/agent-commission/:agentId', getAgentCommissionDetail);
+router.get('/agent-commission/:agentId/settlements', getAgentSettlements);
+router.post('/agent-commission/:agentId/settle', settleAgentCommission);
+router.post('/agent-commission/:agentId/report', createCommissionReport);
 
 module.exports = router; 
