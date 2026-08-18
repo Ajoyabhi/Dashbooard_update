@@ -4,8 +4,7 @@ const ExcelJS = require('exceljs');
 const { commissionReportQueue } = require('../config/queue.config');
 const { connectMongo } = require('../config/mongoConnect');
 const { logger } = require('../utils/logger');
-const { Op } = require('sequelize');
-const { User, MerchantCharges } = require('../models');
+const { User, AgentCommissionRate } = require('../models');
 const PayinTransaction = require('../models/payinTransaction.model');
 const PayoutTransaction = require('../models/payoutTransaction.model');
 
@@ -47,35 +46,16 @@ async function fetchCompleted(Model, userIds, dateRange) {
 const num = (v) => (v === null || v === undefined || v === '' || isNaN(v) ? null : parseFloat(v));
 
 /**
- * Commission for one transaction, RECOMPUTED (not read from the stored value):
- *   - If an override rate (%) was supplied for this leg, apply it to the amount.
- *     This is how historical transactions (stored agent_charge = 0) get a real
- *     figure for the statement.
- *   - Otherwise fall back to the merchant's currently-configured agent charge:
- *     find the amount bracket in MerchantCharges and use its agent rate (percentage
- *     -> amount*rate/100, fixed -> the fixed value).
+ * Commission for one transaction, RECOMPUTED from a RATE (report-only) — never
+ * from the value stored on the transaction:
+ *   commission = amount * effectiveRate / 100
+ * where effectiveRate = override rate if supplied, else the user's configured
+ * report-only agent rate. This is fully independent of the live charge logic and
+ * gives real figures for historical transactions too.
  */
-function computeCommission(type, txn, overrideRate, brackets) {
+function computeCommission(txn, effectiveRate) {
   const amount = parseFloat(txn.amount) || 0;
-
-  if (overrideRate != null) {
-    return round2((amount * overrideRate) / 100);
-  }
-
-  const startOf = type === 'payin'
-    ? (b) => parseFloat(b.payin_start_amount ?? b.start_amount)
-    : (b) => parseFloat(b.payout_start_amount ?? b.start_amount);
-  const endOf = type === 'payin'
-    ? (b) => parseFloat(b.payin_end_amount ?? b.end_amount)
-    : (b) => parseFloat(b.payout_end_amount ?? b.end_amount);
-
-  const bracket = (brackets || []).find((b) => amount >= startOf(b) && amount <= endOf(b));
-  if (!bracket) return 0;
-
-  const rate = type === 'payin' ? bracket.agent_payin_charge : bracket.agent_payout_charge;
-  const rtype = type === 'payin' ? bracket.agent_payin_charge_type : bracket.agent_payout_charge_type;
-  if (rtype === 'fixed') return round2(parseFloat(rate) || 0);
-  return round2((amount * (parseFloat(rate) || 0)) / 100);
+  return round2((amount * (effectiveRate || 0)) / 100);
 }
 
 function addTxnRow(sheet, type, txn, commission) {
@@ -109,17 +89,21 @@ commissionReportQueue.process(async (job) => {
   const userIds = [userId.toString()];
   const dateRange = buildDateRange(startDate, endDate);
 
-  // The user's own configured agent-charge slabs (used when no override is given).
-  const brackets = await MerchantCharges.findAll({ where: { user_id: userId }, raw: true });
+  // The user's report-only agent rate (used when no override is supplied).
+  const rateRow = await AgentCommissionRate.findOne({ where: { user_id: userId }, raw: true });
+  const cfgPayin = rateRow ? parseFloat(rateRow.agent_payin_rate) || 0 : 0;
+  const cfgPayout = rateRow ? parseFloat(rateRow.agent_payout_rate) || 0 : 0;
+
+  const effPayin = ovPayin != null ? ovPayin : cfgPayin;
+  const effPayout = ovPayout != null ? ovPayout : cfgPayout;
 
   const [payins, payouts] = await Promise.all([
     fetchCompleted(PayinTransaction, userIds, dateRange),
     fetchCompleted(PayoutTransaction, userIds, dateRange)
   ]);
 
-  // Commission per transaction (override or the user's configured slab fallback).
-  const commissionOf = (type, txn) =>
-    computeCommission(type, txn, type === 'payin' ? ovPayin : ovPayout, brackets);
+  // Commission per transaction = amount * effective rate (override or configured).
+  const commissionOf = (type, txn) => computeCommission(txn, type === 'payin' ? effPayin : effPayout);
 
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'PayVex';
@@ -165,8 +149,8 @@ commissionReportQueue.process(async (job) => {
     { field: 'Merchant', value: `${user.name} (${user.user_name})` },
     { field: 'Date From', value: startDate || 'All time' },
     { field: 'Date To', value: endDate || 'All time' },
-    { field: 'Payin Rate Basis', value: ovPayin != null ? `Override ${ovPayin}%` : "User's configured agent charge" },
-    { field: 'Payout Rate Basis', value: ovPayout != null ? `Override ${ovPayout}%` : "User's configured agent charge" },
+    { field: 'Payin Rate Applied', value: `${effPayin}% ${ovPayin != null ? '(override)' : '(configured)'}` },
+    { field: 'Payout Rate Applied', value: `${effPayout}% ${ovPayout != null ? '(override)' : '(configured)'}` },
     { field: 'Payin Txns', value: gPayinCount },
     { field: 'Total Payin Charge Taken', value: round2(gPayinCharge) },
     { field: 'Payin Agent Commission', value: round2(gPayinComm) },

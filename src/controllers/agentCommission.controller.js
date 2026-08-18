@@ -1,25 +1,26 @@
 const path = require('path');
 const { Op, fn, col } = require('sequelize');
-const { User, MerchantCharges, AgentCommissionSettlement, sequelize } = require('../models');
+const { User, AgentCommissionRate, AgentCommissionSettlement, sequelize } = require('../models');
 const PayinTransaction = require('../models/payinTransaction.model');
 const PayoutTransaction = require('../models/payoutTransaction.model');
 const { commissionReportQueue } = require('../config/queue.config');
 
 /**
- * Admin-facing agent-commission reporting & settlement, keyed PER USER (merchant).
+ * Admin agent-commission reporting & settlement, keyed PER USER (merchant).
  *
- * Each row is one merchant we have. For each we show:
- *   - total_charges we collected (payin & payout)
- *   - agent commission accrued = SUM(agent_charge) on their COMPLETED txns
- *   - settled / payable (payable = accrued - settled), tracked per payin/payout
- *   - the current agent charge % (editable inline; a single rate applied across
- *     all of that user's charge slabs)
+ * IMPORTANT: agent commission here is REPORT-ONLY. It is fully decoupled from the
+ * live transaction/charge logic — the merchant is always charged only the admin
+ * (total) charge, and we NEVER read the `agent_charge` stamped on transactions.
+ * Instead the agent's cut is recomputed from a per-user rate stored in
+ * `agent_commission_rates`:
  *
- * The merchant is charged `total_charges` (== admin_charge); `agent_charge` is
- * CARVED OUT of it (never added on top). Platform net = total_charges - agent_charge.
+ *   agent commission = SUM(transaction amount on completed txns) * agent_rate / 100
+ *
+ *   payable(user,type) = accrued(from rate) - settled(agent_commission_settlements)
+ *
+ * Payin and payout are independent. Merchant->row is every merchant user.
  */
 
-// Merchant user types (exclude admin/agent/staff).
 const MERCHANT_TYPES = ['payin_payout', 'payin_only', 'payout_only'];
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -36,8 +37,9 @@ function buildDateFilter(startDate, endDate) {
   return range;
 }
 
-// Aggregate commission + total charges per user over COMPLETED txns.
-async function aggregateByUser(Model, userIds, dateRange) {
+// Aggregate transaction AMOUNT + total charges per user over COMPLETED txns.
+// (We use amount, not the stored agent_charge — commission is recomputed.)
+async function amountByUser(Model, userIds, dateRange) {
   if (!userIds.length) return [];
   const match = { 'user.user_id': { $in: userIds }, status: 'completed' };
   if (dateRange) match.createdAt = dateRange;
@@ -46,12 +48,26 @@ async function aggregateByUser(Model, userIds, dateRange) {
     {
       $group: {
         _id: '$user.user_id',
-        commission: { $sum: { $ifNull: ['$charges.agent_charge', 0] } },
+        amount: { $sum: { $ifNull: ['$amount', 0] } },
         total_charges: { $sum: { $ifNull: ['$charges.total_charges', 0] } },
         count: { $sum: 1 }
       }
     }
   ]);
+}
+
+// Report-only agent rates (%) per user.
+async function ratesByUser(userIds) {
+  if (!userIds.length) return {};
+  const rows = await AgentCommissionRate.findAll({
+    where: { user_id: { [Op.in]: userIds } },
+    raw: true
+  });
+  const map = {};
+  rows.forEach((r) => {
+    map[r.user_id] = { payin: parseFloat(r.agent_payin_rate) || 0, payout: parseFloat(r.agent_payout_rate) || 0 };
+  });
+  return map;
 }
 
 // Sum settled amounts grouped by user_id + type.
@@ -72,30 +88,9 @@ async function settledByUser(userIds) {
   return map;
 }
 
-// Representative configured agent rate (%) per user, from their charge slabs.
-// Inline override sets all slabs uniformly, so the first bracket is representative.
-async function agentRatesByUser(userIds) {
-  if (!userIds.length) return {};
-  const rows = await MerchantCharges.findAll({
-    where: { user_id: { [Op.in]: userIds } },
-    attributes: ['user_id', 'agent_payin_charge', 'agent_payout_charge', 'start_amount'],
-    order: [['start_amount', 'ASC']],
-    raw: true
-  });
-  const map = {};
-  rows.forEach((r) => {
-    if (map[r.user_id]) return; // keep the first (lowest band)
-    map[r.user_id] = {
-      agent_payin_charge: round2(r.agent_payin_charge),
-      agent_payout_charge: round2(r.agent_payout_charge)
-    };
-  });
-  return map;
-}
-
 /**
  * GET /admin/agent-commission
- * One row per merchant: total charges, accrued/settled/payable, current agent rate.
+ * One row per merchant: total charges taken, agent rate, accrued/settled/payable.
  */
 const getAgentCommissionSummary = async (req, res) => {
   try {
@@ -109,11 +104,11 @@ const getAgentCommissionSummary = async (req, res) => {
     const userIdsInt = users.map((u) => u.id);
     const userIds = users.map((u) => u.id.toString());
 
-    const [payinAgg, payoutAgg, settledMap, ratesMap] = await Promise.all([
-      aggregateByUser(PayinTransaction, userIds, null),
-      aggregateByUser(PayoutTransaction, userIds, null),
+    const [payinAgg, payoutAgg, settledMap, rateMap] = await Promise.all([
+      amountByUser(PayinTransaction, userIds, null),
+      amountByUser(PayoutTransaction, userIds, null),
       settledByUser(userIdsInt),
-      agentRatesByUser(userIdsInt)
+      ratesByUser(userIdsInt)
     ]);
 
     const payinMap = Object.fromEntries(payinAgg.map((r) => [r._id, r]));
@@ -124,10 +119,10 @@ const getAgentCommissionSummary = async (req, res) => {
       const pi = payinMap[key] || {};
       const po = payoutMap[key] || {};
       const set = settledMap[u.id] || { payin: 0, payout: 0 };
-      const rates = ratesMap[u.id] || { agent_payin_charge: 0, agent_payout_charge: 0 };
+      const rate = rateMap[u.id] || { payin: 0, payout: 0 };
 
-      const payinAccrued = round2(pi.commission || 0);
-      const payoutAccrued = round2(po.commission || 0);
+      const payinAccrued = round2(((pi.amount || 0) * rate.payin) / 100);
+      const payoutAccrued = round2(((po.amount || 0) * rate.payout) / 100);
 
       return {
         user_id: u.id,
@@ -136,8 +131,8 @@ const getAgentCommissionSummary = async (req, res) => {
         user_type: u.user_type,
         payin_total_charges: round2(pi.total_charges || 0),
         payout_total_charges: round2(po.total_charges || 0),
-        agent_payin_charge: rates.agent_payin_charge,
-        agent_payout_charge: rates.agent_payout_charge,
+        agent_payin_charge: rate.payin,   // report-only rate (%), kept key for FE
+        agent_payout_charge: rate.payout,
         payin_accrued: payinAccrued,
         payout_accrued: payoutAccrued,
         payin_settled: set.payin,
@@ -154,16 +149,18 @@ const getAgentCommissionSummary = async (req, res) => {
   }
 };
 
-// All-time payable per type for a single user (used by the settle guard).
+// All-time payable per type for a single user (recomputed from the rate).
 async function computeUserPayable(userId) {
   const uid = [userId.toString()];
-  const [payinAgg, payoutAgg, settledMap] = await Promise.all([
-    aggregateByUser(PayinTransaction, uid, null),
-    aggregateByUser(PayoutTransaction, uid, null),
-    settledByUser([userId])
+  const [payinAgg, payoutAgg, settledMap, rateMap] = await Promise.all([
+    amountByUser(PayinTransaction, uid, null),
+    amountByUser(PayoutTransaction, uid, null),
+    settledByUser([userId]),
+    ratesByUser([userId])
   ]);
-  const payinAccrued = round2((payinAgg[0] || {}).commission || 0);
-  const payoutAccrued = round2((payoutAgg[0] || {}).commission || 0);
+  const rate = rateMap[userId] || { payin: 0, payout: 0 };
+  const payinAccrued = round2((((payinAgg[0] || {}).amount || 0) * rate.payin) / 100);
+  const payoutAccrued = round2((((payoutAgg[0] || {}).amount || 0) * rate.payout) / 100);
   const set = settledMap[userId] || { payin: 0, payout: 0 };
   return {
     payin: { accrued: payinAccrued, settled: set.payin, payable: round2(payinAccrued - set.payin) },
@@ -174,57 +171,35 @@ async function computeUserPayable(userId) {
 /**
  * PUT /admin/agent-commission/user/:userId/agent-charge
  * Body: { agent_payin_charge, agent_payout_charge }  (percentages)
- * Sets a single agent rate across ALL of the user's charge slabs. This is the
- * inline per-user override and it flows into live transaction commission.
+ * Upserts the REPORT-ONLY per-user rate. Does NOT touch MerchantCharges or the
+ * live transaction logic.
  */
 const setUserAgentCharge = async (req, res) => {
-  const t = await sequelize.transaction();
   try {
     const userId = parseInt(req.params.userId, 10);
     const payin = parseFloat(req.body.agent_payin_charge);
     const payout = parseFloat(req.body.agent_payout_charge);
 
-    if (!userId) { await t.rollback(); return res.status(400).json({ success: false, message: 'Invalid user id' }); }
+    if (!userId) return res.status(400).json({ success: false, message: 'Invalid user id' });
     if (isNaN(payin) || payin < 0 || isNaN(payout) || payout < 0) {
-      await t.rollback();
-      return res.status(400).json({ success: false, message: 'Agent charges must be valid non-negative numbers' });
+      return res.status(400).json({ success: false, message: 'Agent rates must be valid non-negative numbers' });
     }
 
-    const brackets = await MerchantCharges.findAll({ where: { user_id: userId }, transaction: t });
-    if (!brackets.length) {
-      await t.rollback();
-      return res.status(400).json({ success: false, message: 'No charge slabs configured for this user yet' });
+    const user = await User.findByPk(userId, { attributes: ['id'], raw: true });
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const [row, created] = await AgentCommissionRate.findOrCreate({
+      where: { user_id: userId },
+      defaults: { agent_payin_rate: payin, agent_payout_rate: payout, updated_by: req.user?.id || null }
+    });
+    if (!created) {
+      await row.update({ agent_payin_rate: payin, agent_payout_rate: payout, updated_by: req.user?.id || null });
     }
 
-    // Invariant: agent cut cannot exceed the admin (total) charge on any slab
-    // (compared as percentages against percentage admin charges).
-    for (const b of brackets) {
-      if (b.admin_payin_charge_type === 'percentage' && payin > parseFloat(b.admin_payin_charge)) {
-        await t.rollback();
-        return res.status(400).json({ success: false, message: `Agent payin ${payin}% exceeds admin payin charge ${b.admin_payin_charge}% on one of the slabs` });
-      }
-      if (b.admin_payout_charge_type === 'percentage' && payout > parseFloat(b.admin_payout_charge)) {
-        await t.rollback();
-        return res.status(400).json({ success: false, message: `Agent payout ${payout}% exceeds admin payout charge ${b.admin_payout_charge}% on one of the slabs` });
-      }
-    }
-
-    for (const b of brackets) {
-      await b.update({
-        agent_payin_charge: payin,
-        agent_payout_charge: payout,
-        agent_payin_charge_type: 'percentage',
-        agent_payout_charge_type: 'percentage',
-        updated_by: req.user?.id || null
-      }, { transaction: t });
-    }
-
-    await t.commit();
-    res.json({ success: true, message: 'Agent charge updated for user' });
+    res.json({ success: true, message: 'Agent commission rate updated' });
   } catch (error) {
-    await t.rollback();
     console.error('Error in setUserAgentCharge:', error);
-    res.status(500).json({ success: false, message: 'Error updating agent charge', error: error.message });
+    res.status(500).json({ success: false, message: 'Error updating agent rate', error: error.message });
   }
 };
 
@@ -251,11 +226,7 @@ const settleUserCommission = async (req, res) => {
     }
 
     const record = await AgentCommissionSettlement.create({
-      user_id: userId,
-      type,
-      amount: round2(value),
-      note: note || null,
-      settled_by: req.user?.id || null
+      user_id: userId, type, amount: round2(value), note: note || null, settled_by: req.user?.id || null
     }, { transaction: t });
 
     await t.commit();
@@ -282,12 +253,8 @@ const getUserSettlements = async (req, res) => {
     });
 
     const data = rows.map((r) => ({
-      id: r.id,
-      type: r.type,
-      amount: round2(r.amount),
-      note: r.note,
-      settled_by_name: r.settledByUser?.name || null,
-      created_at: r.created_at
+      id: r.id, type: r.type, amount: round2(r.amount), note: r.note,
+      settled_by_name: r.settledByUser?.name || null, created_at: r.created_at
     }));
 
     res.json({ success: true, data });
@@ -316,8 +283,6 @@ const createCommissionReport = async (req, res) => {
         userUsername: user.user_name,
         startDate: req.query.startDate || body.startDate || null,
         endDate: req.query.endDate || body.endDate || null,
-        // Optional override rates (%). Blank => worker uses the user's configured
-        // agent charge. Applies to historical txns too (recomputes commission).
         overridePayinRate: body.overridePayinRate ?? req.query.overridePayinRate ?? null,
         overridePayoutRate: body.overridePayoutRate ?? req.query.overridePayoutRate ?? null,
         requestedBy: req.user?.id || null
@@ -361,17 +326,13 @@ const downloadReport = async (req, res) => {
     if (!job) return res.status(404).json({ success: false, message: 'Report job not found' });
 
     const state = await job.getState();
-    if (state !== 'completed') {
-      return res.status(400).json({ success: false, message: 'Report is not ready yet' });
-    }
+    if (state !== 'completed') return res.status(400).json({ success: false, message: 'Report is not ready yet' });
 
     const filePath = job.returnvalue?.filePath;
     if (!filePath) return res.status(404).json({ success: false, message: 'Report file not available' });
 
     return res.download(path.resolve(filePath), path.basename(filePath), (err) => {
-      if (err && !res.headersSent) {
-        res.status(500).json({ success: false, message: 'Error sending report file' });
-      }
+      if (err && !res.headersSent) res.status(500).json({ success: false, message: 'Error sending report file' });
     });
   } catch (error) {
     console.error('Error in downloadReport:', error);

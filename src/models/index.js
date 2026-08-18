@@ -29,6 +29,7 @@ const ManageFundRequestModel = require('./manageFundRequest.model');
 const WalletTransactionModel = require('./WalletTransaction');
 const PayoutFailedHistoryModel = require('./PayoutFailedHistory');
 const AgentCommissionSettlementModel = require('./agentCommissionSettlement.model');
+const AgentCommissionRateModel = require('./agentCommissionRate.model');
 
 // Initialize models
 const User = UserModel(sequelize);
@@ -45,6 +46,7 @@ const ManageFundRequest = ManageFundRequestModel(sequelize);
 const WalletTransaction = WalletTransactionModel(sequelize);
 const PayoutFailedHistory = PayoutFailedHistoryModel(sequelize);
 const AgentCommissionSettlement = AgentCommissionSettlementModel(sequelize);
+const AgentCommissionRate = AgentCommissionRateModel(sequelize);
 
 // Define relationships
 User.hasOne(UserStatus, { foreignKey: 'user_id', onDelete: 'CASCADE' });
@@ -95,6 +97,10 @@ User.hasMany(AgentCommissionSettlement, { foreignKey: 'user_id', onDelete: 'CASC
 AgentCommissionSettlement.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 AgentCommissionSettlement.belongsTo(User, { foreignKey: 'settled_by', as: 'settledByUser' });
 
+// Per-user agent commission RATE (report-only; decoupled from MerchantCharges)
+User.hasOne(AgentCommissionRate, { foreignKey: 'user_id', onDelete: 'CASCADE' });
+AgentCommissionRate.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
 // Export models
 module.exports = {
     sequelize,
@@ -111,5 +117,6 @@ module.exports = {
     ManageFundRequest,
     WalletTransaction,
     PayoutFailedHistory,
-    AgentCommissionSettlement
+    AgentCommissionSettlement,
+    AgentCommissionRate
 }; 
