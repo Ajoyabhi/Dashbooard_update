@@ -128,41 +128,57 @@ commissionReportQueue.process(async (job) => {
   workbook.creator = 'PayVex';
   workbook.created = new Date();
 
-  // ---- Sheet 1: per-transaction detail ----
-  const detail = workbook.addWorksheet('Commission Detail');
-  detail.columns = [
-    { header: 'Type', key: 'type', width: 10 },
-    { header: 'Reference ID', key: 'reference_id', width: 26 },
-    { header: 'UTR', key: 'utr', width: 22 },
-    { header: 'Merchant', key: 'merchant_name', width: 22 },
-    { header: 'Merchant ID', key: 'merchant_username', width: 12 },
-    { header: 'Amount', key: 'amount', width: 14 },
-    { header: 'Total Charge Taken', key: 'merchant_charge', width: 18 },
-    { header: 'Agent Commission', key: 'agent_commission', width: 18 },
-    { header: 'Platform Net', key: 'platform_net', width: 14 },
-    { header: 'Status', key: 'status', width: 12 },
-    { header: 'Created Date', key: 'created_date', width: 22 }
-  ];
-  detail.getRow(1).font = { bold: true };
-  detail.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E0E0' } };
+  // Build a transaction-detail sheet (one per leg — the tab name is the type).
+  const buildDetailSheet = (name) => {
+    const sheet = workbook.addWorksheet(name);
+    sheet.columns = [
+      { header: 'Reference ID', key: 'reference_id', width: 26 },
+      { header: 'UTR', key: 'utr', width: 22 },
+      { header: 'Merchant', key: 'merchant_name', width: 22 },
+      { header: 'Merchant ID', key: 'merchant_username', width: 12 },
+      { header: 'Amount', key: 'amount', width: 14 },
+      { header: 'Total Charge Taken', key: 'merchant_charge', width: 18 },
+      { header: 'Agent Commission', key: 'agent_commission', width: 18 },
+      { header: 'Platform Net', key: 'platform_net', width: 14 },
+      { header: 'Status', key: 'status', width: 12 },
+      { header: 'Created Date', key: 'created_date', width: 22 }
+    ];
+    sheet.getRow(1).font = { bold: true };
+    sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E0E0' } };
+    return sheet;
+  };
 
+  // ---- Sheet 1: Payin ----
+  const payinSheet = buildDetailSheet('Payin');
   let gPayinCount = 0, gPayinComm = 0, gPayinCharge = 0;
-  let gPayoutCount = 0, gPayoutComm = 0, gPayoutCharge = 0;
-
   payins.forEach((t) => {
     const total = totalChargeOf('payin', t);
     const c = commissionOf('payin', t);
-    addTxnRow(detail, 'payin', t, total, c);
+    addTxnRow(payinSheet, 'payin', t, total, c);
     gPayinCount += 1; gPayinComm += c; gPayinCharge += total;
   });
+  const payinTotalRow = payinSheet.addRow({
+    reference_id: 'TOTAL', merchant_charge: round2(gPayinCharge),
+    agent_commission: round2(gPayinComm), platform_net: round2(gPayinCharge - gPayinComm)
+  });
+  payinTotalRow.font = { bold: true };
+
+  // ---- Sheet 2: Payout ----
+  const payoutSheet = buildDetailSheet('Payout');
+  let gPayoutCount = 0, gPayoutComm = 0, gPayoutCharge = 0;
   payouts.forEach((t) => {
     const total = totalChargeOf('payout', t);
     const c = commissionOf('payout', t);
-    addTxnRow(detail, 'payout', t, total, c);
+    addTxnRow(payoutSheet, 'payout', t, total, c);
     gPayoutCount += 1; gPayoutComm += c; gPayoutCharge += total;
   });
+  const payoutTotalRow = payoutSheet.addRow({
+    reference_id: 'TOTAL', merchant_charge: round2(gPayoutCharge),
+    agent_commission: round2(gPayoutComm), platform_net: round2(gPayoutCharge - gPayoutComm)
+  });
+  payoutTotalRow.font = { bold: true };
 
-  // ---- Sheet 2: report meta / totals ----
+  // ---- Sheet 3: report meta / totals ----
   const meta = workbook.addWorksheet('Report Info');
   meta.columns = [{ header: 'Field', key: 'field', width: 28 }, { header: 'Value', key: 'value', width: 44 }];
   meta.getRow(1).font = { bold: true };
