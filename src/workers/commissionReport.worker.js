@@ -4,7 +4,7 @@ const ExcelJS = require('exceljs');
 const { commissionReportQueue } = require('../config/queue.config');
 const { connectMongo } = require('../config/mongoConnect');
 const { logger } = require('../utils/logger');
-const { User, AgentCommissionRate } = require('../models');
+const { User, MerchantCharges, AgentCommissionRate } = require('../models');
 const PayinTransaction = require('../models/payinTransaction.model');
 const PayoutTransaction = require('../models/payoutTransaction.model');
 
@@ -58,8 +58,16 @@ function computeCommission(txn, effectiveRate) {
   return round2((amount * (effectiveRate || 0)) / 100);
 }
 
-function addTxnRow(sheet, type, txn, commission) {
-  const total = txn.charges?.total_charges || 0;
+// Total charge for a transaction, computed from the CURRENT configured charge
+// rate (not the historical stored value), so the statement reflects the agreed
+// structure consistently: percentage => amount*rate/100, fixed => the flat value.
+function computeTotalCharge(txn, rate, type) {
+  const amount = parseFloat(txn.amount) || 0;
+  if (type === 'fixed') return round2(rate || 0);
+  return round2((amount * (rate || 0)) / 100);
+}
+
+function addTxnRow(sheet, type, txn, totalCharge, commission) {
   sheet.addRow({
     type,
     reference_id: txn.reference_id,
@@ -67,9 +75,9 @@ function addTxnRow(sheet, type, txn, commission) {
     merchant_name: txn.user?.name || 'N/A',
     merchant_username: txn.user?.user_id || 'N/A',
     amount: round2(txn.amount),
-    merchant_charge: round2(total),
+    merchant_charge: round2(totalCharge),
     agent_commission: round2(commission),
-    platform_net: round2(total - commission),
+    platform_net: round2(totalCharge - commission),
     status: txn.status,
     created_date: txn.createdAt ? new Date(txn.createdAt).toLocaleString('en-IN') : 'N/A'
   });
@@ -97,13 +105,24 @@ commissionReportQueue.process(async (job) => {
   const effPayin = ovPayin != null ? ovPayin : cfgPayin;
   const effPayout = ovPayout != null ? ovPayout : cfgPayout;
 
+  // The user's CURRENT configured charge rate (representative = lowest band), used
+  // to compute the total charge consistently with the agent cut.
+  const chargeRow = await MerchantCharges.findOne({ where: { user_id: userId }, order: [['start_amount', 'ASC']], raw: true });
+  const chgPayin = chargeRow ? parseFloat(chargeRow.admin_payin_charge) || 0 : 0;
+  const chgPayout = chargeRow ? parseFloat(chargeRow.admin_payout_charge) || 0 : 0;
+  const chgPayinType = chargeRow ? chargeRow.admin_payin_charge_type : 'percentage';
+  const chgPayoutType = chargeRow ? chargeRow.admin_payout_charge_type : 'percentage';
+
   const [payins, payouts] = await Promise.all([
     fetchCompleted(PayinTransaction, userIds, dateRange),
     fetchCompleted(PayoutTransaction, userIds, dateRange)
   ]);
 
-  // Commission per transaction = amount * effective rate (override or configured).
+  // Per transaction: total charge from the configured charge rate, agent from the
+  // effective agent rate; both consistent so net = total - agent.
   const commissionOf = (type, txn) => computeCommission(txn, type === 'payin' ? effPayin : effPayout);
+  const totalChargeOf = (type, txn) =>
+    type === 'payin' ? computeTotalCharge(txn, chgPayin, chgPayinType) : computeTotalCharge(txn, chgPayout, chgPayoutType);
 
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'PayVex';
@@ -131,14 +150,16 @@ commissionReportQueue.process(async (job) => {
   let gPayoutCount = 0, gPayoutComm = 0, gPayoutCharge = 0;
 
   payins.forEach((t) => {
+    const total = totalChargeOf('payin', t);
     const c = commissionOf('payin', t);
-    addTxnRow(detail, 'payin', t, c);
-    gPayinCount += 1; gPayinComm += c; gPayinCharge += (t.charges?.total_charges || 0);
+    addTxnRow(detail, 'payin', t, total, c);
+    gPayinCount += 1; gPayinComm += c; gPayinCharge += total;
   });
   payouts.forEach((t) => {
+    const total = totalChargeOf('payout', t);
     const c = commissionOf('payout', t);
-    addTxnRow(detail, 'payout', t, c);
-    gPayoutCount += 1; gPayoutComm += c; gPayoutCharge += (t.charges?.total_charges || 0);
+    addTxnRow(detail, 'payout', t, total, c);
+    gPayoutCount += 1; gPayoutComm += c; gPayoutCharge += total;
   });
 
   // ---- Sheet 2: report meta / totals ----

@@ -149,6 +149,15 @@ const getAgentCommissionSummary = async (req, res) => {
       const payinAccrued = round2(((pi.amount || 0) * rate.payin) / 100);
       const payoutAccrued = round2(((po.amount || 0) * rate.payout) / 100);
 
+      // Total charge computed from the CURRENT configured rate (consistent with
+      // how the agent cut and the report are computed), not the stored historical.
+      const payinTotalCharge = charge.payin_type === 'fixed'
+        ? round2((pi.count || 0) * charge.payin)
+        : round2(((pi.amount || 0) * charge.payin) / 100);
+      const payoutTotalCharge = charge.payout_type === 'fixed'
+        ? round2((po.count || 0) * charge.payout)
+        : round2(((po.amount || 0) * charge.payout) / 100);
+
       return {
         user_id: u.id,
         name: u.name,
@@ -159,8 +168,8 @@ const getAgentCommissionSummary = async (req, res) => {
         charge_payout_rate: charge.payout,
         charge_payin_type: charge.payin_type,
         charge_payout_type: charge.payout_type,
-        payin_total_charges: round2(pi.total_charges || 0),
-        payout_total_charges: round2(po.total_charges || 0),
+        payin_total_charges: payinTotalCharge,
+        payout_total_charges: payoutTotalCharge,
         agent_payin_charge: rate.payin,   // report-only agent cut rate (%)
         agent_payout_charge: rate.payout,
         payin_accrued: payinAccrued,
@@ -217,6 +226,19 @@ const setUserAgentCharge = async (req, res) => {
 
     const user = await User.findByPk(userId, { attributes: ['id'], raw: true });
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    // Invariant: the agent cut can never exceed the charge rate we impose on that
+    // leg — otherwise the agent would be given more than we earn (negative net).
+    const chargeMap = await chargeRatesByUser([userId]);
+    const charge = chargeMap[userId];
+    if (charge) {
+      if (charge.payin_type === 'percentage' && payin > charge.payin) {
+        return res.status(400).json({ success: false, message: `Agent payin cut ${payin}% cannot exceed the payin charge ${charge.payin}%` });
+      }
+      if (charge.payout_type === 'percentage' && payout > charge.payout) {
+        return res.status(400).json({ success: false, message: `Agent payout cut ${payout}% cannot exceed the payout charge ${charge.payout}%` });
+      }
+    }
 
     const [row, created] = await AgentCommissionRate.findOrCreate({
       where: { user_id: userId },
