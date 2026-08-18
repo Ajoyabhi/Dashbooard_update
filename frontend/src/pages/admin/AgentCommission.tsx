@@ -30,6 +30,10 @@ interface UserRow {
   name: string;
   user_name: string;
   user_type: string;
+  charge_payin_rate: number;
+  charge_payout_rate: number;
+  charge_payin_type: string;
+  charge_payout_type: string;
   payin_total_charges: number;
   payout_total_charges: number;
   agent_payin_charge: number;
@@ -278,6 +282,19 @@ export default function AgentCommission() {
       ),
     },
     {
+      header: 'Charge Imposed',
+      accessor: 'charge_payin_rate',
+      cell: (_: any, row: UserRow) => {
+        const fmt = (v: number, t: string) => `${v ?? 0}${t === 'percentage' ? '%' : ' flat'}`;
+        return (
+          <div className="text-xs leading-tight">
+            <div>payin <span className="font-medium">{fmt(row.charge_payin_rate, row.charge_payin_type)}</span></div>
+            <div>payout <span className="font-medium">{fmt(row.charge_payout_rate, row.charge_payout_type)}</span></div>
+          </div>
+        );
+      },
+    },
+    {
       header: 'Total Charges Taken',
       accessor: 'payin_total_charges',
       cell: (_: any, row: UserRow) => (
@@ -288,7 +305,7 @@ export default function AgentCommission() {
       ),
     },
     {
-      header: 'Agent Rate %',
+      header: 'Agent Cut %',
       accessor: 'agent_payin_charge',
       cell: (_: any, row: UserRow) => {
         const draft = rateDrafts[row.user_id] || { payin: '0', payout: '0' };

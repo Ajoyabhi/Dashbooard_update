@@ -1,6 +1,6 @@
 const path = require('path');
 const { Op, fn, col } = require('sequelize');
-const { User, AgentCommissionRate, AgentCommissionSettlement, sequelize } = require('../models');
+const { User, MerchantCharges, AgentCommissionRate, AgentCommissionSettlement, sequelize } = require('../models');
 const PayinTransaction = require('../models/payinTransaction.model');
 const PayoutTransaction = require('../models/payoutTransaction.model');
 const { commissionReportQueue } = require('../config/queue.config');
@@ -70,6 +70,29 @@ async function ratesByUser(userIds) {
   return map;
 }
 
+// Representative configured CHARGE rate (what we impose on the merchant) per user,
+// from their charge slabs. READ-ONLY — used purely to display context in the panel.
+async function chargeRatesByUser(userIds) {
+  if (!userIds.length) return {};
+  const rows = await MerchantCharges.findAll({
+    where: { user_id: { [Op.in]: userIds } },
+    attributes: ['user_id', 'admin_payin_charge', 'admin_payout_charge', 'admin_payin_charge_type', 'admin_payout_charge_type', 'start_amount'],
+    order: [['start_amount', 'ASC']],
+    raw: true
+  });
+  const map = {};
+  rows.forEach((r) => {
+    if (map[r.user_id]) return; // first (lowest) band is representative
+    map[r.user_id] = {
+      payin: round2(r.admin_payin_charge),
+      payout: round2(r.admin_payout_charge),
+      payin_type: r.admin_payin_charge_type,
+      payout_type: r.admin_payout_charge_type
+    };
+  });
+  return map;
+}
+
 // Sum settled amounts grouped by user_id + type.
 async function settledByUser(userIds) {
   if (!userIds.length) return {};
@@ -104,11 +127,12 @@ const getAgentCommissionSummary = async (req, res) => {
     const userIdsInt = users.map((u) => u.id);
     const userIds = users.map((u) => u.id.toString());
 
-    const [payinAgg, payoutAgg, settledMap, rateMap] = await Promise.all([
+    const [payinAgg, payoutAgg, settledMap, rateMap, chargeMap] = await Promise.all([
       amountByUser(PayinTransaction, userIds, null),
       amountByUser(PayoutTransaction, userIds, null),
       settledByUser(userIdsInt),
-      ratesByUser(userIdsInt)
+      ratesByUser(userIdsInt),
+      chargeRatesByUser(userIdsInt)
     ]);
 
     const payinMap = Object.fromEntries(payinAgg.map((r) => [r._id, r]));
@@ -120,6 +144,7 @@ const getAgentCommissionSummary = async (req, res) => {
       const po = payoutMap[key] || {};
       const set = settledMap[u.id] || { payin: 0, payout: 0 };
       const rate = rateMap[u.id] || { payin: 0, payout: 0 };
+      const charge = chargeMap[u.id] || { payin: 0, payout: 0, payin_type: 'percentage', payout_type: 'percentage' };
 
       const payinAccrued = round2(((pi.amount || 0) * rate.payin) / 100);
       const payoutAccrued = round2(((po.amount || 0) * rate.payout) / 100);
@@ -129,9 +154,14 @@ const getAgentCommissionSummary = async (req, res) => {
         name: u.name,
         user_name: u.user_name,
         user_type: u.user_type,
+        // What we IMPOSE on the merchant (configured charge rate), read-only context.
+        charge_payin_rate: charge.payin,
+        charge_payout_rate: charge.payout,
+        charge_payin_type: charge.payin_type,
+        charge_payout_type: charge.payout_type,
         payin_total_charges: round2(pi.total_charges || 0),
         payout_total_charges: round2(po.total_charges || 0),
-        agent_payin_charge: rate.payin,   // report-only rate (%), kept key for FE
+        agent_payin_charge: rate.payin,   // report-only agent cut rate (%)
         agent_payout_charge: rate.payout,
         payin_accrued: payinAccrued,
         payout_accrued: payoutAccrued,
