@@ -178,7 +178,8 @@ const initiatePayout = async (req, res) => {
       });
       return res.status(400).json({
         success: false,
-        message: 'Transaction is temporarily suspended, please contact your bank'
+        message: user.UserStatus.payout_suspended_message
+          || 'Transaction is temporarily suspended, please contact your bank'
       });
     }
 

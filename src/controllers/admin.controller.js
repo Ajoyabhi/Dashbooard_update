@@ -743,10 +743,13 @@ const togglePayoutAlert = async (req, res) => {
 const togglePayoutSuspended = async (req, res) => {
     try {
         const { userId } = req.params;
-        const { enabled } = req.body;
+        const { enabled, message } = req.body;
 
         if (typeof enabled !== 'boolean') {
             return res.status(400).json({ error: '"enabled" must be a boolean' });
+        }
+        if (message !== undefined && message !== null && typeof message !== 'string') {
+            return res.status(400).json({ error: '"message" must be a string' });
         }
 
         const user = await User.findByPk(userId);
@@ -754,16 +757,25 @@ const togglePayoutSuspended = async (req, res) => {
             return res.status(404).json({ error: 'User not found' });
         }
 
+        // Only overwrite the stored message when the FE actually sends one.
+        // A trimmed empty string clears it (falls back to the default downstream).
+        const updateFields = { payout_suspended: enabled };
+        if (message !== undefined) {
+            const trimmed = typeof message === 'string' ? message.trim() : '';
+            updateFields.payout_suspended_message = trimmed.length ? trimmed : null;
+        }
+
         const [userStatus] = await UserStatus.findOrCreate({
             where: { user_id: userId },
-            defaults: { payout_suspended: enabled }
+            defaults: updateFields
         });
-        await userStatus.update({ payout_suspended: enabled });
+        await userStatus.update(updateFields);
 
         res.json({
             success: true,
             message: `Payout ${enabled ? 'suspended' : 'resumed'} for user`,
-            payout_suspended: userStatus.payout_suspended
+            payout_suspended: userStatus.payout_suspended,
+            payout_suspended_message: userStatus.payout_suspended_message
         });
     } catch (error) {
         console.error('Error toggling payout suspended:', error);

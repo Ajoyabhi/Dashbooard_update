@@ -59,6 +59,13 @@ module.exports = (sequelize) => {
             type: DataTypes.BOOLEAN,
             defaultValue: false
         },
+        // Custom message returned to the merchant when payout_suspended is true.
+        // Editable from the admin FE. Falls back to a standard message when null.
+        payout_suspended_message: {
+            type: DataTypes.STRING,
+            allowNull: true,
+            defaultValue: null
+        },
         // Per-user payin kill switch. When true, payin requests are rejected
         // immediately with a realistic "service unavailable" message BEFORE any
         // transaction record is created and WITHOUT hitting any gateway

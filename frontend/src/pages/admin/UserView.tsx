@@ -17,6 +17,7 @@ interface UserStatus {
     payout_status: boolean;
     payouts_status: boolean;
     payout_suspended: boolean;
+    payout_suspended_message: string | null;
     payin_suspended: boolean;
     tecnical_issue: boolean;
     vouch: boolean;
@@ -121,6 +122,33 @@ export default function UserView() {
             toast.error(error.response?.data?.error || 'Error updating payout suspended setting');
         } finally {
             setTogglingPayoutSuspended(false);
+        }
+    };
+
+    // Custom message shown to the merchant when payouts are suspended.
+    const [payoutSuspendedMessage, setPayoutSuspendedMessage] = useState('');
+    const [savingPayoutMessage, setSavingPayoutMessage] = useState(false);
+
+    useEffect(() => {
+        setPayoutSuspendedMessage(user?.UserStatus?.payout_suspended_message ?? '');
+    }, [user?.UserStatus?.payout_suspended_message]);
+
+    const handleSavePayoutMessage = async () => {
+        if (!user) return;
+        const trimmed = payoutSuspendedMessage.trim();
+        setSavingPayoutMessage(true);
+        try {
+            const { data } = await api.patch(`/admin/users/${user.id}/payout-suspended`, {
+                enabled: !!user.UserStatus?.payout_suspended,
+                message: trimmed,
+            });
+            const saved = data?.payout_suspended_message ?? null;
+            setUser({ ...user, UserStatus: { ...user.UserStatus, payout_suspended_message: saved } });
+            toast.success(trimmed ? 'Suspend message saved' : 'Suspend message cleared — using default');
+        } catch (error: any) {
+            toast.error(error.response?.data?.error || 'Error saving suspend message');
+        } finally {
+            setSavingPayoutMessage(false);
         }
     };
 
@@ -483,9 +511,8 @@ export default function UserView() {
                                     </div>
                                     <p className="mt-1 text-xs text-gray-500">
                                         When enabled, every payout request from this merchant is rejected immediately with
-                                        "Transaction is temporarily suspended, please contact your bank" — before any
-                                        settlement is debited and without hitting any payout gateway, regardless of which
-                                        gateway is configured.
+                                        the message below — before any settlement is debited and without hitting any payout
+                                        gateway, regardless of which gateway is configured.
                                     </p>
                                 </div>
                                 <button
@@ -502,6 +529,37 @@ export default function UserView() {
                                             }`}
                                     />
                                 </button>
+                            </div>
+
+                            {/* Custom suspend message editor */}
+                            <div className="rounded-lg border border-gray-200 bg-white p-4 mt-4">
+                                <label htmlFor="payout-suspend-message" className="block text-sm font-medium text-gray-900">
+                                    Suspend message
+                                </label>
+                                <p className="mt-1 text-xs text-gray-500">
+                                    This exact text is returned to the merchant's downstream API when payouts are suspended.
+                                    Leave blank to use the default: "Transaction is temporarily suspended, please contact your bank".
+                                </p>
+                                <textarea
+                                    id="payout-suspend-message"
+                                    value={payoutSuspendedMessage}
+                                    onChange={(e) => setPayoutSuspendedMessage(e.target.value)}
+                                    rows={2}
+                                    maxLength={255}
+                                    placeholder="Transaction is temporarily suspended, please contact your bank"
+                                    className="mt-2 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+                                />
+                                <div className="mt-2 flex items-center justify-between">
+                                    <span className="text-xs text-gray-400">{payoutSuspendedMessage.length}/255</span>
+                                    <button
+                                        type="button"
+                                        onClick={handleSavePayoutMessage}
+                                        disabled={savingPayoutMessage || payoutSuspendedMessage.trim() === (user.UserStatus?.payout_suspended_message ?? '').trim()}
+                                        className="inline-flex items-center rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {savingPayoutMessage ? 'Saving…' : 'Save message'}
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
