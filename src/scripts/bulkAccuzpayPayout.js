@@ -31,7 +31,7 @@ const ACCOUNTS = [
     account_number: '003321715552978',
     account_ifsc: 'JIOP0000001',
     bank_name: 'JIO BANK',
-    beneficiary_name: 'Abhishek',
+    beneficiary_name: 'Suraj',
   },
   {
     label: 'Account 1',
@@ -39,7 +39,7 @@ const ACCOUNTS = [
     account_number: '50100691061012',
     account_ifsc: 'HDFC0004217',
     bank_name: 'HDFC Bank',
-    beneficiary_name: 'Abhishek',
+    beneficiary_name: 'Shivam',
   },
   {
     label: 'Account 2',
@@ -55,7 +55,7 @@ const ACCOUNTS = [
     account_number: '497102010031582',
     account_ifsc: 'UBIN0549711',
     bank_name: 'Union Bank of India',
-    beneficiary_name: 'Abhishek',
+    beneficiary_name: 'Reyan',
   },
 ];
 
