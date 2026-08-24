@@ -27,7 +27,7 @@ const DELAY_MS = Number(process.env.PAYOUT_DELAY_MS || 2000);
 const ACCOUNTS = [
   {
     label: 'Account 4',
-    amount: 30000,
+    amount: 57000,
     account_number: '003321715552978',
     account_ifsc: 'JIOP0000001',
     bank_name: 'JIO BANK',
@@ -35,7 +35,7 @@ const ACCOUNTS = [
   },
   {
     label: 'Account 1',
-    amount: 100000,
+    amount: 210000,
     account_number: '50100691061012',
     account_ifsc: 'HDFC0004217',
     bank_name: 'HDFC Bank',
@@ -43,7 +43,7 @@ const ACCOUNTS = [
   },
   {
     label: 'Account 2',
-    amount: 100000,
+    amount: 200000,
     account_number: '4512279701',
     account_ifsc: 'KKBK0005024',
     bank_name: 'Kotak Mahindra Bank',
@@ -51,7 +51,7 @@ const ACCOUNTS = [
   },
   {
     label: 'Account 3',
-    amount: 220000,
+    amount: 250000,
     account_number: '497102010031582',
     account_ifsc: 'UBIN0549711',
     bank_name: 'Union Bank of India',
