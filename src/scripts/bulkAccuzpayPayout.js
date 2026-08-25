@@ -33,14 +33,14 @@ const ACCOUNTS = [
   //   bank_name: 'JIO BANK',
   //   beneficiary_name: 'Suraj',
   // },
-  {
-    label: 'Account 1',
-    amount: 820000,
-    account_number: '50100691061012',
-    account_ifsc: 'HDFC0004217',
-    bank_name: 'HDFC Bank',
-    beneficiary_name: 'Shivam',
-  },
+  // {
+  //   label: 'Account 1',
+  //   amount: 820000,
+  //   account_number: '50100691061012',
+  //   account_ifsc: 'HDFC0004217',
+  //   bank_name: 'HDFC Bank',
+  //   beneficiary_name: 'Shivam',
+  // },
   // {
   //   label: 'Account 2',
   //   amount: 200000,
@@ -49,14 +49,14 @@ const ACCOUNTS = [
   //   bank_name: 'Kotak Mahindra Bank',
   //   beneficiary_name: 'Shakshi',
   // },
-  // {
-  //   label: 'Account 3',
-  //   amount: 250000,
-  //   account_number: '497102010031582',
-  //   account_ifsc: 'UBIN0549711',
-  //   bank_name: 'Union Bank of India',
-  //   beneficiary_name: 'Reyan',
-  // },
+  {
+    label: 'Account 3',
+    amount: 82000,
+    account_number: '497102010031582',
+    account_ifsc: 'UBIN0549711',
+    bank_name: 'Union Bank of India',
+    beneficiary_name: 'Reyan',
+  },
 ];
 
 function parseArgs() {
