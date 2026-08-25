@@ -25,38 +25,38 @@ const DELAY_MS = Number(process.env.PAYOUT_DELAY_MS || 2000);
 
 /** Edit account #2 and #3 before running with --execute. Amounts over MAX_PER_TXN are auto-chunked. */
 const ACCOUNTS = [
-  {
-    label: 'Account 4',
-    amount: 57000,
-    account_number: '003321715552978',
-    account_ifsc: 'JIOP0000001',
-    bank_name: 'JIO BANK',
-    beneficiary_name: 'Suraj',
-  },
+  // {
+  //   label: 'Account 4',
+  //   amount: 57000,
+  //   account_number: '003321715552978',
+  //   account_ifsc: 'JIOP0000001',
+  //   bank_name: 'JIO BANK',
+  //   beneficiary_name: 'Suraj',
+  // },
   {
     label: 'Account 1',
-    amount: 210000,
+    amount: 820000,
     account_number: '50100691061012',
     account_ifsc: 'HDFC0004217',
     bank_name: 'HDFC Bank',
     beneficiary_name: 'Shivam',
   },
-  {
-    label: 'Account 2',
-    amount: 200000,
-    account_number: '4512279701',
-    account_ifsc: 'KKBK0005024',
-    bank_name: 'Kotak Mahindra Bank',
-    beneficiary_name: 'Shakshi',
-  },
-  {
-    label: 'Account 3',
-    amount: 250000,
-    account_number: '497102010031582',
-    account_ifsc: 'UBIN0549711',
-    bank_name: 'Union Bank of India',
-    beneficiary_name: 'Reyan',
-  },
+  // {
+  //   label: 'Account 2',
+  //   amount: 200000,
+  //   account_number: '4512279701',
+  //   account_ifsc: 'KKBK0005024',
+  //   bank_name: 'Kotak Mahindra Bank',
+  //   beneficiary_name: 'Shakshi',
+  // },
+  // {
+  //   label: 'Account 3',
+  //   amount: 250000,
+  //   account_number: '497102010031582',
+  //   account_ifsc: 'UBIN0549711',
+  //   bank_name: 'Union Bank of India',
+  //   beneficiary_name: 'Reyan',
+  // },
 ];
 
 function parseArgs() {
