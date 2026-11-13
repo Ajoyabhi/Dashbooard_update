@@ -79,6 +79,11 @@ export const getMenuItems = (userType: string): MenuItem[] => {
             title: 'Development Docs',
             path: '/user/development-docs',
             icon: 'BookOpen'
+          },
+          {
+            title: 'API Playground',
+            path: '/user/api-playground',
+            icon: 'FileCode'
           }
         ]
       }
@@ -258,6 +263,11 @@ export const getMenuItems = (userType: string): MenuItem[] => {
               title: 'Development Docs',
               path: '/user/development-docs',
               icon: 'BookOpen'
+            },
+            {
+              title: 'API Playground',
+              path: '/user/api-playground',
+              icon: 'FileCode'
             }
           ]
         }
