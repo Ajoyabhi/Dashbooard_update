@@ -66,6 +66,7 @@ const gatewayOptions: FilterOption[] = [
   { label: 'All Gateways', value: 'all' },
   { label: 'BluSwap', value: 'BluSwap' },
   { label: 'MizorPay', value: 'MizorPay' },
+  { label: 'RapidPay', value: 'RapidPay' },
   { label: 'Dummy (Test) Gateway', value: 'DummyGateway' },
 ];
 
@@ -394,6 +395,7 @@ export default function PayoutReport() {
         const colorMap: Record<string, string> = {
           BluSwap:      'bg-blue-100 text-blue-700',
           MizorPay:     'bg-emerald-100 text-emerald-700',
+          RapidPay:     'bg-rose-100 text-rose-700',
           DummyGateway: 'bg-amber-100 text-amber-700',
         };
         const cls = gw ? (colorMap[gw] ?? 'bg-gray-100 text-gray-600') : 'bg-gray-100 text-gray-400';

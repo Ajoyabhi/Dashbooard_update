@@ -3,7 +3,8 @@ const axios = require('axios');
 const { logger } = require('../utils/logger');
 const { processPayin } = require('../services/payment.service');
 const { recordTraceEvent, STAGES } = require('../services/transactionTrace.service');
-const { callbackQueue, bluswapPayoutQueue, mizorpayPayoutQueue, createRedisClient } = require('../config/queue.config');
+const { callbackQueue, bluswapPayoutQueue, mizorpayPayoutQueue, rapidpayPayoutQueue, createRedisClient } = require('../config/queue.config');
+const { checkPayinStatus } = require('../services/payinStatusCheck.service');
 const PayinTransaction = require('../models/payinTransaction.model');
 const { extractFailureReason } = require('../utils/failureReason');
 const { MerchantDetails } = require('../models');
@@ -489,7 +490,32 @@ const getTransactionStatus = async (req, res) => {
       });
     }
 
-    // Unknown/legacy gateway (only HDFC, AirPay, Razorpay are live) — no external
+    if (merchantName === 'RapidPay') {
+      // GET /api/v1/payments/rapidpay/rpp-check?reference_id=... (RapidPay contract §2)
+      const { normalizedStatus, amount, utr, raw } = await checkPayinStatus({
+        gateway: 'RapidPay', reference_id: searchTransactionId,
+      });
+      logger.info('RapidPay rpp-check response', { result: raw, reference_id: searchTransactionId });
+
+      return res.status(200).json({
+        success: true,
+        transaction: {
+          reference_id: raw?.reference_id ?? transaction.reference_id,
+          type: 'payin',
+          status: normalizedStatus,
+          amount: amount ?? transaction.amount,
+          utr,
+          message: normalizedStatus === 'success'
+            ? 'Transaction processed'
+            : normalizedStatus === 'pending'
+              ? 'Transaction is pending'
+              : 'Transaction failed',
+          timestamp: transaction.updatedAt || transaction.createdAt || new Date().toISOString()
+        }
+      });
+    }
+
+    // Unknown/legacy gateway (only HDFC, AirPay, Razorpay, RapidPay are live) — no external
     // status API to query. Serve the authoritative status from our own record.
     const localStatus = transaction.status === 'completed' ? 'success'
       : transaction.status === 'failed' ? 'failed'
@@ -786,7 +812,103 @@ const razorpayCallback = async (req, res) => {
   }
 };
 
+// RapidPay collection result (RAPIDPAY_ACCUZPAY_CONTRACT.md §7), POSTed by the
+// anpamart backend to ACCUZPAY_CALLBACK_URL once the collection is final:
+//   { reference_id, status: 'TXN'|'FAILED', utr, amount, error_message? }
+const rapidpayCallback = async (req, res) => {
+  try {
+    const apiKey = req.headers['x-api-key'];
+    if (!apiKey || apiKey !== process.env.RAPIDPAY_SHARED_SECRET) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const { reference_id, status, utr, amount, error_message } = req.body;
+    if (!reference_id || !status) {
+      return res.status(400).json({ success: false, message: 'Missing reference_id or status' });
+    }
+
+    const mappedStatus = mapCallbackStatus(status);
+    const failureReason = mappedStatus === 'failed'
+      ? (error_message || extractFailureReason(req.body))
+      : null;
+
+    await logGatewayCallback('rapidpay', req, {
+      reference_id, status_raw: status, mapped_status: mappedStatus, failure_reason: failureReason,
+    });
+
+    const job = await callbackQueue.add(
+      {
+        statuscode: status,
+        apitxnid: reference_id,
+        utr: utr || null,
+        amount,
+        message: 'RapidPay UPI payment',
+        txnid: null, // RapidPay never returns its own txn id
+        rawBody: req.body,
+        failureReason,
+      },
+      { attempts: 3, backoff: { type: 'exponential', delay: 5000 } }
+    );
+
+    recordTraceEvent({
+      reference_id, trace_type: 'payin', stage: STAGES.QUEUED, status: 'info', source: 'gateway_callback',
+      gateway_name: 'rapidpay', detail: 'Enqueued to callbackQueue', payload: { jobId: job.id }
+    });
+    logger.info('RapidPay callback queued', { reference_id, status, jobId: job.id });
+    return res.status(200).json({ received: true });
+  } catch (error) {
+    logger.error('RapidPay callback error', { error: error.message });
+    return res.status(500).json({ success: false, message: 'Internal error' });
+  }
+};
+
+// RapidPay payout result (contract §7), POSTed to ACCUZPAY_PAYOUT_CALLBACK_URL:
+//   { reference_id, status: 'TXN'|'FAILED', utr, amount, error_message? }
+const handleRapidpayPayoutCallback = async (req, res) => {
+  try {
+    const apiKey = req.headers['x-api-key'];
+    if (!apiKey || apiKey !== process.env.RAPIDPAY_SHARED_SECRET) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const callbackData = req.body || {};
+    const rapidpayRef = callbackData.reference_id || null;
+    if (!rapidpayRef || !callbackData.status) {
+      return res.status(400).json({ success: false, message: 'Missing reference_id or status' });
+    }
+    logger.info('Received RapidPay payout callback', { data: callbackData });
+
+    const isSuccess = String(callbackData.status).toUpperCase() === 'TXN';
+    recordTraceEvent({
+      reference_id: rapidpayRef, trace_type: 'payout', stage: STAGES.CALLBACK_RECEIVED,
+      status: isSuccess ? 'ok' : 'failed',
+      source: 'gateway_callback', gateway_name: 'RapidPay',
+      http: { method: req.method, url: '/api/payments/rapidpay/payout/callback' },
+      detail: `Inbound RapidPay payout callback: ${callbackData.status}`,
+      payload: { body: req.body }
+    });
+
+    const job = await rapidpayPayoutQueue.add(callbackData, {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 5000 }
+    });
+
+    recordTraceEvent({
+      reference_id: rapidpayRef, trace_type: 'payout', stage: STAGES.QUEUED, status: 'info',
+      source: 'gateway_callback', gateway_name: 'RapidPay', detail: 'Enqueued to rapidpayPayoutQueue',
+      payload: { jobId: job.id }
+    });
+
+    return res.status(200).json({ success: true, message: 'Callback processed successfully', job_id: job.id });
+  } catch (error) {
+    logger.error('Error processing RapidPay payout callback', { error: error.message });
+    return res.status(500).json({ success: false, message: 'Error processing callback' });
+  }
+};
+
 module.exports = {
+  rapidpayCallback,
+  handleRapidpayPayoutCallback,
   initiatePayment,
   getTransactionStatus,
   validatePaymentRequest,

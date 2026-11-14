@@ -166,6 +166,8 @@ const processPayin = async (data) => {
       result = await airpayPayin(payinData);
     } else if (merchantName === 'Razorpay') {
       result = await razorpayPayin(payinData);
+    } else if (merchantName === 'RapidPay') {
+      result = await rapidpayPayin(payinData);
     } else {
       throw new Error('Invalid merchant name');
     }
@@ -359,6 +361,58 @@ const razorpayPayin = async (payinData) => {
       qrString: response.data.upi_intent_uri,
       razorpay_order_id: response.data.razorpay_order_id,
       razorpay_payment_id: response.data.razorpay_payment_id,
+    },
+  };
+};
+
+// RapidPay collection (RAPIDPAY_ACCUZPAY_CONTRACT.md §1).
+// POST {ECOMMERCE_API_URL}/api/v1/payments/rapidpay/rpp-initiate  (x-api-key).
+// Amount in rupees, RapidPay minimum is ₹100 (rejected downstream with 502).
+const rapidpayPayin = async (payinData) => {
+  const { order_amount, name, email, phone, reference_id } = payinData;
+
+  // Contract requires email + customerId — reuse the persistent UPI customer
+  // registry (dedupes by email, else mints a UUID) like the Razorpay flow.
+  const customerId = await resolveHdfcCustomerId(phone, email);
+
+  let response;
+  try {
+    response = await axios.post(
+      `${process.env.ECOMMERCE_API_URL}/api/v1/payments/rapidpay/rpp-initiate`,
+      {
+        reference_id,
+        amount: String(order_amount),
+        name: name || 'Customer',
+        email: email || '',
+        phone: phone || '',
+        customerId,
+      },
+      {
+        headers: {
+          'x-api-key': process.env.RAPIDPAY_SHARED_SECRET,
+          'Content-Type': 'application/json',
+        },
+        timeout: 30000,
+      }
+    );
+  } catch (err) {
+    // 400 / 409 / 502 carry { success:false, message } — surface it instead of
+    // axios's generic "Request failed with status code 502".
+    const body = err.response?.data;
+    throw new Error(body?.message || err.message || 'RapidPay payment initiation failed');
+  }
+
+  if (!response.data.success || !response.data.upi_intent_uri) {
+    throw new Error(response.data.message || 'RapidPay payment initiation failed');
+  }
+
+  return {
+    statuscode: 'TXN',
+    message: 'UPI intent generated',
+    data: {
+      apitxnid: response.data.reference_id || reference_id,
+      qrString: response.data.upi_intent_uri,
+      rapidpay_order_id: response.data.rapidpay_order_id,
     },
   };
 };

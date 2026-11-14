@@ -91,6 +91,7 @@ const gatewayOptions: FilterOption[] = [
   { label: 'HDFC', value: 'HDFC' },
   { label: 'AirPay', value: 'AirPay' },
   { label: 'Razorpay', value: 'Razorpay' },
+  { label: 'RapidPay', value: 'RapidPay' },
 ];
 
 export default function PayinReport() {
@@ -376,6 +377,7 @@ export default function PayinReport() {
           HDFC:      'bg-sky-100 text-sky-700',
           AirPay:    'bg-emerald-100 text-emerald-700',
           Razorpay:  'bg-amber-100 text-amber-700',
+          RapidPay:  'bg-rose-100 text-rose-700',
         };
         const cls = gw ? (colorMap[gw] ?? 'bg-gray-100 text-gray-600') : 'bg-gray-100 text-gray-400';
         return (

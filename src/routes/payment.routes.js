@@ -3,7 +3,8 @@ const router = express.Router();
 const { auth } = require('../middleware/auth.middleware');
 const { checkRole } = require('../middleware/role.middleware');
 const { initiatePayment, getTransactionStatus,
-  handleBluswapPayoutCallback, handleMizorpayPayoutCallback, hdfcCallback, airpayCallback, razorpayCallback } = require('../controllers/payment.controller');
+  handleBluswapPayoutCallback, handleMizorpayPayoutCallback, hdfcCallback, airpayCallback, razorpayCallback,
+  rapidpayCallback, handleRapidpayPayoutCallback } = require('../controllers/payment.controller');
 const { initiatePayout , getPayoutTransactionStatus, handleBalanceCheck, reconcilePayoutByReference, reconcileProcessingPayouts, reconcileUserPayouts, failDummyPayout } = require('../controllers/payment.payout');
 
 
@@ -87,6 +88,12 @@ router.post('/rp/callback', airpayCallback);
 
 // Razorpay callback — called by anpamart backend after Razorpay webhook is verified
 router.post('/razorpay/callback', razorpayCallback);
+
+// RapidPay result callbacks (RAPIDPAY_ACCUZPAY_CONTRACT.md §7) — called by the
+// anpamart backend with x-api-key = RAPIDPAY_SHARED_SECRET. Point anpamart's
+// ACCUZPAY_CALLBACK_URL / ACCUZPAY_PAYOUT_CALLBACK_URL at these two paths.
+router.post('/rapidpay/callback', rapidpayCallback);
+router.post('/rapidpay/payout/callback', handleRapidpayPayoutCallback);
 
 router.get('/balanceCheck',
   auth,

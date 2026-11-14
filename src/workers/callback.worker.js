@@ -1,4 +1,4 @@
-const { callbackQueue, bluswapPayoutQueue, mizorpayPayoutQueue, dummyPayoutQueue } = require('../config/queue.config');
+const { callbackQueue, bluswapPayoutQueue, mizorpayPayoutQueue, rapidpayPayoutQueue, dummyPayoutQueue } = require('../config/queue.config');
 const { finalizePayout } = require('../services/payoutReconciliation.service');
 const { recordTraceEvent, STAGES } = require('../services/transactionTrace.service');
 const { logger } = require('../utils/logger');
@@ -421,6 +421,47 @@ mizorpayPayoutQueue.on('stalled', (job) => {
 });
 
 
+// RapidPay payout result callback (RAPIDPAY_ACCUZPAY_CONTRACT.md §7):
+// { reference_id, status: 'TXN'|'FAILED', utr, amount, error_message? }
+// Only final states are ever sent. Finalized through the same idempotent
+// finalizePayout() path as BluSwap/MizorPay, so a callback racing a manual
+// reconcile / status-check self-heal can never double-refund or double-notify.
+rapidpayPayoutQueue.process(async function (job) {
+  try {
+    logger.info('Processing rapidpay payout job', { jobId: job.id, data: job.data, attempts: job.attemptsMade });
+
+    const status = String(job.data?.status || '').toUpperCase();
+    const referenceId = job.data?.reference_id;
+    if (status !== 'TXN' && status !== 'FAILED') {
+      logger.warn('RapidPay payout callback with non-final status ignored', { jobId: job.id, referenceId, status });
+      return { success: true, jobId: job.id, changed: false, reason: 'non_final_status' };
+    }
+
+    const result = await finalizePayout({
+      referenceId,
+      isSuccess: status === 'TXN',
+      utr: job.data?.utr || null,
+      gatewayTransactionId: null, // RapidPay sends no id on the callback; rapidpay_payout_id is stored at initiate
+      message: job.data?.error_message || null
+    });
+
+    logger.info('RapidPay payout finalized via callback', { jobId: job.id, referenceId, result });
+    return { success: true, jobId: job.id, ...result };
+  } catch (error) {
+    logger.error('Error processing rapidpay payout job', {
+      jobId: job.id, error: error.message, stack: error.stack, attempts: job.attemptsMade
+    });
+    return { success: false, error: `Error is ${error}`, jobId: job.id };
+  }
+});
+
+rapidpayPayoutQueue.on('failed', (job, error) => {
+  logger.error('RapidPay payout job failed', {
+    jobId: job.id, error: error.message, stack: error.stack, attempts: job.attemptsMade
+  });
+});
+
+
 // Dummy/test payout — the simulated async settlement "callback".
 // Enqueued (with a delay) by dummy_payout_request.js instead of arriving from a
 // real gateway. Finalizes through the SAME idempotent finalizePayout() path as
@@ -484,6 +525,7 @@ process.on('SIGTERM', async () => {
   await callbackQueue.close();
   await bluswapPayoutQueue.close();
   await mizorpayPayoutQueue.close();
+  await rapidpayPayoutQueue.close();
   await dummyPayoutQueue.close();
   process.exit(0);
 });

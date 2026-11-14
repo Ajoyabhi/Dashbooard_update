@@ -83,6 +83,24 @@ async function checkPayinStatus({ gateway, reference_id, timeoutMs = 30000 }) {
     };
   }
 
+  if (gateway === 'RapidPay') {
+    // GET /api/v1/payments/rapidpay/rpp-check?reference_id=... (RapidPay contract §2)
+    const response = await axios.get(`${baseUrl}/api/v1/payments/rapidpay/rpp-check`, {
+      params: { reference_id },
+      headers: { 'x-api-key': process.env.RAPIDPAY_SHARED_SECRET, 'Content-Type': 'application/json' },
+      timeout: timeoutMs,
+    });
+    const result = response.data;
+    const normalizedStatus = normalizeRapidpayStatus(result.rapidpay_status, result.status, result.utr);
+    return {
+      normalizedStatus,
+      amount: result.amount ?? null,
+      utr: normalizedStatus === 'success' ? (result.utr || null) : null,
+      payerVpa: null,
+      raw: result,
+    };
+  }
+
   logger.warn('checkPayinStatus called for unsupported gateway', { gateway, reference_id });
   return { normalizedStatus: 'unsupported', amount: null, utr: null, payerVpa: null, raw: null };
 }
@@ -120,6 +138,20 @@ function normalizeRazorpayStatus(rpStatus) {
   return 'pending';
 }
 
-const SUPPORTED_PAYIN_GATEWAYS = Object.freeze(['AirPay', 'HDFC', 'Razorpay']);
+// RapidPay: `rapidpay_status` SUCCESS = paid (carries a UTR). The derived `status`
+// is TXN | PENDING | FAILED, where FAILED only happens at initiate (a failed UPI
+// attempt keeps the collection PENDING). Success requires a SUCCESS provider
+// status, or TXN together with a UTR.
+function normalizeRapidpayStatus(rppStatus, derivedStatus, utr) {
+  const s = String(rppStatus || '').toUpperCase();
+  const d = String(derivedStatus || '').toUpperCase();
+  if (s === 'SUCCESS' || s === 'CAPTURED') return 'success';
+  if (!s && d === 'TXN' && utr) return 'success';
+  if (['FAILED', 'FAILURE', 'CANCELLED', 'ERROR', 'EXPIRED', 'DECLINED', 'REJECTED'].includes(s)) return 'failed';
+  if (!s && d === 'FAILED') return 'failed';
+  return 'pending';
+}
 
-module.exports = { checkPayinStatus, SUPPORTED_PAYIN_GATEWAYS };
+const SUPPORTED_PAYIN_GATEWAYS = Object.freeze(['AirPay', 'HDFC', 'Razorpay', 'RapidPay']);
+
+module.exports = { checkPayinStatus, SUPPORTED_PAYIN_GATEWAYS, normalizeRapidpayStatus };

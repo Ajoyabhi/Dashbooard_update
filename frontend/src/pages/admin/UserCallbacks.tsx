@@ -48,7 +48,7 @@ interface CallbackSettings {
   currentPayoutGatewayBands: GatewayBand[];
 }
 
-const PAYOUT_GATEWAYS = ['BluSwap', 'MizorPay', 'DummyGateway'];
+const PAYOUT_GATEWAYS = ['BluSwap', 'MizorPay', 'RapidPay', 'DummyGateway'];
 
 // Convert the API's stored bands (or legacy single-threshold columns) into the
 // editable GatewayBand[] the UI works with. Falls back to seeding a 2-band setup
@@ -449,6 +449,7 @@ export default function UserCallbacks() {
                   <option value="HDFC">HDFC</option>
                   <option value="AirPay">AirPay</option>
                   <option value="Razorpay">Razorpay</option>
+                  <option value="RapidPay">RapidPay</option>
                 </select>
               </div>
               <button
@@ -482,6 +483,7 @@ export default function UserCallbacks() {
                   <option value="">Select Merchant</option>
                   <option value="BluSwap">BluSwap</option>
                   <option value="MizorPay">MizorPay</option>
+                  <option value="RapidPay">RapidPay</option>
                   <option value="DummyGateway">Dummy (Test) Gateway</option>
                 </select>
               </div>

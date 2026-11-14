@@ -10,7 +10,8 @@ const { checkPayinStatus, SUPPORTED_PAYIN_GATEWAYS } = require('../services/payi
 const { callbackQueue } = require('../config/queue.config');
 const {
   bluswapTransactionStatus,
-  mizorpayTransactionStatus
+  mizorpayTransactionStatus,
+  rapidpayTransactionStatus
 } = require('../transactionStatusCheck/TransactionCheck');
 const { logger } = require('../utils/logger');
 const { istDayRange, istDaySkeleton, istCreatedAtRange } = require('../utils/istTime');
@@ -3876,7 +3877,28 @@ const adminCheckPayinStatus = async (req, res) => {
             });
         }
 
-        // Unknown/legacy gateway (only HDFC, AirPay, Razorpay are live) — no external
+        if (merchantName === 'RapidPay') {
+            const { normalizedStatus, amount, utr, raw } = await checkPayinStatus({ gateway: 'RapidPay', reference_id });
+            return res.status(200).json({
+                success: true,
+                transaction: {
+                    reference_id: raw?.reference_id ?? transaction.reference_id,
+                    type: 'payin',
+                    status: normalizedStatus,
+                    amount: amount ?? transaction.amount,
+                    utr,
+                    message: normalizedStatus === 'success'
+                        ? 'Transaction processed'
+                        : normalizedStatus === 'pending' ? 'Transaction is pending' : 'Transaction failed',
+                    timestamp: transaction.updatedAt || transaction.createdAt || new Date().toISOString(),
+                    rapidpay_status: raw?.rapidpay_status || null,
+                    rapidpay_order_id: raw?.rapidpay_order_id || null,
+                    forwarded: raw?.forwarded ?? null,
+                }
+            });
+        }
+
+        // Unknown/legacy gateway (only HDFC, AirPay, Razorpay, RapidPay are live) — no external
         // status API to query. Serve the authoritative status from our own record.
         const localStatus = transaction.status === 'completed' ? 'success'
             : transaction.status === 'failed' ? 'failed'
@@ -4144,6 +4166,7 @@ const getLivePayoutStatus = async (transaction) => {
     const statusFns = {
         BluSwap: bluswapTransactionStatus,
         MizorPay: mizorpayTransactionStatus,
+        RapidPay: rapidpayTransactionStatus,
     };
     const fn = statusFns[merchantName];
     if (!fn) return { supported: false, merchantName: merchantName || null };

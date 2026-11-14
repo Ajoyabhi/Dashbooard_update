@@ -9,12 +9,13 @@ const PayoutTransaction = require('../models/payoutTransaction.model');
 const { Op } = require('sequelize');
 const { bluswapPayout } = require('../merchant_payin_payout/merchant_payout_request');
 const { mizorpayPayout } = require('../merchant_payin_payout/mizorpay_payout_request');
+const { rapidpayPayout } = require('../merchant_payin_payout/rapidpay_payout_request');
 const { dummyPayout } = require('../merchant_payin_payout/dummy_payout_request');
 const { getRandomMizorpayContact } = require('../utils/mizorpayContact');
 const getClientIp = require('../utils/getClientIp');
 const mongoose = require('mongoose');
 const axios = require('axios');
-const { bluswapTransactionStatus, mizorpayTransactionStatus } = require('../transactionStatusCheck/TransactionCheck');
+const { bluswapTransactionStatus, mizorpayTransactionStatus, rapidpayTransactionStatus } = require('../transactionStatusCheck/TransactionCheck');
 const { reconcilePayoutTransaction, finalizePayout, failCompletedDummyPayout } = require('../services/payoutReconciliation.service');
 const { recordTraceEvent, STAGES } = require('../services/transactionTrace.service');
 const { notifyPayoutWakeup } = require('../services/payoutAlert.service');
@@ -512,6 +513,39 @@ const initiatePayout = async (req, res) => {
           reference_id: result?.data?.apitxnid || reference_id
         });
       }
+    } else if (effectiveGateway === 'RapidPay') {
+      // RapidPay (RAPIDPAY_ACCUZPAY_CONTRACT.md §4). No email/mobile needed —
+      // RapidPay ignores them. An ambiguous outcome (timeout etc.) comes back as
+      // 'processing' and must NOT be refunded — the callback / reconcile settles it.
+      const payoutData = {
+        reference_id,
+        user_id,
+        amount,
+        amountToDeduct,
+        request_type,
+        beneficiary_details: {
+          account_number,
+          account_ifsc,
+          bank_name,
+          beneficiary_name
+        }
+      };
+      result = await rapidpayPayout(payoutData);
+      if (result?.status == 200 && result.data.status === 'processing') {
+        return res.status(200).json({
+          success: true,
+          message: result.data.message || 'Payout initiated, awaiting confirmation',
+          reference_id: result.data.apitxnid,
+          transaction_id: result.data.transaction_id
+        });
+      } else {
+        await failPayoutWithRefund(reference_id, result?.data?.message || 'Payout processing failed');
+        return res.status(400).json({
+          success: false,
+          message: result?.data?.message || 'Payout processing failed',
+          reference_id: result?.data?.apitxnid || reference_id
+        });
+      }
     } else if (effectiveGateway === 'DummyGateway') {
       // Dummy/test gateway. Runs the full real pipeline above (settlement already
       // debited, records created) and returns the SAME immediate `processing`
@@ -625,6 +659,8 @@ const getPayoutTransactionStatus = async (req, res) => {
     } else if (processedGateway === 'MizorPay') {
       result = await mizorpayTransactionStatus(transaction_id);
       console.log("this is result of mizorpay payout", result)
+    } else if (processedGateway === 'RapidPay') {
+      result = await rapidpayTransactionStatus(transaction_id);
     } else if (processedGateway === 'DummyGateway') {
       // Dummy payouts have no external gateway to query — serve the authoritative
       // status straight from our own record (mirrors the gateway-404 fallback below).
@@ -675,7 +711,7 @@ const getPayoutTransactionStatus = async (req, res) => {
       ) {
         try {
           const gatewayTransactionId =
-            gw.bluswap_transaction_id || gw.provider_payout_id || gw.payout_order_id || gw.transaction_id || gw.txn_id || gw.merchant_order_id || null;
+            gw.bluswap_transaction_id || gw.provider_payout_id || gw.payout_order_id || gw.rapidpay_payout_id || gw.transaction_id || gw.txn_id || gw.merchant_order_id || null;
           const reconciliation = await finalizePayout({
             referenceId: transaction.reference_id,
             isSuccess: normalizedStatus === 'success',

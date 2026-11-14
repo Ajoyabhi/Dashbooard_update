@@ -99,7 +99,45 @@ const mizorpayTransactionStatus = async (reference_id) => {
   }
 };
 
+/**
+ * Check a RapidPay payout status.
+ *
+ * Contract §5: GET {ECOMMERCE_API_URL}/api/v1/payments/rapidpay/payout/rpp-check?reference_id=...
+ * (auth: x-api-key = RAPIDPAY_SHARED_SECRET). Flat body.
+ * `status`: TXN (paid, utr set) | PROCESSING | PENDING | FAILED.
+ * Normalized to success | failed | pending. Unknown reference -> 404 (status 'error').
+ */
+const rapidpayTransactionStatus = async (reference_id) => {
+  const baseUrl = process.env.ECOMMERCE_API_URL;
+  const apiKey = process.env.RAPIDPAY_SHARED_SECRET;
+
+  if (!baseUrl || !apiKey) {
+    throw new Error('RapidPay shared secret or ECOMMERCE_API_URL not set in environment variables');
+  }
+
+  try {
+    const response = await axios.get(`${baseUrl}/api/v1/payments/rapidpay/payout/rpp-check`, {
+      params: { reference_id },
+      headers: { 'x-api-key': apiKey, 'Content-Type': 'application/json' },
+      timeout: 30000
+    });
+    const result = response.data;
+
+    const s = String(result?.status || '').toUpperCase();
+    let derived = 'pending';
+    if (s === 'TXN') derived = 'success';
+    else if (s === 'FAILED') derived = 'failed';
+
+    return { data: { status: derived, response: result }, status: 200 };
+  } catch (err) {
+    const statusCode = err.response?.status || 500;
+    const result = err.response ? err.response.data : { message: err.message };
+    return { data: { status: 'error', response: result }, status: statusCode };
+  }
+};
+
 module.exports = {
   bluswapTransactionStatus,
-  mizorpayTransactionStatus
+  mizorpayTransactionStatus,
+  rapidpayTransactionStatus
 }

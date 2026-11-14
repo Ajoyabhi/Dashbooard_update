@@ -230,7 +230,7 @@ router.get('/transactions/:reference_id/trace', adminGetTransactionTrace);
 // Callback queue health
 router.get('/queue/health', async (req, res) => {
   try {
-    const { callbackQueue, bluswapPayoutQueue, mizorpayPayoutQueue } = require('../config/queue.config');
+    const { callbackQueue, bluswapPayoutQueue, mizorpayPayoutQueue, rapidpayPayoutQueue } = require('../config/queue.config');
 
     // Bull requires an explicit range for getFailed; cap it so a huge backlog can't blow up the request.
     const MAX_FAILED_TO_SCAN = 2000;
@@ -261,10 +261,11 @@ router.get('/queue/health', async (req, res) => {
       };
     };
 
-    const [payin, bluswapPayout, mizorpayPayout] = await Promise.all([
+    const [payin, bluswapPayout, mizorpayPayout, rapidpayPayout] = await Promise.all([
       describeQueue(callbackQueue, 'apitxnid'),
       describeQueue(bluswapPayoutQueue, (data) => data?.data?.order_id),
       describeQueue(mizorpayPayoutQueue, (data) => data?.reference_id),
+      describeQueue(rapidpayPayoutQueue, (data) => data?.reference_id),
     ]);
 
     res.json({
@@ -274,6 +275,7 @@ router.get('/queue/health', async (req, res) => {
         payin,
         bluswapPayout,
         mizorpayPayout,
+        rapidpayPayout,
       },
       // Backward-compatible top-level fields mirroring the payin queue (previous shape of this endpoint)
       counts: payin.counts,

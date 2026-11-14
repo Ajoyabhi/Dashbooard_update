@@ -243,6 +243,31 @@ mizorpayPayoutQueue.on('failed', (job, error) => {
   });
 });
 
+// RapidPay payout result-callback queue (RAPIDPAY_ACCUZPAY_CONTRACT.md §7).
+// Processed in callback.worker.js through the shared finalizePayout() path.
+const rapidpayPayoutQueue = new Bull('rapidpayPayout', queueOptions);
+logger.info("RapidPay payout queue created with proper Redis configuration");
+
+rapidpayPayoutQueue.on('error', (error) => {
+  logger.error('RapidPay payout queue error:', error);
+  if (error.message.includes('Connection is closed')) {
+    logger.info('Attempting to recover from connection error...');
+    rapidpayPayoutQueue.resume();
+  }
+});
+
+rapidpayPayoutQueue.on('ready', () => {
+  logger.info('RapidPay payout queue is ready and connected to Redis');
+});
+
+rapidpayPayoutQueue.on('failed', (job, error) => {
+  logger.error('RapidPay payout job failed', {
+    jobId: job.id,
+    error: error.message,
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Dummy/test payout queue — used ONLY by merchants configured with
 // payout_merchant_name === 'DummyGateway'. Jobs are enqueued with a delay to
 // simulate a real gateway's async settlement callback; the worker finalizes them
@@ -352,6 +377,7 @@ process.on('SIGTERM', async () => {
   await callbackQueue.close();
   await bluswapPayoutQueue.close();
   await mizorpayPayoutQueue.close();
+  await rapidpayPayoutQueue.close();
   await dummyPayoutQueue.close();
   await payinReconciliationQueue.close();
   await commissionReportQueue.close();
@@ -362,6 +388,7 @@ module.exports = {
   callbackQueue,
   bluswapPayoutQueue,
   mizorpayPayoutQueue,
+  rapidpayPayoutQueue,
   dummyPayoutQueue,
   payinReconciliationQueue,
   commissionReportQueue,

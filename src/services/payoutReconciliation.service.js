@@ -2,7 +2,7 @@ const axios = require('axios');
 const { logger } = require('../utils/logger');
 const PayoutTransaction = require('../models/payoutTransaction.model');
 const { TransactionCharges, FinancialDetails, MerchantDetails } = require('../models');
-const { bluswapTransactionStatus, mizorpayTransactionStatus } = require('../transactionStatusCheck/TransactionCheck');
+const { bluswapTransactionStatus, mizorpayTransactionStatus, rapidpayTransactionStatus } = require('../transactionStatusCheck/TransactionCheck');
 const { recordTraceEvent, STAGES } = require('./transactionTrace.service');
 const { notifyPayoutFailure } = require('./payoutAlert.service');
 
@@ -232,6 +232,14 @@ async function reconcilePayoutTransaction(payoutTransaction) {
     derived = statusResult?.data?.status; // 'success' | 'failed' | 'pending'
     utr = gatewayData.utr || null;
     gatewayTransactionId = gatewayData.provider_payout_id || gatewayData.payout_order_id || null;
+    message = gatewayData.failure_reason || null;
+  } else if (merchantName === 'RapidPay') {
+    // RapidPay /payout/rpp-check returns a flat body (contract §5).
+    const statusResult = await rapidpayTransactionStatus(referenceId);
+    const gatewayData = statusResult?.data?.response || {};
+    derived = statusResult?.data?.status; // 'success' | 'failed' | 'pending' | 'error'
+    utr = gatewayData.utr || null;
+    gatewayTransactionId = gatewayData.rapidpay_payout_id || null;
     message = gatewayData.failure_reason || null;
   } else {
     return { referenceId, changed: false, reason: 'unsupported_gateway', merchant: merchantName || null };
