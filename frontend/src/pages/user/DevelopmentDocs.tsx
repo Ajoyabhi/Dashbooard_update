@@ -126,7 +126,7 @@ export default function DevelopmentDocs() {
                   </thead>
                   <tbody className="divide-y divide-gray-200">
                     {[
-                      { param: 'order_amount', type: 'number', required: 'Yes', desc: 'Amount to be charged (in paise)' },
+                      { param: 'order_amount', type: 'number', required: 'Yes', desc: 'Amount to be charged, in rupees (INR) — e.g. 1000 = ₹1,000' },
                       { param: 'name', type: 'string', required: 'Yes', desc: "Customer's full name" },
                       { param: 'email', type: 'string', required: 'Yes', desc: "Customer's email address" },
                       { param: 'phone', type: 'string', required: 'Yes', desc: "Customer's phone number (10 digits)" },
@@ -176,6 +176,53 @@ export default function DevelopmentDocs() {
     "country": "India"
   }
 }'`}
+                </pre>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-neutral-900 mb-2">Success Response</h3>
+              <p className="text-neutral-600 mb-3">
+                HTTP <span className="font-mono">200</span>. Open <span className="font-mono">result.payment_url</span> (a UPI
+                intent) on the customer's device to collect the payment. The final result arrives on your payin webhook, or
+                poll the payin status API with your <span className="font-mono">reference_id</span>.
+              </p>
+              <div className="bg-neutral-100 rounded-xl p-4">
+                <pre className="text-sm text-neutral-800 overflow-x-auto">
+                  {`{
+  "transaction_id": "3f1c9a2e-8b4d-4e2a-9c1f-5d6e7a8b9c0d",
+  "result": {
+    "success": true,
+    "reference_id": "TXN123456",
+    "payment_url": "upi://pay?pa=merchant@bank&pn=Merchant&am=1000.00&tr=TXN123456"
+  }
+}`}
+                </pre>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-neutral-900 mb-2">Error Responses</h3>
+              <p className="text-neutral-600 mb-3">
+                Missing or invalid fields return HTTP <span className="font-mono">400</span> with an
+                <span className="font-mono"> errors</span> list. Any other rejection (duplicate
+                <span className="font-mono"> reference_id</span>, IP not whitelisted, payin disabled, etc.) returns HTTP
+                <span className="font-mono"> 400</span> with <span className="font-mono">success: false</span> and a
+                <span className="font-mono"> message</span>.
+              </p>
+              <div className="bg-neutral-100 rounded-xl p-4">
+                <pre className="text-sm text-neutral-800 overflow-x-auto">
+                  {`{
+  "success": false,
+  "message": "Invalid request",
+  "errors": ["Phone is required", "Address pincode is required"]
+}`}
+                </pre>
+              </div>
+              <div className="bg-neutral-100 rounded-xl p-4 mt-3">
+                <pre className="text-sm text-neutral-800 overflow-x-auto">
+                  {`{
+  "success": false,
+  "message": "Transaction with this reference ID already exists. Please use a different reference ID for new transactions."
+}`}
                 </pre>
               </div>
             </div>
@@ -229,6 +276,26 @@ export default function DevelopmentDocs() {
   "request_type": "IMPS",
   "reference_id": "PAYOUT123456"
 }'`}
+                </pre>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-neutral-900 mb-2">Success Response</h3>
+              <p className="text-neutral-600 mb-3">
+                HTTP <span className="font-mono">200</span> means the payout was <strong>accepted</strong>, not yet completed — the
+                amount plus charges is debited from your settlement balance and the transfer is processing. The final
+                <span className="font-mono"> success</span> / <span className="font-mono">failed</span> result (with UTR) arrives on
+                your payout webhook, or poll the payout status API. A failed payout is refunded to your settlement balance.
+                The <span className="font-mono">message</span> wording can vary; rely on <span className="font-mono">success</span>.
+              </p>
+              <div className="bg-neutral-100 rounded-xl p-4">
+                <pre className="text-sm text-neutral-800 overflow-x-auto">
+                  {`{
+  "success": true,
+  "message": "Payout initiated, awaiting confirmation",
+  "reference_id": "PAYOUT123456",
+  "transaction_id": "7a2b9c4d-1e3f-4a5b-8c6d-9e0f1a2b3c4d"
+}`}
                 </pre>
               </div>
             </div>
@@ -357,6 +424,25 @@ export default function DevelopmentDocs() {
                 <pre className="text-sm text-neutral-800 overflow-x-auto">
                   {`curl --location 'https://dashboard.accuzpay.in/api/payments/balanceCheck' \\
 --header 'Authorization: YOUR_JWT_TOKEN'`}
+                </pre>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-neutral-900 mb-2">Response</h3>
+              <p className="text-neutral-600 mb-3">
+                All balances are in rupees (INR). Payouts are debited from <span className="font-mono">settlement_balance</span>.
+              </p>
+              <div className="bg-neutral-100 rounded-xl p-4">
+                <pre className="text-sm text-neutral-800 overflow-x-auto">
+                  {`{
+  "success": true,
+  "message": "Balance check successful",
+  "data": {
+    "wallet_balance": 25000.5,
+    "settlement_balance": 18250,
+    "direct_bank_payout_balance": 0
+  }
+}`}
                 </pre>
               </div>
             </div>
