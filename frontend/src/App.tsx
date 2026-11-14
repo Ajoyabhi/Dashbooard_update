@@ -35,6 +35,7 @@ import UserPayoutReport from './pages/user/PayoutReport';
 import UserPayinReport from './pages/user/PayinReport';
 import UserDeveloperSettings from './pages/user/DeveloperSettings';
 import UserDevelopmentDocs from './pages/user/DevelopmentDocs';
+import UserApiPlayground from './pages/user/ApiPlayground';
 import UserWalletTransactionHistory from './pages/user/WalletTransactionHistory';
 import UserPayoutFailedHistory from './pages/user/PayoutFailedHistory';
 import UserSettlementReport from './pages/user/settlementReport';
@@ -103,6 +104,7 @@ function AppRoutes() {
         <Route path="/user/settlement-report" element={<ProtectedRoute role="user"><UserSettlementReport /></ProtectedRoute>} />
         <Route path="/user/developer-settings" element={<ProtectedRoute role="user"><UserDeveloperSettings /></ProtectedRoute>} />
         <Route path="/user/development-docs" element={<ProtectedRoute role="user"><UserDevelopmentDocs /></ProtectedRoute>} />
+        <Route path="/user/api-playground" element={<ProtectedRoute role="user"><UserApiPlayground /></ProtectedRoute>} />
 
         {/* Agent Routes */}
         <Route path="/agent/payin-report" element={<ProtectedRoute role="agent"><AgentPayinReport /></ProtectedRoute>} />

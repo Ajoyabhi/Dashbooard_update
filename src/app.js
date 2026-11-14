@@ -23,6 +23,7 @@ const userRoutes = require('./routes/user.routes');
 const agentRoutes = require('./routes/agent.routes');
 const adminRoutes = require('./routes/admin.routes');
 const paymentRoutes = require('./routes/payment.routes');
+const sandboxRoutes = require('./routes/sandbox.routes');
 
 const app = express();
 
@@ -51,6 +52,7 @@ app.use('/api/user', userRoutes);
 app.use('/api/agent', agentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/sandbox', sandboxRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
